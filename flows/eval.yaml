@@ -7,6 +7,8 @@
 #   uv run myorch eval collect            # candidates from the history; confirm them in the console
 #   uv run myorch eval run --depth quick --depth standard
 #   uv run myorch eval report
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-eval
 flow: eval
 role: eval
 inputs:

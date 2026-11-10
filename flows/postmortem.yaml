@@ -11,6 +11,8 @@
 #
 # The replays are separate eval runs (myorch/evals.py, case id = this run): reviewers there see the
 # change only, never this run's workspace (the incident, the fix, the analysis).
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-postmortem
 flow: postmortem
 role: postmortem
 require_one_of: [[commit, bad]]   # the console and the CLI refuse to start without one of them

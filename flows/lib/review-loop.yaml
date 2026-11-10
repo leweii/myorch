@@ -14,6 +14,8 @@
 #     with: {base: "{{project.base}}", reviewers: 3}
 #
 # {{params.x}} is filled in when the flow is loaded; other {{...}} are rendered at run time.
+#
+# Docs: https://leweii.github.io/myorch/workflows/#fragments--review-loop
 fragment: review-loop
 description: CI → 并行 reviewer + security → verify 投票 →（可选）fix，按轮循环直到没有阻塞问题
 

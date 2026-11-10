@@ -1,3 +1,7 @@
+"""The myorch command line: every command (`uv run myorch <command> -h`).
+
+Docs: https://leweii.github.io/myorch/#ch-05-cli
+"""
 from __future__ import annotations
 
 import argparse

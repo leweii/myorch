@@ -6,6 +6,8 @@
 #
 # Run it once when a project is added (after `myorch project sync <name>`), and again whenever the
 # repository changes shape. Nothing is pushed to the project's repository.
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-onboard
 flow: onboard
 role: onboard
 inputs:

@@ -13,6 +13,7 @@ its translation to en.py; the script stops and lists any text without one.
 """
 import html, os, re, sys
 
+sys.dont_write_bytecode = True  # no __pycache__ next to the diagrams (the docs check compares this directory)
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from en import EN  # noqa: E402
 

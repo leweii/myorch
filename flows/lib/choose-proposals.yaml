@@ -9,6 +9,8 @@
 #
 # Reads <dir>/proposals.json ([{"id", "title", "kind", "evidence"}...]) and writes
 # <dir>/accepted.json ({"accepted": [ids]}).
+#
+# Docs: https://leweii.github.io/myorch/workflows/#fragments--choose-proposals
 fragment: choose-proposals
 description: 列出建议，让人挑选采纳哪几条
 

@@ -5,6 +5,8 @@
 #   uv run myorch run flows/review.yaml --project mdm -i pr=13 -i depth=deep
 #
 # GitHub is only read (the PR, its base and its files). People talk to myorch in the console.
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-review
 flow: review
 role: review
 inputs:

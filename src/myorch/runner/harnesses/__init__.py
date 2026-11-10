@@ -1,3 +1,7 @@
+"""Harness adapters: how each kind of agent is started in a sandbox (base.py is the interface).
+
+Docs: https://leweii.github.io/myorch/#index--platform-features
+"""
 from myorch.runner.harnesses.base import HarnessAdapter, HarnessTask
 from myorch.runner.harnesses.claude_code import ClaudeCodeAdapter
 from myorch.runner.harnesses.script import ScriptAdapter

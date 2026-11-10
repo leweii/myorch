@@ -27,6 +27,8 @@
 # A replay never asks for approval, never delivers and writes no takeaway.
 #
 #   uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=<sha> -i ticket_as_of=2026-10-01T08:00:00Z
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-development
 flow: development
 role: development
 inputs:

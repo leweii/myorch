@@ -6,6 +6,8 @@ An agent platform driven by a flow engine. Temporal orchestrates the flows; each
 
 **Docs: https://leweii.github.io/myorch/** (sources in [docs/en/](docs/en/README.md); Chinese: [docs/](docs/README.md), https://leweii.github.io/myorch/zh/): services and dependencies, architecture, setup, CLI reference, flows, project packs, writing flows, design principles, conventions, troubleshooting, status. What each flow does and what each step does: the [Flow manual](docs/en/workflows/README.md). Design rationale: [ARCHITECTURE.md](docs/en/ARCHITECTURE.md) (Chinese original: [ARCHITECTURE.md](ARCHITECTURE.md)).
 
+**Docs ↔ code.** Paths in the docs link to the files here; every code directory has a generated `README.md` listing the doc sections that describe its files (start at [src/myorch/](src/myorch/)), and every package and flow file carries a `Docs:` link.
+
 ## Directories
 
 myorch keeps its things in four places:

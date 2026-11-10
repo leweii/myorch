@@ -4,6 +4,8 @@
 #
 #   - use: lib/sync-base.yaml
 #     id: sync-master
+#
+# Docs: https://leweii.github.io/myorch/workflows/#fragments--sync-base
 fragment: sync-base
 description: 克隆或更新项目仓库，切到最新的 base 分支，初始化子模块
 

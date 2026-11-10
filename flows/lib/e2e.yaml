@@ -17,6 +17,8 @@
 # Results: docs/e2e/round-<N>/smoke/ and docs/e2e/round-<N>/acceptance/ (report.md, result.json,
 # screenshots/), the acceptance cases in docs/e2e/round-<N>/acceptance/cases/, and the verdict
 # per criterion in docs/e2e/round-<N>/acceptance.md.
+#
+# Docs: https://leweii.github.io/myorch/workflows/#fragments--e2e
 fragment: e2e
 description: 端到端测试：项目的固定冒烟用例 +（可选）按验收标准写的用例 →（可选）fix，按轮循环直到全部通过
 

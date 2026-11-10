@@ -7,6 +7,8 @@
 #
 #   uv run myorch run flows/sweep.yaml --project mdm
 #   uv run myorch run flows/sweep.yaml --project mdm -i depth=deep
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-sweep
 flow: sweep
 role: sweep
 inputs:

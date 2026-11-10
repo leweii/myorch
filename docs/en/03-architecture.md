@@ -84,7 +84,9 @@ src/myorch/
     runner.py            StepRunner: one turn of a step from start to end
     openshell.py         openshell CLI wrapper, mount arguments, reading supervisor logs
     profiles.py          Profile loading
-    harnesses/           claude_code.py, script.py
+    harnesses/           Harness adapters: how each agent is started (base.py)
+      claude_code.py     Claude Code
+      script.py          Shell scripts
     actions.py           Host actions (5 of them, see 8. Flow syntax)
     jobs.py              One-off sandbox jobs: cloning git knowledge sources, Watchdog judgments
   engines/temporal/

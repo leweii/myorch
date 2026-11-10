@@ -74,6 +74,7 @@
 - **实测过的才写成事实。** 没实测的标「待验证」。
 - **中文文档用简明中文写，英文文档用简明英文写。** 短句，一句只说一件事，主语清楚。能用表格的用表格。术语前后一致。
 - **流程的步骤只写在流程手册里。** `docs/` 的章节不重复每个流程的步骤，链接到 [workflows/index.html](workflows/index.html)。
+- **代码和文档双向链接。** 文档里写成代码格式、在仓库里存在的路径（`src/myorch/core/run.py`、`core/run.py`、`deploy/compose.yaml`）会自动链接到 GitHub 上的文件，代码地图这样的目录树也一样。`docs/build-html.py` 还在每个被文档提到的代码目录里生成 `README.md`，列出描述这些文件的章节（GitHub 在文件列表下面显示它），流程手册生成 `flows/README.md`。每个包的 docstring 和每个流程文件头注释的最后一行写 `Docs: https://leweii.github.io/myorch/#<章节>`，`tests/test_doc_links.py` 检查这些链接打开的章节存在。新加模块时，在[代码地图](03-architecture.md#代码地图)里写上它。
 - **改完重新生成网页版。** `uv run --with markdown python docs/build-html.py`，生成 `docs/index.html`（英文，首页）和 `docs/zh/index.html`（中文）。
 - **图一律用 HTML 画，不用字符画。** 图在 `docs/diagrams/`，全部由 `docs/diagrams/gen.py` 生成。改图时改 `gen.py`，运行 `python3 docs/diagrams/gen.py docs/diagrams`，再重新生成网页版。图里的中文在 `docs/diagrams/en.py` 里有对应的英文，英文图生成到 `docs/diagrams/en/`。改了图里的文字要在 `en.py` 补上英文，否则 `gen.py` 报错并列出缺的文字。
   - 有交叉连线的图（总图、OpenShell 内部图）用像素坐标画。网页按内容宽度缩放它们。

@@ -9,6 +9,8 @@
 # carries outputs.delivery so channels can say which branch was pushed. myorch opens no pull
 # request: that is for people to do.
 # Interface: docs/notes/2026-11-02-delivery-interface.md
+#
+# Docs: https://leweii.github.io/myorch/workflows/#fragments--deliver
 fragment: deliver
 description: 审批通过后推送分支，写交付说明（不调用平台 API）
 

@@ -7,4 +7,6 @@
 
 The only adapter today is the console (src/myorch/ui/). Platform adapters (GitHub, Slack, ...) are
 built on the relay when they are needed; the earlier GitHub adapter was removed on 2026-11-03.
+
+Docs: https://leweii.github.io/myorch/#03-architecture--the-channel-layer
 """

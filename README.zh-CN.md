@@ -6,6 +6,8 @@ English: [README.md](README.md)
 
 **文档在 [docs/](docs/README.md)**（网页版 https://leweii.github.io/myorch/zh/ ，英文 https://leweii.github.io/myorch/ ）：服务和依赖、架构、安装和启动、命令参考、流程清单、项目包、写流程、设计原则、使用规范、排错、现状。每个流程做什么、每一步做什么，见[流程手册](docs/workflows/README.md)。设计理由见 [ARCHITECTURE.md](ARCHITECTURE.md)。
 
+**文档和代码双向链接。** 文档里的路径链接到这里的文件；每个代码目录有一个生成的 `README.md`，列出描述其中文件的文档章节（从 [src/myorch/](src/myorch/) 看起）；每个包和流程文件都有一行 `Docs:` 链接。
+
 ## 目录
 
 myorch 的东西放在四个地方：

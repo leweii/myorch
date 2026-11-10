@@ -84,7 +84,9 @@ src/myorch/
     runner.py            StepRunner：一轮步骤从头到尾
     openshell.py         openshell CLI 封装、挂载参数，读 supervisor 日志
     profiles.py          profile 加载
-    harnesses/           claude_code.py、script.py
+    harnesses/           harness adapter：每种 agent 怎么启动（base.py）
+      claude_code.py     Claude Code
+      script.py          shell 脚本
     actions.py           宿主机动作（5 个，见 8. 流程语法）
     jobs.py              一次性 sandbox 任务：git 知识源的克隆、Watchdog 的判断
   engines/temporal/

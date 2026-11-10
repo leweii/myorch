@@ -19,6 +19,8 @@
 # next learn. takeaways-learned records what was taken in, whatever was adopted. Only the project's
 # guide/ and checks.sh / checks.env change (myorch-knowledge/<project>/); changes are committed to
 # the myorch-knowledge git repo and the snapshot re-synced. Flow changes are only proposed.
+#
+# Docs: https://leweii.github.io/myorch/workflows/#ch-learn
 flow: learn
 role: learn
 inputs:
