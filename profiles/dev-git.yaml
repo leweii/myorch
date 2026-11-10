@@ -1,0 +1,5 @@
+# Talks to GitHub: clone/fetch, push the run's branch, open the PR. Provider roles are mapped by
+# the project (blog: github -> github-blog; artifacts: none), so each project uses its own account.
+providers: [github, artifacts]
+policy: project
+repo: rw

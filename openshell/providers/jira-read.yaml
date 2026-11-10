@@ -1,0 +1,38 @@
+# Jira provider: read issues and their comments, nothing else (GET on the REST API only).
+# One instance per Jira site. Replace the host below with the site (for example
+# example.atlassian.net), then:
+#
+#   openshell provider profile lint   -f openshell/providers/jira-read.yaml
+#   openshell provider profile import -f openshell/providers/jira-read.yaml
+#   read -s JIRA_TOKEN && export JIRA_TOKEN      # Atlassian Cloud: an API token; Data Center: a PAT
+#   openshell provider create --name jira-<site> --type jira-read --credential JIRA_TOKEN
+#   unset JIRA_TOKEN
+#
+# Then map the role in the project pack (project.yaml):
+#   providers: {jira: jira-<site>}
+#   jira: {url: https://<host>, key: MD, auth: basic, email: <token owner>}   # Data Center PAT: auth: bearer
+#
+# The sandbox only sees a placeholder in JIRA_TOKEN. Cloud wants Basic (email:token); the gateway
+# decodes Basic credentials, swaps the placeholder and re-encodes at egress (as for GitHub's git).
+id: jira-read
+display_name: Jira (read only)
+description: Read issues and comments through the Jira REST API
+category: other
+credentials:
+  - name: api_token
+    description: Jira API token (Cloud) or personal access token (Data Center) of a user who can read the project
+    env_vars: [JIRA_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_token]
+endpoints:
+  - host: REPLACE-WITH-SITE.atlassian.net
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/rest/api/2/issue/**" }
+      - allow: { method: GET, path: "/rest/api/2/myself" }
+binaries: [/usr/bin/python3, /usr/bin/python3.12, /usr/bin/curl]

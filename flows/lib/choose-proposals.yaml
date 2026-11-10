@@ -1,0 +1,56 @@
+# Ask the user which proposals to adopt (numbers, all, none) and record the answer, for a
+# project-apply step that follows. Used by learn (guide/) and onboard (the whole pack).
+#
+#   - use: lib/choose-proposals.yaml
+#     id: choose
+#     needs: [analyze]
+#     when: "steps.analyze.outputs.proposals > 0"
+#     with: {dir: docs/learn, what: 知识库修改建议}
+#
+# Reads <dir>/proposals.json ([{"id", "title", "kind", "evidence"}...]) and writes
+# <dir>/accepted.json ({"accepted": [ids]}).
+fragment: choose-proposals
+description: 列出建议，让人挑选采纳哪几条
+
+params:
+  dir:  {type: string, required: true}   # 工作区里放 proposals.json 的目录
+  what: {type: string, default: 修改建议}  # 问题里怎么称呼这些建议
+
+item:
+  harness: script
+  profile: dev-read
+  interaction: allowed
+  outputs:
+    accepted: "采纳的建议条数"
+  limits: { input_timeout: 24h }
+  prompt: |
+    set -euo pipefail
+    python3 - <<'PY'
+    import json, os, re, subprocess
+    ws = os.environ["MYORCH_WORKSPACE"]
+    d = f"{ws}/{{params.dir}}"
+    proposals = json.load(open(f"{d}/proposals.json", encoding="utf-8"))
+    ids = [int(p["id"]) for p in proposals]
+    def ask(prefix=""):
+        lines = [f"{p['id']}. {p['title']}（{p.get('kind', '')}，证据 {len(p.get('evidence') or [])} 条）" for p in proposals]
+        q = (prefix + "提出了以下{{params.what}}（详情见工作区 {{params.dir}}/proposals.md），采纳哪几条？回复编号，如 1,3；或 all / none。\n" + "\n".join(lines))
+        subprocess.run(["/sandbox/bin/myorch-ask", q, "--option", "all", "--option", "none"], check=True)
+    reply = os.environ.get("MYORCH_REPLY", "").strip().lower()
+    if os.environ.get("MYORCH_TURN") == "1":
+        ask()
+        raise SystemExit(0)
+    if reply in ("all", "全部"):
+        chosen = ids
+    elif reply in ("none", "无", "都不要", "0"):
+        chosen = []
+    else:
+        nums = [int(x) for x in re.findall(r"\d+", reply)]
+        if not nums or any(n not in ids for n in nums):
+            ask(f"没看懂「{reply}」。")
+            raise SystemExit(0)
+        chosen = sorted(set(nums))
+    json.dump({"accepted": chosen}, open(f"{d}/accepted.json", "w"))
+    json.dump({"status": "ok", "summary": f"采纳 {len(chosen)} 条：{chosen}" if chosen else "一条都不采纳",
+               "outputs": {"accepted": len(chosen), "ids": chosen}},
+              open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
+    PY

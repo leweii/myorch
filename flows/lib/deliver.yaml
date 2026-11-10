@@ -1,0 +1,174 @@
+# Push the approved commit and describe the change, after the approval gate (development):
+#
+#   - use: lib/deliver.yaml
+#     id: deliver
+#     with: {approved: "{{approvals.human-review.subject}}"}
+#
+# The workflow only does git: it pushes exactly the approved commit (refuses if the branch moved
+# after approval) and writes docs/delivery.md. It calls no platform API. The run_finished event
+# carries outputs.delivery so channels can say which branch was pushed. myorch opens no pull
+# request: that is for people to do.
+# Interface: docs/notes/2026-11-02-delivery-interface.md
+fragment: deliver
+description: 审批通过后推送分支，写交付说明（不调用平台 API）
+
+params:
+  approved: {type: string, required: true}   # the approved commit
+
+item:
+  harness: script
+  profile: dev-git
+  limits: { timeout: 10m, retries: 1 }
+  outputs:
+    delivery: "推送了什么（渠道用来告诉人）：branch、base、commit、title、ticket、repo、description、pr_template"
+  prompt: |
+    set -euo pipefail
+    if [ "$MYORCH_BRANCH" = "$MYORCH_PROJECT_BASE" ]; then
+      echo "当前分支是 base 分支 ${MYORCH_PROJECT_BASE}，不推送。" >&2
+      exit 3
+    fi
+    export DELIVER_APPROVED="{{params.approved}}"
+    head=$(git rev-parse HEAD)
+    # Push exactly what was approved: refuse if the branch moved after the approval gate.
+    if [ -z "$DELIVER_APPROVED" ] || [ "$head" != "$DELIVER_APPROVED" ]; then
+      echo "HEAD 在审批之后变了：批准的是 ${DELIVER_APPROVED:0:12}，现在是 ${head:0:12}。不推送，需要重新运行并重新审批。" >&2
+      exit 3
+    fi
+    basic=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+    git -c "http.extraHeader=Authorization: Basic $basic" push --quiet -u origin "HEAD:refs/heads/$MYORCH_BRANCH"
+    python3 - <<'PY'
+    import glob, json, os, re, subprocess
+    ws = os.environ["MYORCH_WORKSPACE"]
+    repo, branch, base = os.environ["MYORCH_PROJECT_REPO"], os.environ["MYORCH_BRANCH"], os.environ["MYORCH_PROJECT_BASE"]
+    commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True, check=True).stdout.strip()
+    ticket = os.environ.get("MYORCH_INPUT_TICKET", "")
+
+    def read(rel):
+        p = os.path.join(ws, rel)
+        return open(p, encoding="utf-8").read() if os.path.exists(p) else ""
+
+    def load(rel, default):
+        try:
+            return json.loads(read(rel)) if read(rel) else default
+        except ValueError:
+            return default
+
+    def section(text, name):
+        """The body of the first markdown heading that contains `name`, up to the next heading of the same or a higher level."""
+        lines, out, level = text.splitlines(), [], 0
+        for line in lines:
+            m = re.match(r"^(#+)\s+(.*)", line)
+            if level and m and len(m.group(1)) <= level:
+                break
+            if level:
+                out.append(line)
+            elif m and name in m.group(2):
+                level = len(m.group(1))
+        return "\n".join(out).strip()
+
+    def last_round(pattern):
+        found = sorted((int(re.search(r"round-(\d+)", p).group(1)), p) for p in glob.glob(os.path.join(ws, pattern)))
+        return found[-1] if found else (0, "")
+
+    title = load(".myorch/steps/develop/out/manifest.json", {}).get("outputs", {}).get("title") \
+        or load(".myorch/steps/analyze-requirement/out/manifest.json", {}).get("outputs", {}).get("title") \
+        or os.environ.get("MYORCH_INPUT_TASK", "")[:60]
+
+    changed = section(read("docs/implementation.md"), "改动") or "（实现记录里没有「改动」部分）"
+
+    n, ci_path = last_round("docs/ci/round-*/result.json")
+    ci = load(os.path.relpath(ci_path, ws), {}) if ci_path else {}
+    if not ci_path:
+        checks = "没有检查结果"
+    elif ci.get("passed"):
+        checks = f"第 {n} 轮通过"
+    else:
+        checks = f"第 {n} 轮未通过：" + "、".join(map(str, ci.get("failed", [])))
+
+    n, summary_path = last_round("docs/review/round-*/summary.md")
+    summary = open(summary_path, encoding="utf-8").read() if summary_path else ""
+    table = []
+    for line in summary.splitlines()[next((i for i, l in enumerate(summary.splitlines()) if "验收标准" in l), len(summary.splitlines())):]:
+        if line.lstrip().startswith("|"):
+            table.append(line)
+        elif table:
+            break
+    acceptance = "\n".join(table) or "（review 总结里没有验收标准表）"
+
+    rounds = sorted(glob.glob(os.path.join(ws, "docs/review/round-*/verified.json")),
+                    key=lambda p: int(re.search(r"round-(\d+)", p).group(1)))
+    every = [load(os.path.relpath(p, ws), []) for p in rounds]
+    last = every[-1] if every else []
+    important = lambda f: f.get("severity") == "Important"
+    blocking = sum(1 for fs in every for f in fs if important(f) and f.get("status", "new") == "new")
+    unresolved = [f for f in last if important(f) and f.get("status", "new") in ("new", "open")]
+    nits = sum(1 for f in last if f.get("severity") == "Nit")
+    review = f"{len(rounds)} 轮，阻塞问题 {blocking} 条，没解决的 {len(unresolved)} 条，Nit {nits} 条"
+    if unresolved:
+        review += "\n" + "\n".join(f"- {f.get('title', '')}（{f.get('file', '')}:{f.get('line', '')}）" for f in unresolved)
+
+    # Commits after the last review round (risk-rules lists them): nobody reviewed these.
+    unreviewed = load(".myorch/steps/risk-rules/out/manifest.json", {}).get("outputs", {}).get("unreviewed_commits") or []
+    if unreviewed:
+        review += f"\nreview 之后的提交 {len(unreviewed)} 个（没有经过 review）：" + "；".join(c.get("subject", "") for c in unreviewed)
+
+    # End-to-end block: the last round's smoke and acceptance results.
+    e2e_rounds = sorted({int(m.group(1)) for p in glob.glob(os.path.join(ws, "docs/e2e/round-*/"))
+                         if (m := re.search(r"round-(\d+)", p))})
+    if not e2e_rounds:
+        e2e = "项目没有端到端测试"
+    else:
+        n, parts = e2e_rounds[-1], []
+        for part, label in (("smoke", "冒烟用例"), ("acceptance", "验收用例")):
+            if not os.path.isdir(os.path.join(ws, f"docs/e2e/round-{n}/{part}")):
+                continue
+            r = load(f"docs/e2e/round-{n}/{part}/result.json", None)
+            if r is None:
+                parts.append(f"{label}没有结果")
+                continue
+            failed, env = r.get("failed") or [], r.get("environment") or []
+            text = f"{label}通过" if r.get("passed") else (f"{label}失败：" + "、".join(map(str, failed)) if failed else f"{label}没有通过")
+            if env:
+                text += "（测试环境的问题，没有测成：" + "、".join(map(str, env)) + "）"
+            parts.append(text)
+        e2e = f"第 {n} 轮，" + ("，".join(parts) or "没有结果")
+
+    risk_md = read("docs/risk.md")
+    risk = "\n\n".join(s for s in (section(risk_md, "结论"), section(risk_md, "请审批人重点检查")) if s) or "（没有风险说明）"
+
+    head_lines = f"# {title}\n" + (f"工单：{ticket}\n" if ticket else "")
+    description = f"""{head_lines}
+    ## 改了什么
+    {changed}
+
+    ## 怎么验证的
+    - 检查：{checks}
+    - 端到端：{e2e}
+    - 验收标准：
+
+    {acceptance}
+
+    ## review
+    {review}
+
+    ## 风险
+    {risk}
+
+    ## 怎么撤回
+    合并前：放弃分支 {branch}。合并后：revert 这次合并带进来的提交（{base}..{commit[:12]}）。
+    """
+    description = description.strip() + "\n"
+    os.makedirs(os.path.join(ws, "docs"), exist_ok=True)
+    open(os.path.join(ws, "docs/delivery.md"), "w", encoding="utf-8").write(description)
+
+    tpl = os.environ.get("MYORCH_PROJECT_PR_TEMPLATE", "")
+    pr_template = open(tpl, encoding="utf-8").read().strip() if tpl and os.path.exists(tpl) else ""
+
+    delivery = {"branch": branch, "base": base, "commit": commit, "title": title, "ticket": ticket,
+                "repo": repo, "description": description, "pr_template": pr_template}
+    json.dump({"status": "ok", "summary": f"已推送 {branch}（{commit[:12]}），交付说明在 docs/delivery.md",
+               "outputs": {"delivery": delivery}},
+              open(os.path.join(os.environ.get("MYORCH_OUT_DIR", "/sandbox/out"), "manifest.json"), "w"),
+              ensure_ascii=False)
+    print(f"pushed {branch} at {commit}")
+    PY

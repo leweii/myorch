@@ -1,0 +1,23 @@
+# OpenShell gateway in a container (deploy/compose.yaml). Findings: docs/notes/2026-11-04-gateway-in-docker.md
+[openshell]
+version = 2
+
+[openshell.gateway]
+
+# Local single-user mode: no TLS, no user authentication. Anyone who reaches the port controls the
+# gateway, so compose publishes it on 127.0.0.1 only. Sandbox launch credentials are still signed
+# (keys in OPENSHELL_LOCAL_TLS_DIR/jwt, made by the gateway-init service).
+[openshell.gateway.auth]
+allow_unauthenticated_users = true
+
+[openshell.drivers.docker]
+# The supervisor container cannot join the compose network (only auto | host | bridge), so it calls
+# back through the host: the gateway port is published there. Docker Desktop: works with the port on
+# 127.0.0.1. Linux: not tested; host.docker.internal is the docker0 bridge there.
+supervisor_network_mode = "bridge"
+# The same port as the gateway service in compose.yaml (17671 there, fixed).
+grpc_endpoint = "http://host.docker.internal:17671"
+allow_driver_config = true    # myorch passes the volume mounts per sandbox
+
+[openshell.drivers.docker.resource_admission]
+enabled = true                # only volumes with the approval labels (myorch init sets them)

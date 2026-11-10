@@ -1,0 +1,1913 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>myorch 流程手册</title>
+<script>
+  // Apply the saved theme before the first paint (same key and values as the console's theme.js).
+  (() => { let t = null; try { t = localStorage.getItem("myorch.theme"); } catch {}
+    t = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[t] || t;
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; })();
+</script>
+<style>
+  /* Quiet and legible: one neutral family, hierarchy from size, weight and space rather than boxes.
+     Borders only where they separate; the accent marks links and where you are. */
+  :root {
+    --canvas: #f6f6f5; --surface: #fff; --well: #f3f3f2; --raised: #fff;
+    --line: rgba(15,15,20,.08); --line-strong: rgba(15,15,20,.15);
+    --text-strong: #17171a; --text: #3b3b41; --text-faint: #6e6e76; --text-ghost: #a3a3aa;
+    --accent: #2563eb; --accent-soft: #edf2fe; --accent-text: #1d4fd7;
+    --success: #15803d; --success-soft: #ebf6ee; --danger: #c2321f; --danger-soft: #fcefec;
+    --warning: #a16207; --warning-soft: #fbf4e4;
+    --shadow-card: 0 1px 2px rgba(15,15,20,.05), 0 0 0 1px var(--line);
+    --hc: rgba(15,15,20,.09);
+    color-scheme: light;
+    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --top: 56px; --side: 280px;
+  }
+  :root[data-theme="dark"] {
+    --canvas: #0e0e10; --surface: #151518; --well: #1c1c20; --raised: #232328;
+    --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
+    --text-strong: #f4f4f5; --text: #d2d2d7; --text-faint: #9d9da6; --text-ghost: #66666e;
+    --accent: #5b9bff; --accent-soft: rgba(91,155,255,.14); --accent-text: #8ab8ff;
+    --success: #4ade80; --success-soft: rgba(74,222,128,.12); --danger: #ff7a66; --danger-soft: rgba(255,122,102,.12);
+    --warning: #f5b94a; --warning-soft: rgba(245,185,74,.12);
+    --shadow-card: 0 0 0 1px var(--line);
+    --hc: rgba(255,255,255,.08);
+    color-scheme: dark; }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme]) {
+    --canvas: #0e0e10; --surface: #151518; --well: #1c1c20; --raised: #232328;
+    --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
+    --text-strong: #f4f4f5; --text: #d2d2d7; --text-faint: #9d9da6; --text-ghost: #66666e;
+    --accent: #5b9bff; --accent-soft: rgba(91,155,255,.14); --accent-text: #8ab8ff;
+    --success: #4ade80; --success-soft: rgba(74,222,128,.12); --danger: #ff7a66; --danger-soft: rgba(255,122,102,.12);
+    --warning: #f5b94a; --warning-soft: rgba(245,185,74,.12);
+    --shadow-card: 0 0 0 1px var(--line);
+    --hc: rgba(255,255,255,.08);
+    color-scheme: dark; } }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top) + 24px); }
+  body { margin: 0; background: var(--surface); color: var(--text); font: 400 15px/1.8 var(--font);
+    -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  ::selection { background: var(--accent-soft); color: var(--text-strong); }
+
+  /* ---- top bar ---- */
+  .top { position: fixed; inset: 0 0 auto 0; height: var(--top); z-index: 20; display: flex; align-items: center; gap: 12px;
+    padding: 0 20px 0 24px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 650; font-size: 16px; color: var(--text-strong); letter-spacing: -.01em; text-decoration: none; }
+  .brand-sub { color: var(--text-faint); font-size: 14px; }
+  .brand-sub::before { content: "/"; margin-right: 12px; color: var(--text-ghost); }
+  .top .spacer { flex: 1; }
+  .seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--well); border-radius: var(--r-md); }
+  .seg button { font: 500 13px/1.3 var(--font); color: var(--text-faint); background: transparent; border: 0; cursor: pointer;
+    padding: 5px 12px; border-radius: var(--r-sm); }
+  .seg button:hover { color: var(--text-strong); }
+  .seg button.on { background: var(--raised); color: var(--text-strong); box-shadow: var(--shadow-card); }
+
+  /* ---- sidebar ---- */
+  aside { position: fixed; top: var(--top); left: 0; bottom: 0; width: var(--side); overflow-y: auto;
+    border-right: 1px solid var(--line); padding: 20px 14px 40px; }
+  aside input { width: 100%; margin: 0 0 16px; padding: 7px 12px; border: 1px solid transparent; border-radius: var(--r-md);
+    font: 400 13.5px/1.4 var(--font); background: var(--well); color: var(--text-strong); }
+  aside input::placeholder { color: var(--text-ghost); }
+  aside input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
+  aside ul { list-style: none; margin: 0; padding: 0; }
+  aside a { display: block; color: var(--text); text-decoration: none; border-radius: var(--r-sm); padding: 5px 10px; line-height: 1.45; }
+  aside a:hover { background: var(--well); color: var(--text-strong); }
+  aside a.ch-link { font-size: 14px; font-weight: 500; }
+  aside ul.sub { display: none; margin: 2px 0 8px 10px; padding-left: 8px; border-left: 1px solid var(--line); }
+  aside li.ch.open ul.sub { display: block; }
+  aside ul.sub a { font-size: 13px; color: var(--text-faint); padding: 4px 10px; }
+  aside a.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
+  aside ul.sub a.active { background: transparent; color: var(--accent-text); font-weight: 500; box-shadow: -9px 0 0 -8px var(--accent); }
+
+  /* ---- content ---- */
+  main { margin-left: var(--side); padding: calc(var(--top) + 40px) 56px 160px; }
+  .chapter { max-width: 980px; }
+  .chapter + .chapter { margin-top: 72px; padding-top: 56px; border-top: 1px solid var(--line); }
+  h1, h2, h3, h4 { color: var(--text-strong); line-height: 1.35; letter-spacing: -.01em; }
+  h1 { font-size: 30px; font-weight: 700; margin: 0 0 20px; }
+  h2 { font-size: 21px; font-weight: 650; margin: 48px 0 12px; }
+  h3 { font-size: 17px; font-weight: 600; margin: 32px 0 8px; }
+  h4 { font-size: 15px; font-weight: 600; margin: 24px 0 6px; }
+  p { margin: 10px 0; }
+  a { color: var(--accent-text); text-decoration: none; }
+  a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  b, strong { font-weight: 600; color: var(--text-strong); }
+  code { font-family: var(--mono); font-size: .85em; background: var(--well); color: var(--text-strong); padding: .15em .4em; border-radius: 4px; }
+  pre { background: var(--well); padding: 14px 18px; border-radius: var(--r-md); overflow-x: auto; line-height: 1.65; margin: 14px 0; }
+  pre code { background: none; padding: 0; font-size: 13px; color: var(--text-strong); }
+  .diagram { width: min(1200px, calc(100vw - var(--side) - 112px)); margin: 20px 0; padding: 20px; background: var(--well); border-radius: var(--r-lg); overflow-x: auto; }
+  table { border-collapse: collapse; margin: 16px 0; font-size: 14px; line-height: 1.65; display: block; overflow-x: auto; }
+  th, td { padding: 9px 14px 9px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  th { font-size: 12.5px; font-weight: 600; color: var(--text-faint); white-space: nowrap; border-bottom-color: var(--line-strong); }
+  td:first-child, th:first-child { padding-left: 2px; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--well) 60%, transparent); }
+  ul, ol { padding-left: 22px; margin: 10px 0; }
+  li { margin: 4px 0; }
+  li::marker { color: var(--text-ghost); }
+  blockquote { margin: 16px 0; padding: 10px 16px; border-left: 3px solid var(--accent); background: var(--accent-soft);
+    border-radius: 0 var(--r-md) var(--r-md) 0; color: var(--text); }
+  blockquote p { margin: 4px 0; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
+  .hidden { display: none !important; }
+  aside::-webkit-scrollbar { width: 8px; } aside::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; border: 2px solid var(--surface); }
+  @media (max-width: 960px) {
+    .diagram { width: auto; }
+    .top { position: sticky; } .brand-sub { display: none; }
+    aside { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
+    main { margin-left: 0; padding: 32px 20px 80px; }
+  }
+  .xlink { font-size: 13.5px; font-weight: 500; color: var(--text-faint); margin-right: 8px; }
+  .xlink:hover { color: var(--accent-text); text-decoration: none; }
+
+  /* ---- generated step graphs (docs/workflows/build.py) ---- */
+  .fg { margin: 16px 0 8px; padding: 18px; background: var(--well); border-radius: var(--r-lg); font-size: 13px; line-height: 1.45; }
+  .fg-row { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .fg-row > * { flex: 1 1 0; min-width: 170px; max-width: 420px; }
+  .fg-row > .fg-loop { max-width: none; flex-basis: 100%; }
+  .fg-c { background: var(--raised); box-shadow: var(--shadow-card); border-radius: 10px; padding: 8px 12px; text-align: center; }
+  .fg-c b { display: block; font: 600 13px/1.4 var(--mono); color: var(--text-strong); }
+  .fg-c > span { display: block; font-size: 12px; color: var(--text-faint); }
+  .fg-c .wait { font-size: 11.5px; color: var(--text-ghost); }
+  .fg-c.k-agent { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-card); }
+  .fg-c.k-host { background: repeating-linear-gradient(-45deg, var(--hc) 0 1px, transparent 1px 7px), var(--raised); }
+  .fg-c.human { background: var(--warning-soft); box-shadow: 0 0 0 1.5px var(--warning); }
+  .fg-c.human b { color: var(--warning); }
+  .fg-c.cond { outline: 1px dashed var(--line-strong); outline-offset: 3px; }
+  .fg .chips { display: flex; gap: 4px; justify-content: center; flex-wrap: wrap; margin-top: 4px; }
+  .fg .chip { font-style: normal; font-size: 11px; font-weight: 500; background: var(--well); color: var(--text-faint); border-radius: 5px; padding: 0 6px; white-space: nowrap; }
+  .fg .chip.ask { background: var(--warning-soft); color: var(--warning); }
+  .fg .chip.cond { border: 1px dashed var(--line-strong); background: transparent; cursor: help; }
+  .fg-down { display: flex; justify-content: center; height: 26px; }
+  .fg-down i { display: block; width: 1.5px; height: 20px; margin-top: 2px; background: var(--text-ghost); position: relative; }
+  .fg-down i::after { content: ""; position: absolute; bottom: -2px; left: -4.25px; border-top: 7px solid var(--text-ghost); border-left: 5px solid transparent; border-right: 5px solid transparent; }
+  .fg-loop { border: 1px solid var(--line-strong); border-radius: 14px; padding: 10px 14px 14px; }
+  .fg-loop.cond { border-style: dashed; }
+  .fg-lh { font-size: 12px; color: var(--text-faint); margin-bottom: 10px; text-align: left; }
+  .fg-lh b { font: 600 12.5px var(--mono); color: var(--text-strong); }
+  .fg-lh code { font-size: 11.5px; }
+  .fg-lh .ask { color: var(--warning); font-weight: 600; }
+  .fg-lh .use { font-family: var(--mono); font-size: 11.5px; color: var(--text-ghost); }
+  .fg-reflect { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line-strong); display: flex; gap: 12px; align-items: center; }
+  .fg-reflect > span { flex: 1 1 auto; font-size: 12px; color: var(--text-faint); text-align: right; }
+  .fg-reflect > .fg-c { flex: 0 0 220px; }
+  .fg-legend { display: flex; flex-wrap: wrap; gap: 6px 16px; margin-top: 16px; font-size: 12px; color: var(--text-faint); }
+  .fg-legend .sw { display: inline-block; width: 14px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; background: var(--raised); box-shadow: var(--shadow-card); }
+  .fg-legend .sw.agent { box-shadow: inset 3px 0 0 var(--accent), var(--shadow-card); }
+  .fg-legend .sw.host { background: repeating-linear-gradient(-45deg, var(--hc) 0 1px, transparent 1px 4px), var(--raised); }
+  .fg-legend .sw.human { background: var(--warning-soft); box-shadow: 0 0 0 1.5px var(--warning); }
+  .fg-legend .sw.cond { background: transparent; box-shadow: none; outline: 1px dashed var(--line-strong); }
+  details.facts { margin: 8px 0 16px; }
+  details.facts summary { cursor: pointer; color: var(--text-faint); font-size: 13.5px; }
+  details.facts summary:hover { color: var(--text-strong); }
+  details.facts td code { white-space: normal; word-break: break-word; }
+  tr.grp td { color: var(--text-faint); font-size: 13px; background: color-mix(in srgb, var(--well) 60%, transparent); }
+  table.meta td:first-child { color: var(--text-faint); white-space: nowrap; width: 80px; }
+  table.meta td { border-bottom: 0; padding-top: 3px; padding-bottom: 3px; }
+  h1 small { font-size: 16px; font-weight: 500; color: var(--text-faint); margin-left: 6px; }
+  p.small, span.small { font-size: 13px; color: var(--text-faint); }
+  p.err { color: var(--danger); }
+  aside .grp-t { font-size: 11.5px; font-weight: 600; color: var(--text-ghost); padding: 14px 10px 4px; text-transform: none; }
+  aside .role { color: var(--text-ghost); font-weight: 400; font-size: 12.5px; margin-left: 4px; }
+
+</style>
+</head>
+<body>
+<header class="top">
+  <a class="brand" href="#ch-index">myorch</a><span class="brand-sub">流程手册</span>
+  <span class="spacer"></span>
+  <a class="xlink" href="../index.html">使用手册 →</a>
+  <a class="xlink" id="other-lang" href="../../workflows/index.html">English</a>
+  <div class="seg" role="radiogroup" aria-label="主题">
+    <button data-theme-pick="light">浅色</button><button data-theme-pick="dark">深色</button><button data-theme-pick="auto">跟随系统</button>
+  </div>
+</header>
+<aside>
+  <input id="q" type="search" placeholder="筛选章节  /">
+  <ul id="nav">
+<li class="ch"><a class="ch-link" href="#ch-index">首页</a><ul class="sub"><li><a href="#index--所有项目共用一套流程">所有项目共用一套流程</a></li><li><a href="#index--角色">角色</a></li><li><a href="#index--什么时候用哪个">什么时候用哪个</a></li><li><a href="#index--发起一个运行">发起一个运行</a></li><li><a href="#index--你介入的地方">你介入的地方</a></li><li><a href="#index--在原分支上接着改">在原分支上接着改</a></li><li><a href="#index--看懂步骤图">看懂步骤图</a></li><li><a href="#index--改流程">改流程</a></li></ul></li>
+<li class="grp-t">流程</li>
+<li class="ch"><a class="ch-link" href="#ch-development">development<span class="role">开发</span></a><ul class="sub"><li><a href="#development--inputs">输入</a></li><li><a href="#development--steps">步骤图</a></li><li><a href="#development--每一步做什么">每一步做什么</a></li><li><a href="#development--你介入的地方">你介入的地方</a></li><li><a href="#development--产物">产物</a></li><li><a href="#development--develop">develop</a></li><li><a href="#development--读工单">读工单</a></li><li><a href="#development--review-循环">review 循环</a></li><li><a href="#development--项目包的修改pack-choosepack-apply">项目包的修改（pack-choose、pack-apply）</a></li><li><a href="#development--任务信息和-takeaway">任务信息和 takeaway</a></li><li><a href="#development--风险和审批">风险和审批</a></li><li><a href="#development--交付">交付</a></li><li><a href="#development--接着改from_run">接着改（from_run）</a></li><li><a href="#development--重放评测用">重放（评测用）</a></li><li><a href="#development--按项目的不同">按项目的不同</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-review">review<span class="role">评审 PR</span></a><ul class="sub"><li><a href="#review--inputs">输入</a></li><li><a href="#review--steps">步骤图</a></li><li><a href="#review--每一步做什么">每一步做什么</a></li><li><a href="#review--你介入的地方">你介入的地方</a></li><li><a href="#review--产物">产物</a></li><li><a href="#review--原则">原则</a></li><li><a href="#review--端到端测试">端到端测试</a></li><li><a href="#review--安全">安全</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-postmortem">postmortem<span class="role">复盘</span></a><ul class="sub"><li><a href="#postmortem--inputs">输入</a></li><li><a href="#postmortem--steps">步骤图</a></li><li><a href="#postmortem--输入">输入</a></li><li><a href="#postmortem--每一步做什么">每一步做什么</a></li><li><a href="#postmortem--回放和评测案例">回放和评测案例</a></li><li><a href="#postmortem--你介入的地方">你介入的地方</a></li><li><a href="#postmortem--写回项目包">写回项目包</a></li><li><a href="#postmortem--产物">产物</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-sweep">sweep<span class="role">找 bug</span></a><ul class="sub"><li><a href="#sweep--inputs">输入</a></li><li><a href="#sweep--steps">步骤图</a></li><li><a href="#sweep--看哪些文件">看哪些文件</a></li><li><a href="#sweep--每一步做什么">每一步做什么</a></li><li><a href="#sweep--跨运行的状态">跨运行的状态</a></li><li><a href="#sweep--你介入的地方">你介入的地方</a></li><li><a href="#sweep--定时跑">定时跑</a></li><li><a href="#sweep--产物">产物</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-learn">learn<span class="role">学习</span></a><ul class="sub"><li><a href="#learn--inputs">输入</a></li><li><a href="#learn--steps">步骤图</a></li><li><a href="#learn--学哪些运行">学哪些运行</a></li><li><a href="#learn--读哪些信号">读哪些信号</a></li><li><a href="#learn--每一步做什么">每一步做什么</a></li><li><a href="#learn--你介入的地方">你介入的地方</a></li><li><a href="#learn--写回项目包">写回项目包</a></li><li><a href="#learn--产物">产物</a></li><li><a href="#learn--定时跑">定时跑</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-eval">eval<span class="role">评测</span></a><ul class="sub"><li><a href="#eval--inputs">输入</a></li><li><a href="#eval--steps">步骤图</a></li><li><a href="#eval--案例从哪里来">案例从哪里来</a></li><li><a href="#eval--每一步做什么">每一步做什么</a></li><li><a href="#eval--不泄露答案">不泄露答案</a></li><li><a href="#eval--怎么打分">怎么打分</a></li><li><a href="#eval--你介入的地方">你介入的地方</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-onboard">onboard<span class="role">接入项目</span></a><ul class="sub"><li><a href="#onboard--inputs">输入</a></li><li><a href="#onboard--steps">步骤图</a></li><li><a href="#onboard--开始之前">开始之前</a></li><li><a href="#onboard--每一步做什么">每一步做什么</a></li><li><a href="#onboard--你介入的地方">你介入的地方</a></li><li><a href="#onboard--写回项目包">写回项目包</a></li><li><a href="#onboard--产物">产物</a></li></ul></li>
+<li class="grp-t">参考</li><li class="ch"><a class="ch-link" href="#ch-fragments">片段</a></li>
+  </ul>
+</aside>
+<main>
+<section class="chapter" id="ch-index"><h1>myorch 流程手册</h1><p>这本手册讲每个流程：做什么、什么时候用、每一步做什么、什么时候需要你。平台本身（服务、架构、命令、项目包、流程语法）在<a href="../index.html#ch-index">使用手册</a>里。</p>
+<p>每个流程一章。章里的输入表、步骤图和步骤明细都从 <code>flows/*.yaml</code> 生成，和 <code>myorch expand</code>、控制台「流程」看到的一样，所以不会和流程定义对不上。其余文字写在流程旁边的 <code>flows/&lt;流程&gt;.md</code> 里，英文版在 <code>docs/en/flows/&lt;流程&gt;.md</code>。改了流程或它的 <code>.md</code> 以后，重新生成（中英文手册一起生成）：</p>
+<pre><code class="language-sh">uv run --with markdown python docs/workflows/build.py
+</code></pre>
+<h2 id="index--所有项目共用一套流程">所有项目共用一套流程</h2>
+<p>每个角色只有一个流程（<code>flows/development.yaml</code>、<code>review.yaml</code> 等），所有项目共用。项目之间的差别写在项目包 <code>myorch-knowledge/&lt;项目&gt;/</code> 里，展开流程时生效，发起时不用选：</p>
+<ul>
+<li><code>project.yaml</code> 的 <code>flows.development</code>：review 有多重（<code>reviewers</code>、<code>max_rounds</code>、<code>security</code>、<code>on_exhausted</code>），要不要提交 takeaway（<code>takeaway</code>），有没有 <code>incident</code> 输入（<code>incident</code>）。不写时用默认值：3、3、true、<code>ask</code>、false、false。</li>
+<li><code>prompts/&lt;槽位&gt;.md</code>：项目自己的 prompt 条款，槽位有 <code>develop</code>、<code>review</code>、<code>verify</code>、<code>fix</code>、<code>risk</code>。展开时原文拼进对应步骤的 prompt，先放模板的，再放项目的。</li>
+<li><code>jira</code>：有 Jira 时，开发流程有工单输入和 <code>fetch-ticket</code>，工单就是需求；没有时第一条消息就是需求。</li>
+<li>流程里的 <code>if:</code> 按项目裁掉步骤和输入。裁掉的输入在表单里看不到。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th><code>flows.development</code></th>
+<th><code>prompts/</code></th>
+<th>Jira</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>mdm（Cookbook，master-data-management）</td>
+<td>默认值，加 <code>takeaway: true</code></td>
+<td>core-ng 模板的 <code>develop.md</code>、<code>review.md</code>（Gradle 依赖、<code>*-interface</code> 契约）</td>
+<td>有（<code>MD</code>）</td>
+</tr>
+<tr>
+<td>blog（个人博客）</td>
+<td><code>reviewers: 1</code>、<code>max_rounds: 1</code>、<code>security: false</code>、<code>on_exhausted: accept</code></td>
+<td><code>develop.md</code>、<code>review.md</code>（Jekyll、写作规范、误公开）</td>
+<td>没有</td>
+</tr>
+<tr>
+<td>myorch（平台自己）</td>
+<td>默认值，加 <code>incident: true</code></td>
+<td><code>develop.md</code>（incident 原因分析、平台的设计检查、合并以后要做的事）、<code>risk.md</code></td>
+<td>没有</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>每个项目怎么走开发流程，见 <a href="#development--按项目的不同">development 的「按项目的不同」</a>。</li>
+<li>改某个项目的做法，改它的项目包，然后 <code>uv run myorch project sync &lt;项目&gt;</code>。改 <code>flows/</code> 下的流程或片段，所有项目都受影响。</li>
+<li>流程文件开头写 <code>role:</code>（角色）。myorch 按角色认流程，不按名字。例如「在这个分支上接着改」对 development 角色的运行都有效，eval 回放用 eval 角色的流程。</li>
+<li>2026-11-03 到 2026-11-10 之间，流程按项目复制过（<code>ck-</code>、<code>blog-</code>、<code>mo-</code> 前缀）。现在合成了一套，原因见 <a href="https://github.com/leweii/myorch/blob/main/docs/notes/2026-11-10-one-set-of-flows.md">docs/notes/2026-11-10-one-set-of-flows.md</a>。旧运行（例如 <code>ck-development-…</code>）照样能看、能接着改。</li>
+</ul>
+<h2 id="index--角色">角色</h2>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>控制台里的任务</th>
+<th>用途</th>
+<th>对外写什么</th>
+<th>流程</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>development</code></td>
+<td>开发</td>
+<td>从需求到推送分支：需求、实现、review、审批、推分支</td>
+<td>审批通过后推送分支。不开 PR，不推 base 分支</td>
+<td><a href="#ch-development">development</a></td>
+</tr>
+<tr>
+<td><code>review</code></td>
+<td>评审 PR</td>
+<td>评审一个已有的 PR，结论显示在控制台</td>
+<td>不写。只读 PR</td>
+<td><a href="#ch-review">review</a></td>
+</tr>
+<tr>
+<td><code>postmortem</code></td>
+<td>复盘</td>
+<td>问题已经进了代码：找出引入它的改动和本该拦住的层，改进知识，生成评测案例</td>
+<td>只改本地 <code>myorch-knowledge</code></td>
+<td><a href="#ch-postmortem">postmortem</a></td>
+</tr>
+<tr>
+<td><code>sweep</code></td>
+<td>找 bug</td>
+<td>找现有代码里的 bug，每次看一批文件，只出日报</td>
+<td>不写</td>
+<td><a href="#ch-sweep">sweep</a></td>
+</tr>
+<tr>
+<td><code>learn</code></td>
+<td>学习</td>
+<td>从历史运行里沉淀知识：改进 <code>guide/</code>、记录人做过的决定、加确定性检查</td>
+<td>只改本地 <code>myorch-knowledge</code></td>
+<td><a href="#ch-learn">learn</a></td>
+</tr>
+<tr>
+<td><code>eval</code></td>
+<td>评测</td>
+<td>重放一个评测案例，给 reviewer 打分</td>
+<td>不写</td>
+<td><a href="#ch-eval">eval</a></td>
+</tr>
+<tr>
+<td><code>onboard</code></td>
+<td>接入项目</td>
+<td>分析仓库、试跑检查，提出项目包的修改</td>
+<td>只改本地 <code>myorch-knowledge</code></td>
+<td><a href="#ch-onboard">onboard</a></td>
+</tr>
+</tbody>
+</table>
+<h2 id="index--什么时候用哪个">什么时候用哪个</h2>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>有一个需求要做</td>
+<td>development</td>
+</tr>
+<tr>
+<td>改动推上去了，自测发现问题，或者要在这次改动上再改</td>
+<td>development，<a href="#index--在原分支上接着改">在原分支上接着改</a></td>
+</tr>
+<tr>
+<td>有一个 PR 要看一眼</td>
+<td>review</td>
+</tr>
+<tr>
+<td>跑了几次以后，review 总报同类问题或总漏同类问题</td>
+<td>learn</td>
+</tr>
+<tr>
+<td>新接一个仓库，或者仓库结构变了</td>
+<td>onboard</td>
+</tr>
+<tr>
+<td>想定期找老代码里的 bug</td>
+<td>sweep，用 <code>myorch schedule</code> 每晚跑</td>
+</tr>
+<tr>
+<td>改了 reviewer 的 prompt 或模型，想知道变好还是变差</td>
+<td>eval</td>
+</tr>
+<tr>
+<td>一个问题已经修好了，想知道当初为什么没拦住</td>
+<td>postmortem（修 bug 本身用 development）</td>
+</tr>
+<tr>
+<td>平台自己出了问题（任何项目的运行）</td>
+<td>myorch 项目的 development，带上 <code>incident</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="index--发起一个运行">发起一个运行</h2>
+<table>
+<thead>
+<tr>
+<th>在哪里</th>
+<th>怎么做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>控制台 http://127.0.0.1:8800/</td>
+<td>顶栏「＋ 新运行」：先选项目，再选任务（这个项目的每个流程一个按钮），填字段，第一条消息写请求</td>
+</tr>
+<tr>
+<td>Slack</td>
+<td><code>/myorch</code> 打开发起弹窗：先选项目，再列出这个项目的流程，字段和控制台的一样。运行开始以后，bot 在你的私信里给它开一个线程</td>
+</tr>
+<tr>
+<td>本机 Claude Code 会话</td>
+<td>用 channel 工具 <code>start</code> 发起，例如发现平台问题后发起 myorch 项目的 development。它发起的运行会推送到这个会话</td>
+</tr>
+<tr>
+<td>命令行</td>
+<td><code>uv run myorch run flows/&lt;流程&gt;.yaml --project &lt;项目&gt; -i 名字=值</code>。命令参考见<a href="../index.html#ch-05-cli">使用手册 · 5. 命令参考</a></td>
+</tr>
+<tr>
+<td>定时</td>
+<td><code>uv run myorch schedule add &lt;名字&gt; --flow &lt;流程名，例如 sweep&gt; --project &lt;项目&gt; --cron '…'</code>，例如每晚的 sweep、每周的 learn</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>字段由流程文件的 <code>inputs</code> 定义：标签、提示、是否必填、类型。类型有文本、消息、下拉选项、工单号（<code>MD-18700</code> 和 <code>18700</code> 都可以）、运行（从这个项目已结束的运行里选）。每章的「输入」表列出了它们。</li>
+<li>消息框写什么也由流程定义，可以按项目不同。development 在有 Jira 的项目（mdm）里，需求在工单里，消息是可选的补充说明；blog 和 myorch 没有工单，消息就是需求，必填。</li>
+<li>工单输入和输入里的工单号会自动成为运行的标签，运行列表可以按标签搜。</li>
+<li>发起前，客户端读流程、按 presets 选参数、展开片段、填入项目值、检查。写错了直接报错，不会启动。想先看展开结果：<code>uv run myorch expand flows/&lt;流程&gt;.yaml --project &lt;项目&gt;</code>。</li>
+</ul>
+<h2 id="index--你介入的地方">你介入的地方</h2>
+<p>流程在下面几种地方停下来等你。控制台顶栏的「等你处理」和 <code>uv run myorch list</code> 都会列出来。Slack 线程里有同样的按钮。步骤图里琥珀色的卡片和「可能问你」标记就是这些地方。</p>
+<table>
+<thead>
+<tr>
+<th>什么时候</th>
+<th>控制台 / Slack</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>agent 提问</td>
+<td>在对话里回复。Slack 里点选项按钮，或在线程里直接回复</td>
+<td><code>myorch reply &lt;run&gt; &lt;步骤&gt; "回答"</code></td>
+</tr>
+<tr>
+<td>循环跑满了，问题还没解决</td>
+<td>先看反思步骤的建议，再回复 1 再跑一轮、2 接受、3 终止</td>
+<td><code>myorch reply &lt;run&gt; &lt;循环&gt; 1</code></td>
+</tr>
+<tr>
+<td>挑选建议（learn、onboard、postmortem 等）</td>
+<td>回复编号，例如 <code>1,3</code>、<code>all</code>、<code>none</code></td>
+<td><code>myorch reply &lt;run&gt; choose "1,3"</code></td>
+</tr>
+<tr>
+<td>审批</td>
+<td>先看右栏「改动」页（diff、review 结论、风险判定），再点「批准」「提修改意见」（先在输入框写意见）或「驳回」。Slack 里是「批准」「要求修改」「驳回」三个按钮</td>
+<td><code>myorch review &lt;run&gt;</code> 看材料，然后 <code>myorch approve</code>、<code>myorch changes</code> 或 <code>myorch reject</code></td>
+</tr>
+<tr>
+<td>不想再跑了</td>
+<td>取消</td>
+<td><code>myorch cancel &lt;run&gt;</code></td>
+</tr>
+<tr>
+<td>失败了，原因已经排除</td>
+<td>「重新执行失败的步骤」，或在一个步骤上点「从这一步重新执行」。同一个运行接着跑，成功的步骤保留结果</td>
+<td><code>myorch resume &lt;run&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>提问等太久会超时失败，默认 24 小时。</li>
+<li>批准绑定提交。批准之后代码变了，交付会拒绝推送，必须重跑。</li>
+<li>提修改意见把运行送回审批前的循环（例如 <code>review-fix</code>）再跑一轮，你的意见会给到修复的 agent。</li>
+<li>本机 Claude Code 会话能回答提问、从失败的步骤继续，不能审批。</li>
+</ul>
+<h2 id="index--在原分支上接着改">在原分支上接着改</h2>
+<p>用于 development 运行结束以后：自测发现了问题，或者要在这次改动的基础上再改。在控制台里打开那个运行，点「在这个分支上接着改」，第一条消息写这次要改什么。命令行用 <code>-i from_run=&lt;运行 ID&gt;</code>。</p>
+<ul>
+<li>选的运行必须已经结束，属于同一个项目，角色也是 development。没给工单号时，沿用上一次的。</li>
+<li>新运行用同一个分支名，推送后更新的是同一个分支，所以人开的 PR 也跟着更新。</li>
+<li>从那个分支的最后一个提交开始。远端分支上有人追加了提交时，从远端的最新提交开始。两者分叉时停下来，要人先处理。</li>
+<li>上一次的需求、设计、实现记录、风险判定、交付说明和最后一轮 review 结论放在 <code>docs/previous/</code>。agent 在它们的基础上写，并单独写明这次改了什么。更早的几次在 <code>docs/previous/earlier/</code> 里，一层套一层。</li>
+<li>人对上一次运行说的话放在 <code>docs/previous/conversation.md</code>：agent 问过的问题和人的回答、修改意见、批准或驳回时的意见，以及失败和重新执行。事件日志在宿主机上，sandbox 读不到，所以发起时（命令行、控制台、Slack 都一样）由宿主机写进新运行。agent 把它当作人的决定，和上一次文档里的假设冲突时以它为准。</li>
+<li>后面的实现、review、审批照常走。第 1 轮 review 只看这次新加的提交，检查和风险判定看整个分支相对 base 的改动。细节见 <a href="#development--接着改from_run">development 的「接着改」</a>。</li>
+</ul>
+<h2 id="index--看懂步骤图">看懂步骤图</h2>
+<ul>
+<li>从上到下是执行顺序。同一行的步骤并行。一张卡片等的不是上一行的全部步骤时，卡片下面写「等 …」。</li>
+<li>卡片第二行是执行者：agent（模型 · profile）、脚本（profile）、宿主机动作（注册过的确定性动作，不进 sandbox）、审批。profile 决定 sandbox 的权限，见<a href="../index.html#ch-07-projects">使用手册 · 7. 项目包</a>。</li>
+<li>左边有蓝条的是 agent。斜线底的是宿主机动作。琥珀色是需要你的地方：审批卡片，和标着「可能问你」的步骤。</li>
+<li>虚线外框是有条件的步骤或循环。鼠标停在「有条件」上能看到表达式。</li>
+<li>方框是循环：标题写最多几轮、什么时候停、跑满了怎么办。底部的反思步骤只在跑满且要问你时执行，给出建议。</li>
+<li>「×3 并行」表示同一个步骤起 3 个实例（例如 3 个 reviewer）。</li>
+<li>图按 mdm 和默认输入展开（mdm 的开发流程步骤最全）。换一个项目，项目包可能裁掉一些步骤、换掉参数（例如 blog 的 review 只有 1 个 reviewer），条件里的项目值也可能不同。用 <code>myorch expand flows/&lt;流程&gt;.yaml --project &lt;项目&gt;</code> 或控制台「流程」看某个项目的展开结果。点开图下面的「每一步的执行者、条件、输出」看完整的表达式。</li>
+</ul>
+<h2 id="index--改流程">改流程</h2>
+<ol>
+<li>改 <code>flows/&lt;流程&gt;.yaml</code> 或片段。写法见<a href="../index.html#ch-08-flow-syntax">使用手册 · 8. 写流程</a>。</li>
+<li><code>uv run myorch expand flows/&lt;流程&gt;.yaml --project &lt;项目&gt;</code> 看展开结果。</li>
+<li>同步改 <code>flows/&lt;流程&gt;.md</code> 和 <code>docs/en/flows/&lt;流程&gt;.md</code>，重新生成这本手册。</li>
+<li>跑一次 <code>uv run pytest</code>。worker 和控制台在 compose 里时，<code>docker compose -f deploy/compose.yaml up -d --build</code> 让它们读到新的流程。</li>
+</ol></section>
+<section class="chapter" id="ch-development"><h1>development <small>开发</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/development.yaml</code>，说明 <code>flows/development.md</code></td></tr><tr><td>角色</td><td><code>development</code>（控制台里的任务「开发」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>从需求到 PR：需求分析、技术设计、实现、多人 review、风险审批。审批通过后才推送分支、创建 PR。</td></tr><tr><td>片段</td><td><a href="#fragments--sync-base"><code>lib/sync-base.yaml</code></a>、<a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>、<a href="#fragments--deliver"><code>lib/deliver.yaml</code></a></td></tr></tbody></table><p>开发流程：从一个需求做到推送分支。所有项目共用这一个流程。它在一个会话里写需求、技术设计、改代码，再经过 review、风险判定和人工审批，最后把批准的那个提交推到这次运行的分支。myorch 不开 PR，也不合并：PR 由人在 GitHub 上开，合并也由人决定。审批之前改动不离开沙箱，什么都不推送。</p>
+<p>项目之间的差别都在项目包里，发起时不用选（见<a href="#development--按项目的不同">按项目的不同</a>）：</p>
+<ul>
+<li>review 有多重：几个 reviewer、最多几轮、要不要单独的 security、跑满以后怎么办（<code>project.yaml</code> 的 <code>flows.development</code>）。</li>
+<li>有没有 Jira：有时先由 <code>fetch-ticket</code> 读工单，工单就是需求；没有时第一条消息就是需求。</li>
+<li>要不要把任务信息和经验（takeaway）提交到仓库的 <code>myorch/</code> 目录（<code>flows.development.takeaway</code>）。</li>
+<li>有没有 <code>incident</code> 输入：平台出了问题时，把出问题的运行挂给 <code>develop</code> 看（<code>flows.development.incident</code>）。</li>
+<li>项目自己的 prompt 条款（<code>prompts/develop.md</code>、<code>review.md</code>、<code>verify.md</code>、<code>fix.md</code>、<code>risk.md</code>），展开流程时原文拼进对应步骤的 prompt。</li>
+</ul>
+<pre><code class="language-sh">uv run myorch run flows/development.yaml --project mdm -i ticket=18700
+uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i task=&quot;只改后台接口，前端另开工单&quot;
+uv run myorch run flows/development.yaml --project blog -i task=&quot;给文章页加字数统计&quot;
+uv run myorch run flows/development.yaml --project myorch -i task=&quot;...&quot; -i incident=development-1a2b3c4d
+uv run myorch run flows/development.yaml --project mdm -i from_run=&lt;上一次的运行 ID&gt; -i task=&quot;自测发现：批量导入时没有校验&quot;
+uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=&lt;PR 的 merge-base&gt; -i ticket_as_of=2026-10-01T08:00:00Z
+</code></pre>
+<p>控制台：先选项目，任务选「开发」。表单只显示这个项目用得上的字段。</p>
+<ul>
+<li>有 Jira 的项目（mdm）：填工单号（<code>MD-18700</code> 或 <code>18700</code>）。第一条消息是可选的补充说明：写工单里没有的重点和限制。</li>
+<li>没有 Jira 的项目（blog、myorch）：第一条消息就是需求，必填，可以写多行。</li>
+<li>myorch：平台在某次运行里出了问题时，在「出问题的运行」里填那次运行的 ID。本机 Claude Code 会话发现平台问题时，也用 channel 工具 <code>start</code> 发起，第一条消息写看到的现象和初步分析。</li>
+</ul>
+<p>消息的第一行成为 <code>task</code>，全文写进 <code>docs/external/request.md</code>。</p>
+<h2 id="development--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>ticket</code></td><td>Jira 工单</td><td>工单号</td><td></td><td></td><td>例如 18700。启动后第一步读工单<br><span class="small">只对 <code>project.jira.url</code> 成立的项目显示</span></td></tr><tr><td><code>from_run</code></td><td>起点</td><td>运行</td><td></td><td></td><td></td></tr><tr><td><code>task</code></td><td>需求</td><td>消息</td><td>看项目：<code>not project.jira.url</code></td><td></td><td>要改什么，越具体越好，可以写多行。有工单时工单就是需求，这里只写工单里没有的：重点、限制、要注意的地方</td></tr><tr><td><code>incident</code></td><td>出问题的运行</td><td>文本</td><td></td><td></td><td>在哪次运行里出了问题，例如 development-1a2b3c4d。没有可以不填<br><span class="small">只对 <code>project.flows.development.incident</code> 成立的项目显示</span></td></tr><tr><td><code>at</code></td><td>重放：基准提交（评测用）</td><td>文本</td><td></td><td></td><td>平时留空。评测重放历史工单时填 PR 的 merge-base：从这个提交开始，删掉之后的历史，不审批、不交付<br><span class="small">只对 <code>project.jira.url</code> 成立的项目显示</span></td></tr><tr><td><code>ticket_as_of</code></td><td>重放：工单截止时间（评测用）</td><td>文本</td><td></td><td></td><td>平时留空。ISO 时间，例如 2026-10-01T08:00:00Z：工单按这个时刻的样子读（描述回滚，只留之前的评论）<br><span class="small">只对 <code>project.jira.url</code> 成立的项目显示</span></td></tr><tr><td><code>ticket_comments</code></td><td>工单评论</td><td>选项：<code>all</code> / <code>none</code></td><td></td><td><code>all</code></td><td><br><span class="small">只对 <code>project.jira.url</code> 成立的项目显示</span></td></tr></tbody></table><h2 id="development--steps">步骤图</h2><p class="small">从 <code>flows/development.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="sync-master"><b>sync-master</b><span>脚本 · dev-git</span></div><div class="fg-c k-script cond" title="fetch-ticket"><b>fetch-ticket</b><span>脚本 · ticket-read</span><div class="chips"><i class="chip cond" title="inputs.ticket">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script" title="checkout-branch"><b>checkout-branch</b><span>脚本 · dev-git</span><span class="wait">等 sync-master</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="develop"><b>develop</b><span>agent · Opus · dev-write</span><div class="chips"><i class="chip ask">可能问你</i></div><span class="wait">等 checkout-branch、fetch-ticket</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-loop cond"><div class="fg-lh"><b>review-fix</b> · 循环 · 最多 3 轮 · 直到 <code>steps.verify.outputs.blocking == 0</code> · <span class="ask">跑满后问你</span> · <span class="use">lib/review-loop.yaml</span> · <i class="chip cond" title="steps.develop.outputs.proceed != false">有条件</i></div><div class="fg-row"><div class="fg-c k-script" title="ci"><b>ci</b><span>脚本 · dev-write</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="review"><b>review</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip">×3 并行</i></div></div><div class="fg-c k-agent" title="security"><b>security</b><span>agent · Sonnet · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="verify"><b>verify</b><span>agent · Opus · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent cond" title="fix"><b>fix</b><span>agent · Opus · dev-write</span><div class="chips"><i class="chip cond" title="steps.verify.outputs.blocking &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="pack-choose"><b>pack-choose</b><span>脚本 · dev-read</span><div class="chips"><i class="chip ask">可能问你</i><i class="chip cond" title="steps.fix.outputs.pack_proposals &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="pack-apply"><b>pack-apply</b><span>宿主机动作 · project-apply</span><div class="chips"><i class="chip cond" title="steps.pack-choose.outputs.accepted &gt; 0">有条件</i></div></div></div><div class="fg-reflect"><span>跑满仍未满足时先反思，再问你：再跑一轮 / 接受 / 终止</span><div class="fg-c k-agent" title="reflect"><b>reflect</b><span>agent · Opus · dev-read</span></div></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="takeaway-trail"><b>takeaway-trail</b><span>宿主机动作 · run-trail</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at">有条件</i><i class="chip">失败当跳过</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent cond" title="takeaway"><b>takeaway</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway-trail.outputs.path">有条件</i><i class="chip">失败当跳过</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="takeaway-redact"><b>takeaway-redact</b><span>宿主机动作 · takeaway-redact</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway.outputs.items != null">有条件</i><i class="chip">失败当跳过</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="takeaway-commit"><b>takeaway-commit</b><span>脚本 · dev-write</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway-redact.outputs.files &gt; 0">有条件</i><i class="chip">失败当跳过</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="risk-rules"><b>risk-rules</b><span>脚本 · dev-read</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent cond" title="classify-risk"><b>classify-risk</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-approval human cond" title="human-review"><b>human-review</b><span>审批 · 人数按风险算</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="deliver"><b>deliver</b><span>脚本 · dev-git</span><div class="chips"><i class="chip cond" title="steps.develop.outputs.proceed != false and not inputs.at">有条件</i></div></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>sync-master</code></td><td>脚本 · dev-git</td><td></td><td></td><td>失败时 <code>ask</code></td><td>超时 15m · 重试 1</td></tr><tr><td><code>checkout-branch</code></td><td>脚本 · dev-git</td><td></td><td><code>since</code></td><td>失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>fetch-ticket</code></td><td>脚本 · ticket-read</td><td><code>inputs.ticket</code></td><td><code>key</code>、<code>summary_line</code></td><td>失败时 <code>ask</code></td><td>超时 5m · 重试 1</td></tr><tr><td><code>develop</code></td><td>agent · Opus · dev-write</td><td></td><td><code>title</code>、<code>proceed</code>、<code>impact</code>、<code>requires_design_decision</code>、<code>design_question</code>、<code>design_options</code>、<code>checks_passed</code></td><td>可以向你提问；失败时 <code>ask</code></td><td>超时 75m · 重试 1</td></tr><tr class="grp"><td colspan="6">循环 <code>review-fix</code>：最多 3 轮，直到 <code>steps.verify.outputs.blocking == 0</code>，跑满后问你。条件 <code>steps.develop.outputs.proceed != false</code>。片段 <code>lib/review-loop.yaml</code></td></tr><tr><td><code>　ci</code></td><td>脚本 · dev-write</td><td></td><td></td><td>失败时 <code>ask</code></td><td>超时 15m</td></tr><tr><td><code>　review</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td>3 个实例并行；失败时 <code>ask</code></td><td>超时 20m</td></tr><tr><td><code>　security</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td>失败时 <code>ask</code></td><td>超时 20m</td></tr><tr><td><code>　verify</code></td><td>agent · Opus · dev-read</td><td></td><td><code>blocking</code>、<code>nits</code>、<code>pre_existing</code></td><td>失败时 <code>ask</code></td><td>超时 20m</td></tr><tr><td><code>　fix</code></td><td>agent · Opus · dev-write</td><td><code>steps.verify.outputs.blocking &gt; 0</code></td><td><code>pack_proposals</code></td><td>失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>　pack-choose</code></td><td>脚本 · dev-read</td><td><code>steps.fix.outputs.pack_proposals &gt; 0</code></td><td><code>accepted</code></td><td>可以向你提问；失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>　pack-apply</code></td><td>宿主机动作 · project-apply</td><td><code>steps.pack-choose.outputs.accepted &gt; 0</code></td><td></td><td>失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>　reflect</code></td><td>agent · Opus · dev-read</td><td></td><td><code>recommendation</code>、<code>reason</code></td><td>失败时 <code>ask</code></td><td>超时 15m</td></tr><tr><td><code>takeaway-trail</code></td><td>宿主机动作 · run-trail</td><td><code>steps.develop.outputs.proceed != false and not inputs.at</code></td><td></td><td>失败时 <code>skip</code></td><td>超时 2m</td></tr><tr><td><code>takeaway</code></td><td>agent · Sonnet · dev-read</td><td><code>steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway-trail.outputs.path</code></td><td><code>items</code></td><td>失败时 <code>skip</code></td><td>超时 10m · 重试 1</td></tr><tr><td><code>takeaway-redact</code></td><td>宿主机动作 · takeaway-redact</td><td><code>steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway.outputs.items != null</code></td><td></td><td>失败时 <code>skip</code></td><td>超时 2m</td></tr><tr><td><code>takeaway-commit</code></td><td>脚本 · dev-write</td><td><code>steps.develop.outputs.proceed != false and not inputs.at and steps.takeaway-redact.outputs.files &gt; 0</code></td><td><code>dir</code></td><td>失败时 <code>skip</code></td><td>超时 2m</td></tr><tr><td><code>risk-rules</code></td><td>脚本 · dev-read</td><td><code>steps.develop.outputs.proceed != false</code></td><td></td><td>失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>classify-risk</code></td><td>agent · Sonnet · dev-read</td><td><code>steps.develop.outputs.proceed != false</code></td><td><code>approvers</code>、<code>risk</code></td><td>失败时 <code>ask</code></td><td>超时 15m</td></tr><tr><td><code>human-review</code></td><td>审批 · 人数按风险算</td><td><code>steps.develop.outputs.proceed != false and not inputs.at</code></td><td></td><td>审批人数 <code>min(steps.risk-rules.outputs.available, max(steps.risk-rules.outputs.approvers, min(steps.classify-risk.outputs.approvers, 2)))</code>；可以提修改意见：再跑一轮 <code>review-fix</code>；失败时 <code>ask</code></td><td>超时 30m</td></tr><tr><td><code>deliver</code></td><td>脚本 · dev-git</td><td><code>steps.develop.outputs.proceed != false and not inputs.at</code></td><td><code>delivery</code></td><td>失败时 <code>ask</code></td><td>超时 10m · 重试 1</td></tr></tbody></table></details>
+
+<p>上面的图按 mdm 展开，步骤最全。blog 和 myorch 没有 <code>fetch-ticket</code> 和 takeaway 四步，blog 的 review 循环只有 1 个 reviewer、没有 <code>security</code>。</p>
+<h2 id="development--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sync-master</code></td>
+<td>克隆或更新仓库，强制对齐 <code>origin/&lt;base&gt;</code>，初始化子模块。第一次克隆走项目共享目录里的镜像仓库，之后只拉增量（<a href="https://github.com/leweii/myorch/blob/main/flows/lib/sync-base.yaml"><code>lib/sync-base.yaml</code></a>）</td>
+<td><code>outputs.base_sha</code></td>
+</tr>
+<tr>
+<td><code>checkout-branch</code></td>
+<td>建这次运行的分支，分支名来自项目包的 <code>branch</code>（mdm 是 <code>MD-&lt;工单号&gt;-myorch-&lt;运行 ID&gt;</code>，blog 和 myorch 是 <code>myorch/&lt;运行 ID&gt;</code>），执行项目的 <code>setup.sh</code>。接着改时切到上一次的分支，重放时切到 <code>at</code>，见后面两节</td>
+<td><code>outputs.branch</code>、<code>outputs.since</code></td>
+</tr>
+<tr>
+<td><code>fetch-ticket</code></td>
+<td>只在项目有 Jira 时。用 Jira REST API 读工单（只读），写成 <code>docs/external/ticket.md</code>，下载截图。见「读工单」</td>
+<td><code>docs/external/ticket.md</code>、<code>docs/external/attachments/</code></td>
+</tr>
+<tr>
+<td><code>develop</code></td>
+<td>一个会话里做完：写需求文档、写技术设计、需要人决定的问题一次问完、改代码、跑检查、写实现记录、提交一次。见「develop」</td>
+<td><code>docs/requirements.md</code>、<code>docs/design.md</code>、<code>docs/implementation.md</code>、一个提交</td>
+</tr>
+<tr>
+<td><code>review-fix</code> 循环</td>
+<td><code>ci</code>（项目的 <code>checks.sh</code>）→ <code>review</code>（个数按项目）和 <code>security</code> 并行 → <code>verify</code> 核实、算出 <code>blocking</code> → <code>fix</code>（只在 <code>blocking &gt; 0</code> 时）→ <code>pack-choose</code>、<code>pack-apply</code>（只在 <code>fix</code> 提了项目包修改时）。轮数和跑满以后怎么办按项目。见「review 循环」</td>
+<td><code>docs/ci/round-N.md</code>、<code>docs/review/round-N/</code></td>
+</tr>
+<tr>
+<td><code>takeaway-trail</code></td>
+<td>只在 <code>flows.development.takeaway</code>（mdm）时。宿主机动作：把运行到现在的过程写进 <code>docs/takeaway/trail.json</code></td>
+<td><code>trail.json</code></td>
+</tr>
+<tr>
+<td><code>takeaway</code></td>
+<td>同上。只读的 agent：写任务信息 <code>task.md</code> 和经验 <code>takeaway.md</code></td>
+<td><code>docs/takeaway/task.md</code>、<code>takeaway.md</code></td>
+</tr>
+<tr>
+<td><code>takeaway-redact</code></td>
+<td>同上。宿主机动作：删掉两个文件里像密钥的行</td>
+<td></td>
+</tr>
+<tr>
+<td><code>takeaway-commit</code></td>
+<td>同上。把两个文件提交到仓库的 <code>myorch/&lt;日期&gt;-&lt;运行 ID&gt;/</code></td>
+<td>一个提交</td>
+</tr>
+<tr>
+<td><code>risk-rules</code></td>
+<td>按规则算审批人数：改动路径和内容、review 没解决的问题、检查失败、没经过 review 的提交</td>
+<td><code>outputs.approvers</code>、<code>head_sha</code> 等</td>
+</tr>
+<tr>
+<td><code>classify-risk</code></td>
+<td>读实际的 diff，独立判断要几个人审批，给审批人写风险说明</td>
+<td><code>docs/risk.md</code></td>
+</tr>
+<tr>
+<td><code>human-review</code></td>
+<td>人工审批，人数见「风险和审批」。人数为 0 时自动通过</td>
+<td></td>
+</tr>
+<tr>
+<td><code>deliver</code></td>
+<td>核对 HEAD 就是批准的提交，推送分支，写交付说明</td>
+<td><code>docs/delivery.md</code>、<code>outputs.delivery</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><code>develop</code> 判断不需要改代码（<code>proceed</code> 为 false）时，后面的步骤全部跳过，运行正常结束。</li>
+<li>没有 takeaway 的项目，四步在展开时就去掉了，<code>risk-rules</code> 直接等 <code>review-fix</code>。</li>
+<li>流程顶层是 <code>on_failed: ask</code>：步骤重试后仍失败时问你。</li>
+</ul>
+<h2 id="development--你介入的地方">你介入的地方</h2>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>develop</code> 改代码前提问</td>
+<td>在对话里回复，或点选项</td>
+<td><code>myorch reply &lt;run&gt; develop "回答"</code></td>
+</tr>
+<tr>
+<td>采纳项目包修改</td>
+<td>回复编号，例如 <code>1,3</code>、<code>all</code>、<code>none</code></td>
+<td><code>myorch reply &lt;run&gt; pack-choose.r&lt;N&gt; "1,3"</code>（N 是轮次）</td>
+</tr>
+<tr>
+<td>review 跑满仍有阻塞问题（<code>on_exhausted: ask</code> 的项目）</td>
+<td>看反思建议，回复 1、2 或 3</td>
+<td><code>myorch reply &lt;run&gt; review-fix 1</code>（1 再跑一轮，2 接受当前结果，3 终止）</td>
+</tr>
+<tr>
+<td>某一步重试后仍失败</td>
+<td>回复 1、2、3，或者写一句提示</td>
+<td><code>myorch reply &lt;run&gt; &lt;步骤&gt; 1</code>（1 新会话重来，2 跳过，3 终止。写别的文字是提示，在原会话里接着做）</td>
+</tr>
+<tr>
+<td>需要审批</td>
+<td>右栏「改动」页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」</td>
+<td><code>myorch review &lt;run&gt;</code> 打开汇总页；<code>myorch approve &lt;run&gt; human-review</code>、<code>myorch changes &lt;run&gt; human-review "意见"</code>、<code>myorch reject &lt;run&gt; human-review</code></td>
+</tr>
+<tr>
+<td>推送以后</td>
+<td>—</td>
+<td>在 GitHub 上用推送的分支开 PR（交付说明可以直接当 PR 描述），决定是否合并。myorch 项目合并以后还要发布，见「myorch：合并以后」</td>
+</tr>
+</tbody>
+</table>
+<p>takeaway 的四步失败时不问你（<code>on_failed: skip</code>），也不阻塞后面的步骤。宿主机动作失败时也不会问。</p>
+<h2 id="development--产物">产物</h2>
+<p>同一个运行的所有步骤共享一个工作区。控制台右栏的「文档」能看所有文档和截图。命令行用 <code>myorch ws &lt;run&gt;</code> 列出文件，<code>myorch ws &lt;run&gt; docs/risk.md</code> 读一个文件。</p>
+<pre><code>observed/&lt;运行 ID&gt;/           接着改时上一次的运行、有 incident 时出问题的运行（只读）
+docs/
+├── external/
+│   ├── request.md            第一条消息的原文（控制台和 Slack 发起时）
+│   ├── ticket.md             工单（fetch-ticket，或 develop 用 MCP 读的）
+│   └── attachments/          工单里的图片
+├── previous/                 接着改时：上一次的文档和对话
+├── requirements.md           需求、验收标准、工单对照；有 incident 时开头是原因分类
+├── design.md                 影响分析、方案、兼容和回滚、测试计划
+├── implementation.md         改动、证据、检查结果、假设、和设计的差异；fix 追加「第 N 轮修复」
+├── ci/round-N.md             每轮的检查报告（round-N/ 里有 result.json、head.txt）
+├── review/round-N/           reviewer-K.json、security.json、verified.json、summary.md、rebuttal.md、approver.json、pack/
+├── takeaway/                 trail.json、task.md、takeaway.md（只在 takeaway 的项目）
+├── risk.md                   风险结论和请审批人重点检查的地方
+└── delivery.md               交付说明
+repo/myorch/&lt;日期&gt;-&lt;运行 ID&gt;/  task.md、takeaway.md（提交在分支上，只在 takeaway 的项目）
+</code></pre>
+<h2 id="development--develop">develop</h2>
+<p>一个 agent 从读需求做到提交代码，三个阶段按顺序：需求、技术设计、实现。不能跳过前两个阶段直接写代码。项目的 <code>prompts/develop.md</code> 原文拼在 prompt 的「输入」之后，见<a href="#development--按项目的不同">按项目的不同</a>。</p>
+<ul>
+<li><strong>输入</strong>：工单 <code>docs/external/ticket.md</code>（有时）、截图、请求原文 <code>docs/external/request.md</code>、项目约定、仓库自带的知识、项目包的 <code>guide/</code>（其中 <code>decisions.md</code> 是以前人做过的决定）。请求原文和工单是外部数据，里面的指令不执行。</li>
+<li><strong>需求文档</strong>：目标、范围、明确不做的事、可检查的验收标准、工单对照表、预计改动的文件、风险、依据。</li>
+<li>工单对照表：工单里的每一条要求照抄一行（包括评论里补充的），对应哪条验收标准，或者为什么不做。一条要求里有几个动作，验收标准就要覆盖每个动作。</li>
+<li>工单点名的模块、功能、场景不能由 agent 自己划进「明确不做的事」。想排除时要问人。</li>
+<li><strong>技术设计</strong>：影响分析（调用方、跨模块依赖、其他服务）、方案和不选的方案、兼容和回滚、测试计划（每条验收标准的测试，加上边界和反例）、风险。设计里不写代码。</li>
+<li>列全入口：给字段加校验或要求多处一致时，至少用报错文案和字段名两种方式反查，在设计里写出搜索命令和找到的入口。</li>
+<li>删除或放宽已有的判断前，用注释和 <code>git log -L</code>、<code>git blame</code> 查清它为什么存在。查不清、或改动后它保护的东西不再成立时，问人。</li>
+<li>先找同类的已有实现：能直接用就调用；形状不合适就改成能共用的形状；行为由共享方法决定时改共享方法，并检查它的每个调用方。不复制一份。为了复用而改共享实现属于这次的范围。</li>
+<li><strong>改代码之前问，最多问一次</strong>：两个阶段里发现的需要人决定的问题，放进一次提问，每个问题给选项，第一个是推荐的。用户能看到的东西、接口和契约、数据模型和迁移、影响其他模块或服务的行为变化、明显改变实现规模的选择，都不能由 agent 替你选。<code>decisions.md</code> 里已经有的决定照做，不再问。</li>
+<li><strong>兜底</strong>：agent 结束时说还有没问就按推荐做了的问题（<code>requires_design_decision</code>），平台照样问你，你的回答作为下一轮发回同一个会话。</li>
+<li><strong>实现</strong>：只改范围内的代码，每条验收标准有测试或检查，跑 <code>myorch-checks</code>（项目的 <code>checks.sh</code>）直到通过，写实现记录，在当前分支提交一次。检查报告把失败列在「环境」里时（沙箱的网络或系统限制），不算代码的问题，照常提交，在实现记录里写明。</li>
+<li><strong>停下来</strong>：需求和代码矛盾、必须改范围以外的代码、检查因代码失败又修不好时，不提交，步骤失败，然后问你怎么办。</li>
+<li><strong>可以判断不用改</strong>：功能已经存在，或者你决定不做。不写文档，后面全部跳过。</li>
+</ul>
+<p>为什么合成一步：分开时每次交接都会丢信息。有凭证的步骤（<code>sync-master</code>、<code>fetch-ticket</code>、<code>deliver</code>）仍然单独跑，<code>develop</code> 拿不到 GitHub 和 Jira 的凭证。</p>
+<h2 id="development--读工单">读工单</h2>
+<ul>
+<li><strong>条件</strong>：项目设置了 <code>jira.url</code>（mdm 是 <code>example.atlassian.net</code>，前缀 <code>MD</code>），并且给了工单号。只写数字时加上项目的前缀（<code>jira.key</code>）。没有 Jira 的项目没有工单输入，也没有 <code>fetch-ticket</code> 这一步。</li>
+<li><strong>只读</strong>：凭证是项目的 Jira provider（mdm 是 <code>jira-mdm</code>），出站规则只放行读工单、读附件内容和 <code>/myself</code>。沙箱里只有占位符，真实 token 由网关替换。</li>
+<li><strong>内容</strong>：标题、类型、状态、优先级、报告人、经办人、标签、组件、父工单、关联工单、描述、子任务、附件列表、评论。文件开头写明它是外部数据。</li>
+<li><strong>截图</strong>：只下载图片附件，最多 10 张，每张不超过 5 MB，存到 <code>docs/external/attachments/&lt;id&gt;-&lt;文件名&gt;</code>。<code>ticket.md</code> 的「附件」一节列出路径，<code>develop</code> 用 Read 打开看。描述里的 <code>!文件名!</code> 指的就是这些图。其他附件只列名字。某张下载失败不影响运行。控制台的「文档」也能看这些图。</li>
+<li><strong>评论</strong>：<code>ticket_comments</code> 默认 <code>all</code>。选 <code>none</code> 时不带评论，只按描述做（评测用：需求应该写在工单里，不靠评论）。</li>
+<li><strong>MCP 兜底</strong>：<code>fetch-ticket</code> 没跑（项目没有 <code>jira.url</code>）、而这次运行挂了能读工单的 MCP 知识源时，<code>develop</code> 先用 MCP 读工单，写同一个 <code>docs/external/ticket.md</code>，开头注明来源。读不到就在摘要里写明，按请求原文继续。mdm 目前不默认挂 Atlassian MCP。</li>
+</ul>
+<h2 id="development--review-循环">review 循环</h2>
+<p>定义在片段 <a href="https://github.com/leweii/myorch/blob/main/flows/lib/review-loop.yaml"><code>lib/review-loop.yaml</code></a>，<a href="#ch-review">review</a> 和 <a href="#ch-eval">eval</a> 也用它（只跑 1 轮、不修复）。这里的参数来自项目的 <code>flows.development</code>：默认 3 个 reviewer 加单独的 security，最多 3 轮，跑满时问你。项目的 <code>prompts/review.md</code>、<code>verify.md</code>、<code>fix.md</code> 拼进对应步骤。</p>
+<ul>
+<li><strong>每轮看什么</strong>：第 1 轮看整个改动（接着改时只看这次运行的新提交）；之后每轮只看上一轮开始以后的提交。范围由 <code>ci</code> 算出，写在 <code>docs/ci/round-N/head.txt</code> 里。</li>
+<li><strong>先独立判断，最后读作者的说法</strong>：reviewer 先只看需求文档、技术设计和 diff，自己找问题；然后才读实现记录，核对里面的测试和检查是否真的存在、假设站不站得住。实现记录里写了原因，也不是放过问题的理由。</li>
+<li><strong>需求文档对照工单原文</strong>：需求文档也是作者写的。漏掉、缩小或改写了工单的要求，工单对照表只覆盖了一部分动作，或者自己把工单点名的内容划出范围，都算 Important。</li>
+<li><strong>到仓库里查</strong>：只看 diff 看不出来的三类问题，一律算 Important：</li>
+<li>没有复用已有的同类实现，或者复制了共享方法的分支而不是改它。</li>
+<li>漏掉的入口：同一个字段、同一句报错的其他读写位置没改，设计里也没说为什么。</li>
+<li>删掉或放宽了已有的判断，破坏了它保护的东西，而需求文档没写这是人决定的。</li>
+<li><strong>分工</strong>：1 号多看正确性和边界，2 号多看验收标准和测试，3 号多看设计、范围和复用。漏掉的入口和放宽的判断每个人都查。只有 1 个 reviewer 的项目（blog）只有 1 号。</li>
+<li><strong>读前面步骤的过程</strong>：<code>fix</code> 和 <code>reflect</code> 可以用 <code>/sandbox/bin/myorch-steps</code> 分段读这次运行前面步骤的 manifest 和日志（例如 develop 当时为什么这么做）。reviewer 和 verify 的 prompt 不提它：它们要先独立判断。前面步骤的记录（<code>.myorch/</code>、别的步骤的 <code>.claude/</code>）对每一步都是只读的。</li>
+<li><strong>规则标记</strong>：上面这些「到仓库里查」「先独立判断」「Nit 最多 5 条」之类的条款，是因为模型以前犯过错才加的。它们在流程文件里用 <code>[[rule:&lt;规则&gt;/&lt;位置&gt;]]</code> 标出来，起因登记在 <a href="https://github.com/leweii/myorch/blob/main/flows/rules/registry.yaml"><code>rules/registry.yaml</code></a>。展开时标记去掉、正文照常保留；只有重放时 <code>--set flows.ablate=&lt;规则&gt;</code> 会去掉整条，用来评测这条规则还需不需要。</li>
+<li><strong>verify</strong>：合并重复，逐条打开代码核实，只有一个人报的也核实，不成立的删掉。删掉纯风格意见，Nit 最多留 5 条。每个检查失败项算一条 Important，环境失败不算。上一轮的问题标成 fixed、open 或 rebutted。<code>blocking</code> 是还没解决的 Important 条数，为 0 时循环结束。</li>
+<li><strong>fix</strong>：只修 Important，一个问题的所有位置一起改，不碰 Nit。认为发现不成立、或者修复要人决定时，不改代码，写进 <code>rebuttal.md</code>（要人决定的以「需要人决定：」开头），下一轮的 verify 会判断。原因在项目包里时，提项目包修改，见下一节。修完跑检查，在实现记录末尾加「第 N 轮修复」，提交一次。</li>
+<li><strong>跑满</strong>：<code>on_exhausted: ask</code>（默认）时，<code>reflect</code> 读完所有轮次，判断是个别问题、方向错了、需要人决定，还是 reviewer 误判，给出建议，然后问你：再跑一轮、接受当前结果、终止。<code>accept</code>（blog）时直接往下走，最后一轮的修复没人 review 过，<code>risk-rules</code> 会把这些提交列出来。</li>
+<li><strong>审批人要求修改</strong>：意见写进下一轮的 <code>approver.json</code>，每一条都算 Important，verify 不会把它删掉。</li>
+</ul>
+<h2 id="development--项目包的修改pack-choosepack-apply">项目包的修改（pack-choose、pack-apply）</h2>
+<p>阻塞问题有时出在项目包里，例如 <code>checks.sh</code> 写错了。项目包在 sandbox 里是只读的（<code>project/</code>），<code>fix</code> 改不了它。这时：</p>
+<ol>
+<li><code>fix</code> 不改 <code>project/</code>，也不为它写 rebuttal。它把 <code>project/</code> 复制到 <code>/tmp</code>，在副本上改，用副本跑一次相关的检查，再把建议写进 <code>docs/review/round-N/pack/proposals.json</code>（机器读）和 <code>proposals.md</code>（给人看，含验证结果）。</li>
+<li><code>pack-choose</code> 列出建议，问你采纳哪几条。</li>
+<li><code>pack-apply</code> 在宿主机上把采纳的改动写回 <code>myorch-knowledge</code>，只提交这些文件，重新同步项目快照。每条改动的原文必须在文件里恰好出现一次，否则什么都不写，步骤失败。</li>
+<li>这次运行的下一轮挂新的快照，用新的项目包检查。别的运行不受影响。最后一轮刚写回时，反思步骤会建议再跑一轮。</li>
+</ol>
+<p>只能改 <code>guide/</code> 下的文件、<code>checks.sh</code>、<code>checks.env</code>、<code>setup.sh</code>（<code>project.py</code> 的 <code>EDITABLE["fix"]</code>）。<code>risk-rules.yaml</code> 和 <code>security.md</code> 不能改：运行不能改变自己的改动怎么被审批。要改别的文件时，<code>fix</code> 写「需要人决定：」。</p>
+<h2 id="development--任务信息和-takeaway">任务信息和 takeaway</h2>
+<p>只在项目设置了 <code>flows.development.takeaway: true</code> 时（现在只有 mdm）：仓库里放一个 <code>myorch/</code> 目录要项目同意。review 循环之后、风险判定之前，四步把这次运行的任务信息和经验提交到仓库。</p>
+<ul>
+<li><strong>提交在分支上</strong>：<code>takeaway-commit</code> 把 <code>task.md</code> 和 <code>takeaway.md</code> 复制到 <code>repo/myorch/&lt;日期&gt;-&lt;运行 ID&gt;/</code>（日期是运行开始的那天），只提交这个目录，提交信息固定为 <code>Add myorch task and takeaway for &lt;运行 ID&gt;</code>。内容没变时不重复提交。审批时能看到，推送后在 PR 里，合并后进 base 分支，<a href="#ch-learn">learn</a> 从那里读。</li>
+<li><strong>不阻塞</strong>：四步都是 <code>on_failed: skip</code>。失败了记一条失败事件，当作跳过，后面照常。每一步只在上一步给出输出时执行，所以不会提交旧的或写了一半的文件（<code>takeaway-trail</code> 先清空两个文件）。</li>
+<li><strong>trail</strong>：每一步的状态、摘要、失败原因、重试次数，问答，review 每轮的 blocking 和检查结果，分支、输入、myorch 提交、项目包版本。像密钥的行在写入前删掉。</li>
+<li><strong>takeaway 写什么</strong>：<code>task.md</code> 只写事实（工单、运行、输入、需求摘要、问答、每轮 review 和检查、结果）。<code>takeaway.md</code> 写遇到的问题、根本原因、怎么解决的、缺了什么知识、对流程或平台的建议，每条标类别（项目知识、流程、平台、环境）并给出证据。「缺了什么知识」只写换一个需求也用得上的项目知识，不写这张工单的答案。两个文件合起来不超过 200 行。agent 不挂知识源，只读。</li>
+<li><strong>读过程</strong>：除了 <code>trail.json</code>，<code>takeaway</code> 还可以用 <code>/sandbox/bin/myorch-steps</code> 分段读每一步的日志，找最早走偏的地方。</li>
+<li><strong>不写密钥</strong>：两个文件会进公司仓库。<code>takeaway-redact</code> 按 <code>knowledge.SECRET_RULES</code>（和知识源扫描是同一份规则）删掉像密钥的行。两个文件都空时它失败，提交就不会执行。</li>
+<li><strong>risk-rules 怎么看这个提交</strong>：它在最后一轮 review 之后，但不算「没有经过 review 的提交」：只有一个父提交、而且只改了 <code>myorch/</code> 下 <code>.md</code> 文件的提交不计入。合并提交一律计入。<code>risk-rules</code> 在这个提交之后取 <code>head_sha</code>，所以你批准的、推送的，都是带着这两个文件的提交。</li>
+<li><strong>不写的时候</strong>：重放（<code>at</code>）不写，否则评测案例的答案会进知识。<code>develop</code> 判断不用改时也不写。运行在审批前失败时推不出去，它的经验不在仓库里。</li>
+</ul>
+<h2 id="development--风险和审批">风险和审批</h2>
+<p>风险由改动决定，不由作者决定。两个分类器互相兜底：规则可能漏掉语义上的风险，模型可能看漏路径上的风险，最后取较严的一个。</p>
+<p><strong>risk-rules</strong>（确定性脚本）：</p>
+<ul>
+<li>规则来自项目包的 <code>risk-rules.yaml</code>（模板的规则加上项目自己的），命中的规则里取最严的。规则可以按路径、按新文件里的文字、按改动行的正则匹配。没有规则命中时用 <code>default</code>。</li>
+<li>下面任意一种情况，至少 1 人：最后一轮 review 还有没解决的 Important；最后一轮检查失败；最后一轮 review 之后有新的提交（例如跑满后接受了，最后一轮的修复没人看过）。takeaway 的提交不算，见上一节。</li>
+<li>输出 <code>approvers</code>（规则要求的人数）和 <code>available</code>（项目登记的审批人数）。</li>
+</ul>
+<p><strong>classify-risk</strong>（agent，只读）：读实际的 diff、需求文档、实现记录里的假设、最后一轮 review 和检查、没经过 review 的提交，判断 0、1 或 2 人。改接口或数据、改构建部署、和安全有关、难以撤回、影响下游，任意一条就是 2 人。写 <code>docs/risk.md</code>：结论、影响范围、没解决的问题、请审批人重点检查的 3 到 5 处。项目的 <code>prompts/risk.md</code> 拼在 prompt 末尾（myorch 用它规定「影响范围」按平台的边界、未结束的运行、部署来写）。</p>
+<p><strong>human-review</strong> 的人数：</p>
+<pre><code>min(项目登记的审批人数, max(risk-rules 的人数, min(classify-risk 的人数, 2)))
+</code></pre>
+<ul>
+<li>三个项目现在都只登记了一个审批人，所以人数最多是 1。</li>
+<li>mdm：core-ng 模板默认 1 人，数据库迁移、接口模块、构建和依赖、CI 和部署、环境配置、实体字段注解、破坏性 SQL 是 2 人；mdm 的 protos 子模块 2 人、规格文档 1 人。所以每次都要恰好 1 人。</li>
+<li>blog：<code>default: 1</code>，每次都要 1 人。</li>
+<li>myorch：<code>default: 0</code>，平台的边界（sandbox、凭证、profile、部署、调度和审批的代码）要 2 人。两个判断都给 0（例如只改了文档）时自动通过，<code>deliver</code> 直接推送分支。推送的只是分支，合并和部署要人做。</li>
+<li>发起人必须是审批人之一（<code>require_initiator</code>）。agent 的批准不算数。</li>
+<li>审批绑定提交：打开审批时记下 <code>head_sha</code>，<code>deliver</code> 推送前核对。</li>
+<li>要求修改：回到 <code>review-fix</code>，最多再跑 2 轮。之后 takeaway、风险判定、审批从头再走一遍。</li>
+<li>24 小时没人处理，发一次提醒。7 天没人处理，这一步失败（「审批超时」），什么都不推送。</li>
+<li>任何一人驳回，运行终止。</li>
+</ul>
+<h2 id="development--交付">交付</h2>
+<p>定义在 <a href="https://github.com/leweii/myorch/blob/main/flows/lib/deliver.yaml"><code>lib/deliver.yaml</code></a>。</p>
+<ul>
+<li>当前分支是 base 分支时拒绝推送。HEAD 不等于批准的提交时拒绝推送，要重新运行、重新审批。</li>
+<li>推送分支（普通推送，不强推），不调用 GitHub API，不开 PR。</li>
+<li>写 <code>docs/delivery.md</code>：标题和工单、改了什么（取自实现记录的「改动」）、怎么验证的（检查结果、验收标准表）、review 轮数和没解决的问题、没经过 review 的提交、风险结论和重点检查项、怎么撤回。</li>
+<li><code>outputs.delivery</code> 带上分支、base、提交、标题、工单、交付说明和仓库的 PR 模板。<code>run_finished</code> 事件带着它，控制台和 Slack 据此告诉你推送了哪个分支。PR 由你开。</li>
+</ul>
+<h2 id="development--接着改from_run">接着改（from_run）</h2>
+<p>通用的做法见 <a href="#index--在原分支上接着改">在原分支上接着改</a>。这个流程里：</p>
+<ul>
+<li><code>checkout-branch</code> 只读挂载上一次运行的工作区，从它的最后一个提交开始。远端同名分支上有人追加了提交时，从远端的最新提交开始。两者分叉时停下来，要人先处理。</li>
+<li>复制到 <code>docs/previous/</code> 的文件：<code>requirements.md</code>、<code>design.md</code>、<code>implementation.md</code>、<code>risk.md</code>、<code>delivery.md</code>、<code>external-request.md</code>（上一次的请求原文）、最后一轮 review 的 <code>review-summary.md</code>、记录上一次运行 ID 的 <code>RUN</code>，更早的几次在 <code>earlier/</code> 里。<code>conversation.md</code> 是宿主机写的：人对上一次运行说过的话。</li>
+<li><code>develop</code> 的需求文档写完整的需求，在「目标」里单独写一段「这次的修改」。上一次的验收标准仍然有效，除非这次的请求改了它。设计在上一次的基础上改。代码在已有提交上改，不重做。<code>conversation.md</code> 里人的决定优先于上一次文档里的假设。</li>
+<li><code>checkout-branch</code> 输出 <code>since</code>（这次开始时的提交）。review 循环的第 1 轮只看 <code>since</code> 之后的提交，检查仍然跑整个分支相对 base 改动的文件。风险判定看整个分支。</li>
+<li>推送到同一个分支，已经开的 PR 会自动更新。没给工单号、<code>incident</code> 时沿用上一次的。</li>
+<li>不能和 <code>at</code> 同时给。</li>
+</ul>
+<h2 id="development--重放评测用">重放（评测用）</h2>
+<p>用来在当时的代码上重做一张已经合并的工单，再和合并的 PR 对比。表单只对有 Jira 的项目显示 <code>at</code>、<code>ticket_as_of</code>、<code>ticket_comments</code>（命令行对任何项目都能传 <code>-i at=</code>）。平时不填。</p>
+<ul>
+<li><code>at</code> 填 PR 的 merge-base。<code>checkout-branch</code> 从这个提交建分支，然后删掉 <code>origin</code> remote、其他所有引用、<code>FETCH_HEAD</code>、reflog 和借来的对象，做一次 gc，子模块也一样。之后的提交会泄露答案，所以仓库里只剩 <code>at</code> 能到达的历史。最后把 <code>origin/&lt;base&gt;</code> 指向 <code>at</code>，后面所有 diff 都以它为基准。</li>
+<li><code>ticket_as_of</code> 填开始做这张工单的时刻（ISO 时间）。<code>fetch-ticket</code> 用工单的变更记录把标题、描述、状态、优先级、经办人回滚到那个时刻，只留之前的评论、附件和关联工单，不带子任务（子任务可能写着解法）。</li>
+<li>重放永远不审批、不推送：<code>human-review</code> 和 <code>deliver</code> 的条件带 <code>not inputs.at</code>。删掉 <code>origin</code> 是第二道保护。takeaway 也不写。运行在 <code>classify-risk</code> 之后结束。</li>
+<li>不能和 <code>from_run</code> 同时给，<code>checkout-branch</code> 会直接失败。</li>
+<li>想知道只靠工单描述够不够时，加 <code>-i ticket_comments=none</code>。</li>
+<li><strong>对比</strong>：重放时可以用 <code>--set</code> 改这次运行的流程设置，例如 <code>--set flows.development.reviewers=1</code> 或 <code>--set flows.ablate=nit-cap</code>（去掉一条标记过的规则，规则名见 <a href="https://github.com/leweii/myorch/blob/main/flows/rules/registry.yaml"><code>rules/registry.yaml</code></a>）。只能改 <code>flows.</code> 下已有的设置，只在重放时能用；改了什么记在 mandate 里，运行带 <code>set:…</code> 标签，方便按变体分组。<code>myorch expand --set …</code> 可以先看改完的 prompt。</li>
+</ul>
+<h2 id="development--按项目的不同">按项目的不同</h2>
+<p>流程只有这一个。2026-11-10 之前每个项目复制了一份（<code>ck-development</code>、<code>blog-development</code>、<code>mo-development</code>），同一处改进要改三份，三份很快就不一样了，所以合回一个（<a href="https://github.com/leweii/myorch/blob/main/docs/notes/2026-11-10-one-set-of-flows.md">docs/notes/2026-11-10-one-set-of-flows.md</a>）。项目之间的差别写在项目包 <code>myorch-knowledge/&lt;项目&gt;/</code> 里，展开流程时生效：</p>
+<ul>
+<li><strong><code>project.yaml</code> 的 <code>flows.development</code></strong>：<code>reviewers</code>（默认 3）、<code>max_rounds</code>（3）、<code>security</code>（true）、<code>on_exhausted</code>（<code>ask</code>）、<code>takeaway</code>（false）、<code>incident</code>（false）。模板可以设置，项目覆盖模板。</li>
+<li><strong><code>prompts/&lt;槽位&gt;.md</code></strong>：槽位有 <code>develop</code>、<code>review</code>、<code>verify</code>、<code>fix</code>、<code>risk</code>，先放模板的，再放项目的，原文拼进对应步骤的 prompt。mandate 的快照里能看到拼好的 prompt。文件名不是这几个槽位时直接报错。</li>
+<li><strong>流程里的 <code>if:</code></strong>：按项目裁掉步骤和输入。<code>fetch-ticket</code> 和工单、重放输入看 <code>project.jira.url</code>，takeaway 四步看 <code>flows.development.takeaway</code>，<code>incident</code> 输入看 <code>flows.development.incident</code>。裁掉的输入在表单里看不到，保留默认值。</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>mdm</th>
+<th>blog</th>
+<th>myorch</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Jira</td>
+<td>有：工单必填，<code>fetch-ticket</code>，重放输入</td>
+<td>没有：第一条消息是需求</td>
+<td>没有：第一条消息是需求</td>
+</tr>
+<tr>
+<td>review</td>
+<td>默认：3 个 reviewer、security、3 轮、跑满问你</td>
+<td>1 个 reviewer、没有 security、1 轮、跑满接受</td>
+<td>默认</td>
+</tr>
+<tr>
+<td>takeaway</td>
+<td>有</td>
+<td>没有</td>
+<td>没有</td>
+</tr>
+<tr>
+<td><code>incident</code></td>
+<td>没有</td>
+<td>没有</td>
+<td>有</td>
+</tr>
+<tr>
+<td>prompts</td>
+<td>core-ng 模板的 <code>develop.md</code>（Gradle 依赖、<code>*-interface</code> 契约注释）、<code>review.md</code>（<code>*-interface</code> 的检查）</td>
+<td><code>develop.md</code>（Jekyll：文档写短、写作规范、哪些要问人）、<code>review.md</code>（构建、链接、写作规范、误公开）</td>
+<td><code>develop.md</code>（incident 原因分析、设计要看的平台事项、「合并以后要做的事」）、<code>risk.md</code></td>
+</tr>
+<tr>
+<td>审批</td>
+<td>1 人</td>
+<td>总是 1 人（<code>risk-rules.yaml</code> 的 <code>default: 1</code>）</td>
+<td>0 或 1 人，按风险</td>
+</tr>
+</tbody>
+</table>
+<p>改某个项目的做法：改它的项目包（<code>flows.development</code>、<code>prompts/</code>、<code>risk-rules.yaml</code>），然后 <code>uv run myorch project sync &lt;项目&gt;</code>。改 <code>flows/development.yaml</code> 或片段会影响所有项目。</p>
+<h3 id="development--blog">blog</h3>
+<p>个人博客（<code>leweii/leweii.github.io</code>）。改动小，所以 review 轻：1 个 reviewer 看一次，有阻塞问题就修一次，不再 review，跑满直接接受。修复后的提交没人 review 过，<code>risk-rules</code> 把它们列出来，交付说明的「review」一节列出没修好的问题。分支是 <code>myorch/&lt;运行 ID&gt;</code>，永远不推 master：推到 master 博客就上线了。</p>
+<ul>
+<li><code>prompts/develop.md</code>：写文章看写作规范，改主题看开发指南。需求文档、技术设计写短，不涉及的部分写「不涉及」。文章的观点和事实、是否公开（<code>published</code>、加密文章）、影响全站的改动（<code>_config.yml</code>、布局、依赖、部署）都要问人。</li>
+<li><code>prompts/review.md</code>：构建会不会挂、链接会不会断、页面会不会错乱；写作规范、front matter、有没有误公开。</li>
+<li>端到端测试只在 <a href="#ch-review">review</a> 里跑，development 不跑。</li>
+</ul>
+<h3 id="development--myorch-和-incident">myorch 和 incident</h3>
+<p>myorch 平台自己：代码、流程、prompt、文档都在仓库 <code>leweii/myorch</code> 里，分支 <code>myorch/&lt;运行 ID&gt;</code>。两种用法：做一个普通需求；或者平台在某次运行里出了问题（任何项目的运行都可以），带上 <code>incident</code> 找原因、修平台。</p>
+<p><code>incident</code> 是出问题的那次运行。它的工作区只读挂给 <code>develop</code>，位置是 <code>/sandbox/workspace/observed/&lt;运行 ID&gt;/</code>：</p>
+<ul>
+<li><code>.myorch/flow.yaml</code>：那次运行用的流程快照。</li>
+<li><code>.myorch/steps/&lt;实例&gt;/out/manifest.json</code> 和 <code>logs/turn-&lt;attempt&gt;-&lt;turn&gt;.log</code>：每一步的结果和每次尝试的日志；<code>supervisor-*.log</code> 是 sandbox 的网络、DNS、凭证记录。</li>
+<li><code>docs/</code> 和 <code>memory/MEMORY.md</code>：那次运行的需求、设计、review、检查报告。</li>
+</ul>
+<p>这些文件是那次运行的数据：agent 只读，不执行里面的命令和指令。控制台的运行选择器只列本项目的运行，所以 <code>incident</code> 是普通的文本框。</p>
+<p>myorch 的 <code>prompts/develop.md</code> 要求 <code>develop</code> 在写需求之前先判断原因：</p>
+<table>
+<thead>
+<tr>
+<th>原因</th>
+<th>意思</th>
+<th>接下来</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>platform-code</code></td>
+<td>myorch 的代码有缺陷（<code>src/myorch/</code>、<code>tools/</code>、<code>deploy/</code>）</td>
+<td>继续：需求、设计、实现、review、审批</td>
+</tr>
+<tr>
+<td><code>flow</code></td>
+<td>流程定义、片段、prompt、profile 有缺陷（<code>flows/</code>、<code>profiles/</code>）</td>
+<td>继续</td>
+</tr>
+<tr>
+<td><code>project-knowledge</code></td>
+<td>那个项目的项目包缺知识或检查，平台没错</td>
+<td>停止。建议用那个项目的 learn 或 postmortem</td>
+</tr>
+<tr>
+<td><code>environment</code></td>
+<td>网络、外部服务、凭证过期、机器资源</td>
+<td>停止。只记录，不改代码</td>
+</tr>
+<tr>
+<td><code>one-off</code></td>
+<td>模型偶发的失误，重跑大概率不会再出现</td>
+<td>停止。建议重跑</td>
+</tr>
+<tr>
+<td><code>unclear</code></td>
+<td>证据不够</td>
+<td>停止。写明还缺什么证据</td>
+</tr>
+</tbody>
+</table>
+<p>「停止」是指 <code>outputs.proceed</code> 写 false：后面的步骤全部跳过，运行正常结束，什么都不推。原因分类、证据（文件和行）和该去哪里处理写在摘要里。继续时，需求文档开头写「出问题的运行和原因分类」，「目标」写清楚那次运行出了什么问题、根本原因在哪个文件、改完以后同样的情况应该怎样。修复不能放宽 policy、provider、挂载、审批。</p>
+<p>同一个 <code>prompts/develop.md</code> 还让技术设计多看几件平台的事：分层（engines → runner → storage → core）、改了片段或 profile 影响哪些流程（流程是所有项目共用的）、Temporal 的确定性、volume 和 events.db、sandbox 里的命令和镜像、要不要重新生成文档。</p>
+<h3 id="development--myorch合并以后">myorch：合并以后</h3>
+<p>这个流程不部署。sandbox 只改仓库，拿不到 docker.sock、gateway 和数据目录，流程里也不能有自动合并、自动部署的步骤（项目包的 <code>security.md</code>）。<code>develop</code> 在实现记录最后写「合并以后要做的事」。你在 GitHub 上开 PR、合并到 main 以后：</p>
+<ol>
+<li>在 myorch 的 main 分支上运行 <code>deploy/update.sh</code>（先用 <code>--check</code> 看要发布哪些提交、会等什么）。它快进 main，等没有正在执行的步骤，用目标提交的干净检出重建镜像，重启 worker 和控制台，跑冒烟流程。冒烟失败时自动回滚到上一次发布的提交。改了 <code>src/myorch/engines/</code> 或 <code>core/run.py</code> 时，它等所有未结束的运行结束。见 <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md"><code>deploy/README.md</code></a> 的「发布 origin/main」。</li>
+<li>改了 <code>images/claude-code/</code> 时，<code>update.sh</code> 一起重建 sandbox 的基础镜像 <code>openshell-claude-code</code>。各项目的开发镜像都基于它，要用上新的基础镜像，还要重建项目的镜像（项目包的 <code>image/build.sh</code>）。改了 <code>pyproject.toml</code> 或 <code>uv.lock</code> 时，重建 myorch 项目的开发镜像（在 myorch-knowledge 目录下运行 <code>myorch/image/build.sh ../myorch</code>），以后 myorch 项目的 development 运行才用上新依赖。</li>
+<li>改了 <code>tools/</code>（sandbox 里的辅助命令 <code>myorch-checks</code>、<code>myorch-ask</code> 等）时，它们由 <code>myorch init</code> 装进 volume（compose 里是 <code>init</code> 服务）。要确认重新运行过 <code>myorch init</code>，否则 sandbox 里还是旧版本。</li>
+</ol></section>
+<section class="chapter" id="ch-review"><h1>review <small>评审 PR</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/review.yaml</code>，说明 <code>flows/review.md</code></td></tr><tr><td>角色</td><td><code>review</code>（控制台里的任务「评审 PR」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>评审一个已有的 PR。结论只在控制台显示。</td></tr><tr><td>片段</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>、<a href="#fragments--e2e"><code>lib/e2e.yaml</code></a></td></tr></tbody></table><p>PR 评审：对一个已有的 PR（包括人写的）做一轮 AI review。所有项目共用这一个流程。它先跑项目的检查，再让 reviewer 看代码；项目有端到端测试时，最后用浏览器测运行中的应用。结论只在本地控制台（右栏「改动」页）和工作区的 <code>docs/review/round-1/</code> 里，不往 GitHub 上发任何东西。它只找问题：不改代码，不批准 PR，也不要求修改，因为 agent 的批准不算数。对 GitHub 只读。</p>
+<p>它用的 review 循环和 <a href="#ch-development">development</a> 是同一个片段 <a href="https://github.com/leweii/myorch/blob/main/flows/lib/review-loop.yaml"><code>lib/review-loop.yaml</code></a>，但只跑 1 轮、不修复、有阻塞问题也照常结束。项目的 <code>prompts/review.md</code>、<code>verify.md</code> 同样拼进去（例如 core-ng 项目的 <code>*-interface</code> 检查、博客的写作规范和误公开检查）。</p>
+<pre><code class="language-sh">uv run myorch run flows/review.yaml --project mdm -i pr=13                # 默认 standard
+uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
+</code></pre>
+<p>控制台：先选项目，任务选「评审 PR」，填 PR 编号，选评审强度。第一条消息可以不写。</p>
+<p>评审强度（<code>depth</code>）决定 reviewer 的个数、模型和要不要单独做安全 review，见下面的预设表。日常的 PR 用 standard。只想快速看一眼用 quick。改了构建、依赖、安全相关的地方用 deep。verify 总是用 Opus。</p>
+<h2 id="review--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>pr</code></td><td>PR 编号</td><td>文本</td><td>必填</td><td></td><td>例如 25</td></tr><tr><td><code>depth</code></td><td>评审强度</td><td>选项：<code>quick</code> / <code>standard</code> / <code>deep</code></td><td></td><td><code>standard</code></td><td></td></tr></tbody></table><p>按输入 <code>depth</code> 选一组参数（presets）：</p><table><thead><tr><th>depth</th><th>reviewers</th><th>security</th><th>review_model</th></tr></thead><tbody><tr><td><code>quick</code></td><td>1</td><td>False</td><td>Haiku</td></tr><tr><td><code>standard</code></td><td>2</td><td>True</td><td>Sonnet</td></tr><tr><td><code>deep</code></td><td>3</td><td>True</td><td>Opus</td></tr></tbody></table><h2 id="review--steps">步骤图</h2><p class="small">从 <code>flows/review.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="fetch-pr"><b>fetch-pr</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-loop cond"><div class="fg-lh"><b>review-round</b> · 循环 · 最多 1 轮 · 直到 <code>steps.verify.outputs.blocking == 0</code> · <span class="">跑满后接受，继续往下</span> · <span class="use">lib/review-loop.yaml</span> · <i class="chip cond" title="steps.fetch-pr.outputs.changed">有条件</i></div><div class="fg-row"><div class="fg-c k-script" title="ci"><b>ci</b><span>脚本 · dev-write</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="review"><b>review</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip">×2 并行</i></div></div><div class="fg-c k-agent" title="security"><b>security</b><span>agent · Sonnet · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="verify"><b>verify</b><span>agent · Opus · dev-read</span></div></div><div class="fg-reflect"><span>跑满仍未满足时先反思，再问你：再跑一轮 / 接受 / 终止</span><div class="fg-c k-agent" title="reflect"><b>reflect</b><span>agent · Opus · dev-read</span></div></div></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>fetch-pr</code></td><td>脚本 · dev-git</td><td></td><td></td><td></td><td>超时 10m · 重试 1</td></tr><tr class="grp"><td colspan="6">循环 <code>review-round</code>：最多 1 轮，直到 <code>steps.verify.outputs.blocking == 0</code>，跑满后接受，继续往下。条件 <code>steps.fetch-pr.outputs.changed</code>。片段 <code>lib/review-loop.yaml</code></td></tr><tr><td><code>　ci</code></td><td>脚本 · dev-write</td><td></td><td></td><td></td><td>超时 15m</td></tr><tr><td><code>　review</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td>2 个实例并行</td><td>超时 20m</td></tr><tr><td><code>　security</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td></td><td>超时 20m</td></tr><tr><td><code>　verify</code></td><td>agent · Opus · dev-read</td><td></td><td><code>blocking</code>、<code>nits</code>、<code>pre_existing</code></td><td></td><td>超时 20m</td></tr><tr><td><code>　reflect</code></td><td>agent · Opus · dev-read</td><td></td><td><code>recommendation</code>、<code>reason</code></td><td></td><td>超时 15m</td></tr></tbody></table></details>
+
+<p>上面的图按 mdm 展开。mdm 和 myorch 没有设置 <code>e2e.image</code>，没有 <code>e2e</code> 块；blog 有。</p>
+<h2 id="review--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fetch-pr</code></td>
+<td>用 GitHub API 读 PR 和改动文件列表；克隆仓库，拉取 base 分支和 <code>pull/&lt;n&gt;/head</code>，在这次运行的分支上切到 PR 的 head，初始化子模块</td>
+<td><code>docs/pr.md</code>、<code>docs/external/pr.md</code></td>
+</tr>
+<tr>
+<td><code>review-round</code> 循环（1 轮）</td>
+<td><code>ci</code>（项目的 <code>checks.sh</code>，检查 PR 改动的文件）→ <code>review</code>（个数由强度决定）和 <code>security</code>（quick 没有）并行 → <code>verify</code> 核实。没有 <code>fix</code></td>
+<td><code>docs/ci/round-1.md</code>、<code>docs/review/round-1/</code></td>
+</tr>
+<tr>
+<td><code>e2e</code> 循环（1 轮）</td>
+<td>只在项目设置了 <code>e2e.image</code> 时有这一块（现在只有 blog）。<code>e2e-smoke</code> 跑项目包的固定冒烟用例；<code>e2e-accept</code> 把 PR 描述里能用浏览器检查的验收标准写成用例，运行它们。只测不修</td>
+<td><code>docs/e2e/round-1/</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>两个块都只跑 1 轮，<code>fix: false</code>、<code>on_exhausted: accept</code>：有阻塞问题或测试失败，运行也照常结束，只报告。</li>
+<li><code>e2e</code> 在 <code>review-round</code> 之后，用的是 <code>ci</code> 准备好的检出。</li>
+</ul>
+<h2 id="review--你介入的地方">你介入的地方</h2>
+<p>没有要你回答的提问，也没有审批。某一步失败时运行就失败（这个流程没有设 <code>on_failed: ask</code>）。</p>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运行结束后</td>
+<td>右栏「改动」页看 diff 和核实过的发现，「文档」页看检查报告和端到端测试的报告、截图</td>
+<td><code>myorch ws &lt;run&gt; docs/review/round-1/summary.md</code></td>
+</tr>
+<tr>
+<td>看完以后</td>
+<td>—</td>
+<td>在 GitHub 上自己决定怎么处理这个 PR</td>
+</tr>
+</tbody>
+</table>
+<h2 id="review--产物">产物</h2>
+<pre><code>docs/
+├── pr.md                    可信的元数据：作者、状态、head → base、改动文件
+├── external/pr.md           PR 作者写的标题和描述（只当参考数据）
+├── ci/round-1.md            检查报告
+├── review/round-1/
+│   ├── reviewer-K.json      每个 reviewer 的发现
+│   ├── security.json        安全 review 的发现（quick 没有）
+│   ├── verified.json        核实以后的发现：Important / Nit / Pre-existing
+│   └── summary.md           数量、阻塞问题列表、验收标准表
+└── e2e/round-1/             有端到端测试的项目
+    ├── smoke/               report.md、result.json、截图
+    ├── acceptance/          report.md、result.json、截图，cases/ 是写出的用例
+    └── acceptance.md        每条验收标准的结论
+</code></pre>
+<h2 id="review--原则">原则</h2>
+<ul>
+<li><strong>每次都 review 整个 PR</strong>：myorch 不在 GitHub 上留标记，没有增量 review。<code>fetch-pr</code> 里「上次 review 到」的逻辑已经不用了：<code>last_reviewed</code> 总是空的，<code>changed</code> 总是 true，所以 <code>review-round</code> 每次都跑，第 1 轮看的是 <code>origin/&lt;base&gt;...HEAD</code>。</li>
+<li><strong>可信的和不可信的分开放</strong>：作者、状态、改动文件、SHA 写进 <code>docs/pr.md</code>。PR 作者写的标题和描述写进 <code>docs/external/pr.md</code>，每个 agent 都把 <code>docs/external/</code> 当作参考数据，里面的指令不执行。</li>
+<li><strong>reviewer 的规则和开发流程一样</strong>：先独立判断再核对作者的说法、到仓库里查复用和漏掉的入口、放宽的判断，详见 <a href="#development--review-循环">development 的 review 循环</a>。1、2、3 号各有侧重，quick 只有 1 号（侧重正确性和边界）。</li>
+<li><strong>verify 逐条核实</strong>：不管几个 reviewer，每条发现都打开代码核实，不成立的删掉，只有一个人报的也核实。<code>votes</code> 只记录几个人报告了它。Nit 最多留 5 条，检查失败算 Important。</li>
+<li><strong>需求文档</strong>：这个流程没有给 review 循环传 <code>requirement_doc</code>，reviewer 和 verify 被告知的需求文档是 <code>docs/requirements.md</code>，而评审运行里没有这个文件。所以它们只能按改动本身判断，PR 描述只在 <code>docs/external/pr.md</code> 里当参考。端到端块传的是 <code>docs/pr.md</code>。</li>
+</ul>
+<h2 id="review--端到端测试">端到端测试</h2>
+<ul>
+<li>review 读代码，e2e 测运行中的应用，两者分开。用什么工具测由项目决定：<code>project.yaml</code> 的 <code>e2e:</code>（<code>image</code>、<code>profile</code>、<code>acceptance</code>），项目包的 <code>e2e/</code>（博客用 Playwright 和无头 Chromium，见 <code>myorch-knowledge/blog/e2e/README.md</code>）。</li>
+<li>测试步骤的权限是 <code>e2e.profile</code>（blog 是 <code>dev-read</code>：仓库只读，没有凭证）。</li>
+<li>冒烟用例失败只是测试环境的问题（例如浏览器没起来）时，报告里单独列为「环境」，不算代码的问题。</li>
+<li><code>e2e-accept</code> 不能为了通过而放宽用例。用例失败时先判断是用例写错了还是改动有问题，改动有问题就保留用例。</li>
+</ul>
+<h2 id="review--安全">安全</h2>
+<ul>
+<li>别人的 PR 代码不可信，<code>ci</code> 和端到端测试会执行它（构建脚本、测试、lint 配置）。执行 PR 代码的步骤（<code>ci</code>、<code>e2e-smoke</code>、<code>e2e-accept</code>）和读代码的 reviewer 都拿不到 GitHub 凭证，在跑完即删的沙箱里。</li>
+<li>有凭证的一步（<code>fetch-pr</code>）只运行流程里写死的脚本，不执行 PR 里的任何代码。它只读：拉代码、读 PR。</li>
+<li>剩下的风险是 prompt 注入：PR 内容可能诱导 reviewer 写出误导的结论。结论只在本机显示，不发到 GitHub。</li>
+</ul></section>
+<section class="chapter" id="ch-postmortem"><h1>postmortem <small>复盘</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/postmortem.yaml</code>，说明 <code>flows/postmortem.md</code></td></tr><tr><td>角色</td><td><code>postmortem</code>（控制台里的任务「复盘」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>复盘：问题已经进了代码。找出引入它的改动和本该拦住的层，提出知识库修改，并生成评测案例。不改项目代码。</td></tr><tr><td>片段</td><td><a href="#fragments--choose-proposals"><code>lib/choose-proposals.yaml</code></a></td></tr></tbody></table><p>复盘一个已经进了项目代码的问题：找出引入它的提交，判断最早该在哪一层拦住、为什么没拦住，提出知识库修改，并把这次改动做成一个评测案例。用在问题已经修好（或已经 revert）以后，想知道当初为什么没拦住时。</p>
+<p>它只分析，不改项目代码，修 bug 用 <a href="#ch-development">development</a>。对外只改本地的 <code>myorch-knowledge</code>（你采纳的建议）和本机的评测集（<code>myorch-data/evals/cases/</code>）。和 <a href="#ch-learn">learn</a> 的区别：learn 从一批运行里找规律，postmortem 从一个具体的问题倒查。postmortem 的结论以后也会被 learn 读到。</p>
+<pre><code class="language-sh">uv run myorch run flows/postmortem.yaml --project mdm -i commit=&lt;修复或 revert 提交&gt;
+uv run myorch run flows/postmortem.yaml --project mdm -i bad=&lt;引入问题的提交&gt;
+</code></pre>
+<p>控制台：先选项目，任务选「复盘」，填「修复或 revert 提交」或「引入问题的提交」中的一个。第一条消息可以写问题的现象和影响，也可以不写；写了存成 <code>docs/external/request.md</code>，analyze 会读。</p>
+<h2 id="postmortem--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>commit</code></td><td>修复或 revert 提交</td><td>文本</td><td>二选一</td><td></td><td>提交 SHA。和下一项二选一</td></tr><tr><td><code>bad</code></td><td>引入问题的提交</td><td>文本</td><td>二选一</td><td></td><td>知道时直接填 SHA</td></tr><tr><td><code>runs</code></td><td></td><td>hidden</td><td></td><td></td><td></td></tr></tbody></table><h2 id="postmortem--steps">步骤图</h2><p class="small">从 <code>flows/postmortem.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="locate"><b>locate</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host" title="replay-before"><b>replay-before</b><span>宿主机动作 · postmortem-replay</span></div><div class="fg-c k-script" title="trace"><b>trace</b><span>脚本 · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="analyze"><b>analyze</b><span>agent · Opus · dev-read</span><span class="wait">等 trace</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="choose"><b>choose</b><span>脚本 · dev-read</span><div class="chips"><i class="chip ask">可能问你</i><i class="chip cond" title="steps.analyze.outputs.proposals &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="apply"><b>apply</b><span>宿主机动作 · project-apply</span><div class="chips"><i class="chip cond" title="steps.choose.outputs.accepted &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host" title="replay-after"><b>replay-after</b><span>宿主机动作 · postmortem-replay</span><span class="wait">等 apply、replay-before</span></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>locate</code></td><td>脚本 · dev-git</td><td></td><td><code>bad</code>、<code>fix</code>、<code>kind</code>、<code>matched</code>、<code>matched_runs</code></td><td></td><td>超时 15m · 重试 1</td></tr><tr><td><code>replay-before</code></td><td>宿主机动作 · postmortem-replay</td><td></td><td></td><td></td><td>超时 5m</td></tr><tr><td><code>trace</code></td><td>脚本 · dev-read</td><td></td><td></td><td></td><td>超时 10m</td></tr><tr><td><code>analyze</code></td><td>agent · Opus · dev-read</td><td></td><td><code>layer</code>、<code>category</code>、<code>proposals</code>、<code>expected</code></td><td></td><td>超时 30m</td></tr><tr><td><code>choose</code></td><td>脚本 · dev-read</td><td><code>steps.analyze.outputs.proposals &gt; 0</code></td><td><code>accepted</code></td><td>可以向你提问</td><td>超时 30m</td></tr><tr><td><code>apply</code></td><td>宿主机动作 · project-apply</td><td><code>steps.choose.outputs.accepted &gt; 0</code></td><td></td><td></td><td>超时 5m</td></tr><tr><td><code>replay-after</code></td><td>宿主机动作 · postmortem-replay</td><td></td><td></td><td></td><td>超时 5m</td></tr></tbody></table></details>
+
+<h2 id="postmortem--输入">输入</h2>
+<ul>
+<li><code>commit</code> 和 <code>bad</code> 二选一，都不填时运行不会启动。两个都填时，以 <code>bad</code> 为准，<code>commit</code> 当作修复提交。</li>
+<li>提交不在任何分支上（例如没合并的 PR）也可以：locate 会按 SHA 从 GitHub 单独拉取。</li>
+<li><code>runs</code> 不用填。发起时客户端填入这个项目最新的 development 和 review 运行（最多 20 个，已结束、失败、取消的都算），locate 从里面挑出碰过这次改动的。</li>
+</ul>
+<h2 id="postmortem--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>locate</code></td>
+<td>找到引入问题的提交（见下）、它的 PR，以及哪些 myorch 运行碰过它</td>
+<td><code>docs/postmortem/target.json</code>、<code>bad.diff</code>、<code>fix.diff</code>（有修复提交时）</td>
+</tr>
+<tr>
+<td><code>replay-before</code></td>
+<td>宿主机动作：建评测案例（草稿），另起一个 eval 运行，用现在的知识库回放这次改动。和 trace、analyze 同时进行</td>
+<td>评测案例，eval 运行 <code>eval-&lt;id&gt;-before</code></td>
+</tr>
+<tr>
+<td><code>trace</code></td>
+<td>从碰过这次改动的运行里，列出当时每一层看到了什么：需求文档提到了哪些相关文件、各轮 review 在改动附近（前后 10 行）的发现、CI 结果、风险判定</td>
+<td><code>docs/postmortem/trace.json</code>、<code>trace.md</code></td>
+</tr>
+<tr>
+<td><code>analyze</code></td>
+<td>判断问题是什么、最早该在哪一层拦住、为什么没拦住；提出知识库修改；写出期望 reviewer 报出的发现。只读，只写 <code>docs/postmortem/</code></td>
+<td><code>postmortem.md</code>、<code>proposals.json</code>、<code>proposals.md</code>、<code>follow-ups.md</code>、<code>case.json</code></td>
+</tr>
+<tr>
+<td><code>choose</code></td>
+<td>列出建议，等你回复编号。没有建议时跳过</td>
+<td><code>docs/postmortem/accepted.json</code></td>
+</tr>
+<tr>
+<td><code>apply</code></td>
+<td>宿主机动作 <code>project-apply</code>：写回项目包、提交、重新同步快照。一条都没采纳时跳过</td>
+<td><code>myorch-knowledge</code> 的一个提交</td>
+</tr>
+<tr>
+<td><code>replay-after</code></td>
+<td>宿主机动作：把期望的发现写进评测案例。采纳了建议时，用新的知识库再回放一次</td>
+<td>评测案例更新，eval 运行 <code>eval-&lt;id&gt;-after</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>&lt;id&gt;</code> 是这次 postmortem 运行 ID 的最后一段，例如 <code>postmortem-1a2b3c4d</code> 的回放是 <code>eval-1a2b3c4d-before</code>。</p>
+<h3 id="postmortem--locate怎么找到引入问题的提交">locate：怎么找到引入问题的提交</h3>
+<table>
+<thead>
+<tr>
+<th>给了什么</th>
+<th>怎么找</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bad</code></td>
+<td>直接用</td>
+</tr>
+<tr>
+<td><code>commit</code>，提交信息里有 <code>This reverts commit &lt;sha&gt;</code></td>
+<td>被 revert 的提交</td>
+</tr>
+<tr>
+<td><code>commit</code>，普通修复</td>
+<td>对修复改动的行做 <code>git blame</code>（纯新增时看新增位置前后 2 行），取出现最多的提交</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>引入问题的提交是合并提交时，对比的基准是它的第一个父提交，所以看的是整个 PR。</li>
+<li>完整历史克隆在工作区外面（<code>/tmp</code>），包含修复的历史不进运行的工作区。</li>
+<li>碰过这次改动的运行：它的分支上有这个提交、而它开始时的 base 上没有；或者它关联的 PR 就是这个提交的 PR。</li>
+<li>需求取自第一个碰过它的运行的 <code>requirements.md</code>（或 <code>pr.md</code>）。没有 myorch 运行碰过时，用提交信息和 PR 标题、描述。</li>
+<li>找不到时这一步失败，并说明原因：提交不在仓库里；修复改的行找不到来源（这时用 <code>-i bad=</code> 直接指定）；引入问题的提交是仓库的第一个提交。</li>
+</ul>
+<h3 id="postmortem--analyze该拦住的层和原因">analyze：该拦住的层和原因</h3>
+<table>
+<thead>
+<tr>
+<th>输出</th>
+<th>取值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>layer</code>：最早该拦住的一层</td>
+<td><code>requirement</code> 需求分析该问到；<code>implementation</code> 实现指南该避开；<code>review</code>；<code>security</code>；<code>risk</code> 该判成高风险要人看；<code>ci</code> 确定性检查；<code>approval</code> 审批人该看到；<code>none</code></td>
+</tr>
+<tr>
+<td><code>category</code>：为什么没拦住</td>
+<td><code>no-rule</code> 知识库和检查都没覆盖；<code>rule-not-applied</code> 有规则但没用上；<code>flagged-not-handled</code> reviewer 或 CI 指出过，但被反驳、降级或忽略；<code>human-let-through</code> 人看到了风险仍然放行；<code>not-detectable</code> 事先确实发现不了</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>没有 myorch 运行碰过这次改动时，判断的是：如果当时经过 myorch，哪一层该拦住。</li>
+<li>建议最多 5 条，格式和 learn 一样（精确替换或追加），只改 <code>guide/</code>。规则要写成能用到同类问题上的样子，不只写这一个 bug。</li>
+<li>适合做成 lint、CI、测试的建议写进 <code>follow-ups.md</code>，要另起 development 去做。</li>
+<li><code>case.json</code> 只写 reviewer 看改动本身就应该发现的问题。<code>category</code> 是 <code>not-detectable</code>，或者只有 CI 才能发现时，写 <code>[]</code>。</li>
+</ul>
+<h2 id="postmortem--回放和评测案例">回放和评测案例</h2>
+<p>回放是<strong>单独的 eval 运行</strong>（<a href="#ch-eval">eval</a> 流程，<a href="https://github.com/leweii/myorch/blob/main/src/myorch/evals.py"><code>evals.py</code></a>）。那里的 reviewer 只看到改动本身和需求，看不到这次运行的工作区：事故描述、修复、分析和期望的发现都看不到。eval 运行从 GitHub 克隆仓库，检出引入问题的提交，之后的提交（包括修复）、分支和 reflog 都删掉。</p>
+<p>案例 ID 就是这次 postmortem 的运行 ID，存在本机 <code>myorch-data/evals/cases/&lt;运行 ID&gt;.json</code>。它这样走到评测集里：</p>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>案例的状态</th>
+<th>发生了什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>replay-before</code></td>
+<td><code>draft</code></td>
+<td>只有改动，还没有期望的发现，评测集里看不到。用现在的知识库回放一次</td>
+</tr>
+<tr>
+<td><code>replay-after</code>，<code>case.json</code> 有内容</td>
+<td><code>pending</code></td>
+<td>写入期望的发现，在控制台「流程 → 评测集」里等你确认。采纳过建议时，用新的知识库再回放一次</td>
+</tr>
+<tr>
+<td><code>replay-after</code>，<code>case.json</code> 是空的</td>
+<td><code>rejected</code></td>
+<td>没有能事先发现的问题，案例不计分，也不再回放</td>
+</tr>
+<tr>
+<td>你在「流程 → 评测集」里勾选成立的发现</td>
+<td><code>confirmed</code></td>
+<td>案例进入评测集，以后的 <code>myorch eval run</code> 也会用它。一条都不勾时是 <code>rejected</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>案例页显示两次回放各抓到了几条。确认之前按 <code>case.json</code> 的全部发现算，确认之后按你勾选的算。</li>
+<li>命令行对比这次的两次回放：<code>uv run myorch eval report --batch &lt;postmortem 运行 ID&gt;</code>。它只按你勾选过的发现打分，所以先确认案例。</li>
+<li>两个回放步骤都幂等：已经起过的回放不会再起第二次。</li>
+<li>回放是另一个运行，它失败不影响 postmortem 本身。去 eval 运行里看原因。</li>
+</ul>
+<h2 id="postmortem--你介入的地方">你介入的地方</h2>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台 / Slack</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>choose</code>：选采纳哪几条</td>
+<td>在对话里回复编号，或点 <code>all</code>、<code>none</code></td>
+<td><code>uv run myorch reply &lt;run&gt; choose "1,3"</code></td>
+</tr>
+<tr>
+<td>运行结束后：确认评测案例</td>
+<td>「流程 → 评测集」里打开这个案例，勾选成立的发现</td>
+<td>没有命令</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>回复的写法和 learn 一样：<code>1,3</code>、<code>1、3</code>、<code>all</code>、<code>none</code>；看不懂会再问一次。详细内容在 <code>docs/postmortem/proposals.md</code>。</li>
+<li>一条都不采纳时，不改知识库，也不做第二次回放。</li>
+</ul>
+<h2 id="postmortem--写回项目包">写回项目包</h2>
+<p>和 learn 用同一个宿主机动作 <code>project-apply</code>，同样是 <code>scope: learn</code>，规则见 <a href="#learn--写回项目包">learn 的「写回项目包」</a>：全部校验通过才写、只提交自己写的文件、提交信息是 <code>learn(&lt;项目&gt;): …</code> 并带 <code>myorch-run: &lt;run_id&gt;</code>、写完重新同步快照、可以 <code>git revert</code>。</p>
+<p>区别只在读的文件：建议在 <code>docs/postmortem/proposals.json</code>，采纳的编号在 <code>docs/postmortem/accepted.json</code>。prompt 只让 analyze 改 <code>guide/</code>；动作本身按 learn 的范围校验，也接受 <code>checks.sh</code>、<code>checks.env</code>。</p>
+<h2 id="postmortem--产物">产物</h2>
+<p>都在工作区的 <code>docs/postmortem/</code> 下，控制台右栏「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/postmortem</code>。</p>
+<pre><code>docs/postmortem/
+  target.json            引入问题的提交、基准、修复、PR、碰过它的运行、需求
+  bad.diff, fix.diff     引入问题的改动；修复（有时）
+  trace.json, trace.md   当时每一层看到了什么
+  postmortem.md          结论：问题、该拦住的层和原因、证据、建议
+  proposals.json, proposals.md, accepted.json   知识库建议，你采纳的编号
+  follow-ups.md          要另起 development 的确定性检查建议
+  case.json              评测案例里期望的发现
+</code></pre></section>
+<section class="chapter" id="ch-sweep"><h1>sweep <small>找 bug</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/sweep.yaml</code>，说明 <code>flows/sweep.md</code></td></tr><tr><td>角色</td><td><code>sweep</code>（控制台里的任务「找 bug」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>找现有代码里的 bug，每次看一批文件，只出日报。</td></tr><tr><td>片段</td><td><a href="#fragments--sync-base"><code>lib/sync-base.yaml</code></a></td></tr></tbody></table><p>找项目现有代码里的 bug。所有项目共用这一个流程。每次按固定顺序看一批文件，几个审查员并行看，核实后写一份日报。适合每晚定时跑，一轮一轮把整个仓库扫完。</p>
+<p>它是观察模式：只写日报 <code>docs/sweep/report.md</code>，不改代码，不推送，不启动 development，也不改知识库。发现的问题要修，由人另起 <a href="#ch-development">development</a>。和 <a href="#ch-review">review</a> 的区别：review 看一个 PR 的改动，sweep 看已经在主分支上的代码。</p>
+<pre><code class="language-sh">uv run myorch run flows/sweep.yaml --project mdm                     # 跑一次，审查强度默认 standard
+uv run myorch run flows/sweep.yaml --project mdm -i depth=deep
+uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '0 2 * * *'   # 每晚 2 点
+</code></pre>
+<p>控制台：先选项目，任务选「找 bug」，选审查强度。第一条消息不用写。</p>
+<h2 id="sweep--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>depth</code></td><td>审查强度</td><td>选项：<code>quick</code> / <code>standard</code> / <code>deep</code></td><td></td><td><code>standard</code></td><td></td></tr></tbody></table><p>按输入 <code>depth</code> 选一组参数（presets）：</p><table><thead><tr><th>depth</th><th>auditors</th><th>audit_model</th></tr></thead><tbody><tr><td><code>quick</code></td><td>1</td><td>Haiku</td></tr><tr><td><code>standard</code></td><td>2</td><td>Sonnet</td></tr><tr><td><code>deep</code></td><td>3</td><td>Opus</td></tr></tbody></table><h2 id="sweep--steps">步骤图</h2><p class="small">从 <code>flows/sweep.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="sync"><b>sync</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script" title="pick"><b>pick</b><span>脚本 · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="audit"><b>audit</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip">×2 并行</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="verify"><b>verify</b><span>agent · Sonnet · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script" title="record"><b>record</b><span>脚本 · dev-read</span></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>sync</code></td><td>脚本 · dev-git</td><td></td><td></td><td></td><td>超时 15m · 重试 1</td></tr><tr><td><code>pick</code></td><td>脚本 · dev-read</td><td></td><td></td><td></td><td>超时 5m</td></tr><tr><td><code>audit</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td>2 个实例并行</td><td>超时 30m</td></tr><tr><td><code>verify</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>new_important</code>、<code>new_nit</code></td><td></td><td>超时 20m</td></tr><tr><td><code>record</code></td><td>脚本 · dev-read</td><td></td><td></td><td></td><td>超时 5m</td></tr></tbody></table></details>
+
+<h2 id="sweep--看哪些文件">看哪些文件</h2>
+<p>由项目包 <code>project.yaml</code> 的 <code>sweep:</code> 决定（见 <a href="../index.html#ch-07-projects">7. 项目包</a>）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+<th>不写时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>paths</code></td>
+<td>只看这些目录或文件</td>
+<td>整个仓库</td>
+</tr>
+<tr>
+<td><code>include</code></td>
+<td>只看匹配这些 glob 的文件（可以用 <code>**</code>）</td>
+<td>不筛选</td>
+</tr>
+<tr>
+<td><code>exclude</code></td>
+<td>不看匹配这些 glob 的文件</td>
+<td>不排除</td>
+</tr>
+<tr>
+<td><code>chunk</code></td>
+<td>每次看几个文件（1 到 200）</td>
+<td>20</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>文件列表来自 <code>git ls-files</code>，按路径排序。</li>
+<li>mdm 和 blog 现在没有写 <code>sweep:</code>，所以看整个仓库，每次 20 个文件。myorch 只看 <code>src/myorch</code>、<code>flows</code>、<code>tools</code>、<code>deploy</code>（不看 <code>src/myorch/ui/static/vendor/**</code>），每次 15 个。</li>
+<li>sweep 读的是项目包快照里的配置。改了 <code>project.yaml</code> 以后要 <code>uv run myorch project sync &lt;项目&gt;</code>。</li>
+<li>配置一个文件都没选中时，<code>pick</code> 失败。</li>
+</ul>
+<h2 id="sweep--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sync</code></td>
+<td>克隆或更新仓库，切到最新的 base 分支（<a href="https://github.com/leweii/myorch/blob/main/flows/lib/sync-base.yaml"><code>lib/sync-base.yaml</code></a>，用项目共享的 bare mirror 加速）</td>
+<td><code>repo/</code></td>
+</tr>
+<tr>
+<td><code>pick</code></td>
+<td>按游标取下一批文件，把已知问题复制一份进工作区。游标在这里不动</td>
+<td><code>docs/sweep/chunk.txt</code>、<code>docs/sweep/known.json</code></td>
+</tr>
+<tr>
+<td><code>audit</code></td>
+<td>几个审查员各自读这批文件，找现在就存在的缺陷。只读，不改代码</td>
+<td><code>docs/sweep/audit-&lt;编号&gt;.json</code></td>
+</tr>
+<tr>
+<td><code>verify</code></td>
+<td>逐条打开代码核实，去掉误报和已知问题，合并重复的，写日报</td>
+<td><code>docs/sweep/verified.json</code>、<code>docs/sweep/report.md</code></td>
+</tr>
+<tr>
+<td><code>record</code></td>
+<td>把新问题记进 <code>known.json</code>，游标前移</td>
+<td>共享目录里的 <code>cursor.json</code>、<code>known.json</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="sweep--audit找什么">audit：找什么</h3>
+<ul>
+<li>正确性（逻辑错误、漏掉的边界情况、没处理的错误、和文档或注释不一致）、安全（注入、泄露的密钥、不安全的默认值、缺少的权限检查）、用户会看到的错误（坏链接、错误的数据或显示）。</li>
+<li>每个审查员有自己的重点：1 号多看正确性和边界情况，2 号多看安全和错误处理，3 号多看文档和数据是否一致。</li>
+<li>不报：代码风格、命名、能写得更好但没错的地方、缺少测试；已知问题；这批文件以外的代码（只用来理解上下文）。</li>
+<li>严重程度只有两级：<code>Important</code>（错误行为、数据错误、安全问题，值得安排人修）和 <code>Nit</code>（确实是问题，但影响小）。没把握的不报。</li>
+<li>有 <code>guide/review-guide.md</code> 时按它的标准看。</li>
+</ul>
+<h3 id="sweep--verify核实">verify：核实</h3>
+<ul>
+<li>每条都打开代码亲自核实，不成立的去掉。</li>
+<li>几个审查员报的同一个问题合并成一条，<code>votes</code> 是报告它的人数。只有一个人报、核实成立的也保留。</li>
+<li>和 <code>known.json</code> 里是同一个问题的去掉。</li>
+<li>日报：没有新问题时只有一句「这批文件没有发现新问题。」，后面附看了哪些目录。有新问题时，第一句写 Important 和 Nit 各几条，再按严重程度列出每条的位置、问题、后果、建议怎么修。不写过程，不写客套话。</li>
+</ul>
+<h2 id="sweep--跨运行的状态">跨运行的状态</h2>
+<p>跨运行的状态放在项目共享目录 <code>shared/&lt;项目&gt;/sweep/</code>（myorch 存储的 volume 上）。只有 <code>pick</code> 和 <code>record</code> 挂载它。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>内容</th>
+<th>谁写</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cursor.json</code></td>
+<td><code>{"next": 下一批从第几个文件开始, "total": 文件总数, "run": 写它的运行}</code></td>
+<td><code>record</code></td>
+</tr>
+<tr>
+<td><code>known.json</code></td>
+<td>报告过的问题列表：<code>fingerprint</code>、<code>file</code>、<code>line</code>、<code>title</code>、<code>severity</code>、<code>run</code>、<code>at</code>（日期）</td>
+<td><code>record</code> 追加</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>整个运行成功后游标才前移。</strong> <code>record</code> 是最后一步，前面任何一步失败，它都不执行，下次重扫同一批。</li>
+<li>扫到最后一个文件后从头开始，所以能一直定时跑下去。</li>
+<li>游标是排序后列表里的位置，不是文件名。文件增删后，下一批的起点会跟着错开几个文件：可能漏看或重看几个，下一轮会补上。</li>
+<li>已知问题去两次重：verify 按意思判断是不是同一个问题，<code>record</code> 再按 <code>文件|标题</code> 的指纹去掉完全相同的。</li>
+<li><code>known.json</code> 只增不减。想从头扫，删掉 <code>cursor.json</code>；想让某个问题再被报告，从 <code>known.json</code> 里删掉那一项。每个运行的工作区里也有一份当时的副本 <code>docs/sweep/known.json</code>。</li>
+</ul>
+<h2 id="sweep--你介入的地方">你介入的地方</h2>
+<p>运行中不需要你。看日报：控制台打开运行，右栏「文档」里的 <code>docs/sweep/report.md</code>；或者 <code>uv run myorch ws &lt;run&gt; docs/sweep/report.md</code>。值得修的问题，另起 development。</p>
+<h2 id="sweep--定时跑">定时跑</h2>
+<ul>
+<li><code>--flow</code> 要写流程名 <code>sweep</code>。需要别的审查强度时加 <code>-i depth=quick</code> 或 <code>-i depth=deep</code>。</li>
+<li>上一次定时发起的运行还在跑时，这一次跳过，所以两次运行不会同时动游标。不要加 <code>--allow-overlap</code>：两个运行会扫同一批文件，<code>known.json</code> 也可能被后结束的那个覆盖。</li>
+<li>运行的发起人是建定时任务的人。<code>uv run myorch schedule list</code> 看下次什么时候跑，<code>pause</code>、<code>unpause</code>、<code>delete</code> 管理，<code>trigger</code> 立即跑一次。</li>
+</ul>
+<h2 id="sweep--产物">产物</h2>
+<pre><code>docs/sweep/
+  chunk.txt          这次看的文件，每行一个
+  known.json         开始时的已知问题副本
+  audit-&lt;编号&gt;.json   每个审查员的发现
+  verified.json      核实后的新问题
+  report.md          日报
+</code></pre></section>
+<section class="chapter" id="ch-learn"><h1>learn <small>学习</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/learn.yaml</code>，说明 <code>flows/learn.md</code></td></tr><tr><td>角色</td><td><code>learn</code>（控制台里的任务「学习」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>从历史运行里沉淀知识：改进 guide/、记录人做过的决定、加确定性检查。</td></tr><tr><td>片段</td><td><a href="#fragments--choose-proposals"><code>lib/choose-proposals.yaml</code></a></td></tr></tbody></table><p>从一个项目过往的运行里沉淀知识，让下一次运行一开始就知道。所有项目共用这一个流程。它把各种信号整理成对项目包的修改建议，你挑选采纳哪几条，然后写回 <code>myorch-knowledge/&lt;项目&gt;/</code>。知识库变准了，以后的每次 development 和 review 都受益。</p>
+<p>它只改本地的 <code>myorch-knowledge</code>：<code>guide/</code>、<code>checks.sh</code>、<code>checks.env</code>。它不推送，不碰项目仓库，也不改流程（对流程的建议只写成文件）。和 <a href="#ch-postmortem">postmortem</a> 的区别：postmortem 从一个漏过去的问题倒查，learn 从一批运行里找反复出现的规律。</p>
+<pre><code class="language-sh">uv run myorch run flows/learn.yaml --project mdm                                                 # 自动选运行
+uv run myorch run flows/learn.yaml --project mdm -i runs=development-b947d694,review-5d5a21ec     # 手动选运行
+uv run myorch schedule add weekly-learn-mdm --flow learn --project mdm --cron '0 9 * * 1'         # 每周一 9 点
+</code></pre>
+<p>控制台：先选项目，任务选「学习」。「要学习的运行」可以留空，第一条消息不用写。</p>
+<h2 id="learn--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>runs</code></td><td>要学习的运行</td><td>文本</td><td></td><td></td><td>可选。逗号分隔的运行 ID；留空时自动选上次 learn 之后的运行</td></tr></tbody></table><h2 id="learn--steps">步骤图</h2><p class="small">从 <code>flows/learn.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="collect"><b>collect</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="analyze"><b>analyze</b><span>agent · Opus · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="choose"><b>choose</b><span>脚本 · dev-read</span><div class="chips"><i class="chip ask">可能问你</i><i class="chip cond" title="steps.analyze.outputs.proposals &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="apply"><b>apply</b><span>宿主机动作 · project-apply</span><div class="chips"><i class="chip cond" title="steps.choose.outputs.accepted &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="takeaways-learned"><b>takeaways-learned</b><span>宿主机动作 · takeaways-learned</span><div class="chips"><i class="chip cond" title="steps.collect.outputs.takeaways &gt; 0">有条件</i></div></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>collect</code></td><td>脚本 · dev-git</td><td></td><td><code>findings</code></td><td></td><td>超时 10m · 重试 1</td></tr><tr><td><code>analyze</code></td><td>agent · Opus · dev-read</td><td></td><td><code>proposals</code>、<code>follow_ups</code></td><td></td><td>超时 20m</td></tr><tr><td><code>choose</code></td><td>脚本 · dev-read</td><td><code>steps.analyze.outputs.proposals &gt; 0</code></td><td><code>accepted</code></td><td>可以向你提问</td><td>超时 30m</td></tr><tr><td><code>apply</code></td><td>宿主机动作 · project-apply</td><td><code>steps.choose.outputs.accepted &gt; 0</code></td><td></td><td></td><td>超时 5m</td></tr><tr><td><code>takeaways-learned</code></td><td>宿主机动作 · takeaways-learned</td><td><code>steps.collect.outputs.takeaways &gt; 0</code></td><td></td><td></td><td>超时 2m</td></tr></tbody></table></details>
+
+<h2 id="learn--学哪些运行">学哪些运行</h2>
+<p>不给 <code>runs</code> 时，发起的客户端（命令行、控制台、Slack、定时任务都一样）自动选：</p>
+<ul>
+<li>这个项目上次<strong>完成</strong>的 learn 之后开始的 development、review 和 postmortem 运行；</li>
+<li>只要已经结束的（成功或失败），取消的不算；</li>
+<li>最多 20 个，取最新的。<code>observe_runs</code> 最多挂载 20 个工作区。</li>
+</ul>
+<p>命令行会在开始前列出选了哪些。一个新运行都没有时，运行不会启动，报「没有新的已结束的 development / review run」。<code>uv run myorch list --project &lt;项目&gt;</code> 能看到有哪些运行，手动选时用 <code>-i runs=&lt;id&gt;,&lt;id&gt;</code>。</p>
+<p>失败或超时的 learn 不算完成。下一次 learn 还会选到同一批运行。</p>
+<h2 id="learn--读哪些信号">读哪些信号</h2>
+<table>
+<thead>
+<tr>
+<th>信号</th>
+<th>从哪里来</th>
+<th>怎么进到运行里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>review 的发现和后来的处理结果</td>
+<td>各运行的 <code>docs/review/round-*/</code>，PR 的状态</td>
+<td>collect 读只读挂载的 <code>observed/&lt;run_id&gt;/</code>，到 GitHub 查 PR</td>
+</tr>
+<tr>
+<td>人回答过的问题、修改意见、驳回、失败的步骤、重新执行、从哪个运行接着改</td>
+<td>宿主机的事件日志</td>
+<td>发起时由客户端写进 <code>docs/learn/trail.json</code>（<a href="https://github.com/leweii/myorch/blob/main/src/myorch/trail.py"><code>trail.py</code></a>）。sandbox 读不到事件日志</td>
+</tr>
+<tr>
+<td>CI 失败</td>
+<td><code>docs/ci/round-*/result.json</code></td>
+<td>collect</td>
+</tr>
+<tr>
+<td>实现时的假设，和需求、设计的差异</td>
+<td><code>docs/implementation.md</code> 的对应小节</td>
+<td>collect</td>
+</tr>
+<tr>
+<td>为什么在分支上接着改</td>
+<td>接着改的运行的请求（<code>docs/external/request.md</code>）</td>
+<td>collect</td>
+</tr>
+<tr>
+<td>复盘结论和跟进建议</td>
+<td>postmortem 运行的 <code>docs/postmortem/</code></td>
+<td>collect</td>
+</tr>
+<tr>
+<td>开发运行自己写的任务信息和经验</td>
+<td>项目仓库 base 分支的 <code>myorch/&lt;日期&gt;-&lt;run_id&gt;/</code></td>
+<td>collect 从仓库读。学过哪些，发起时写进 <code>docs/learn/takeaways-learned.json</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="learn--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collect</code></td>
+<td>汇总上表的信号，判断每条 review 发现后来怎么样了，读仓库里还没学过的 takeaway。脚本只读 GitHub，不执行仓库代码</td>
+<td><code>docs/learn/findings.json</code>、<code>outcomes.md</code>、<code>signals.json</code>、<code>signals.md</code>、<code>takeaways.json</code>、<code>takeaways/</code></td>
+</tr>
+<tr>
+<td><code>analyze</code></td>
+<td>找规律，提出修改建议，每条都要有证据。只写建议文件，不改任何东西</td>
+<td><code>docs/learn/proposals.json</code>、<code>proposals.md</code>、<code>follow-ups.md</code>、<code>flow-proposals.md</code></td>
+</tr>
+<tr>
+<td><code>choose</code></td>
+<td>把建议列给你，等你回复编号。没有建议时跳过</td>
+<td><code>docs/learn/accepted.json</code></td>
+</tr>
+<tr>
+<td><code>apply</code></td>
+<td>宿主机动作 <code>project-apply</code>：校验、写回项目包、在 <code>myorch-knowledge</code> 里提交、重新同步快照。一条都没采纳时跳过</td>
+<td><code>myorch-knowledge</code> 的一个提交</td>
+</tr>
+<tr>
+<td><code>takeaways-learned</code></td>
+<td>宿主机动作：把这次读过的 takeaway 记为学过。不论采纳了几条都执行；这次没读到 takeaway 时跳过</td>
+<td><code>myorch-data/learn/&lt;项目&gt;/takeaways.json</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="learn--collect发现的处理结果">collect：发现的处理结果</h3>
+<p>已经标为 fixed 的发现不算。其余每条按下面的顺序判断，取第一个成立的：</p>
+<table>
+<thead>
+<tr>
+<th>处理结果</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fixed</code></td>
+<td>后面某一轮里，同一个文件有一条发现标为 fixed</td>
+</tr>
+<tr>
+<td><code>rebutted</code></td>
+<td>标题的前 12 个字出现在某一轮的 <code>rebuttal.md</code> 里</td>
+</tr>
+<tr>
+<td><code>merged_unchanged</code> / <code>closed</code> / <code>open</code></td>
+<td>只看 review 运行：被评审的 PR 已合并、已关闭、还开着</td>
+</tr>
+<tr>
+<td><code>not_required</code></td>
+<td>Nit 或 Pre-existing，本来就不阻塞</td>
+</tr>
+<tr>
+<td><code>unknown</code></td>
+<td>以上都不是</td>
+</tr>
+</tbody>
+</table>
+<p>myorch 不再往 PR 上发评论，所以没有「有人回复了评论」这一类，结果只来自运行自己的记录和 PR 状态。</p>
+<h3 id="learn--collect仓库里的-takeaway">collect：仓库里的 takeaway</h3>
+<ul>
+<li>项目设置了 <code>flows.development.takeaway</code>（现在只有 mdm）时，<a href="#ch-development">development</a> 每次把 <code>task.md</code> 和 <code>takeaway.md</code> 随改动提交到 <code>myorch/&lt;日期&gt;-&lt;run_id&gt;/</code>。PR 合并后它们才在 base 分支上，所以只读得到合并了的。别的项目仓库里没有这个目录，这一类信号就是空的。</li>
+<li>工作区没有仓库时，collect 做一个不检出文件的浅克隆，用 <code>git show</code> 逐个读。</li>
+<li>跳过学过的，从最早的开始读。每次最多 30 条、300 KB（第一条总会读），其余留给下一次。摘要写明还剩几条。</li>
+<li>读不到 <code>takeaway.md</code>（网络问题、空文件）的不读，也不记为学过，下次再试。连续 3 条读不到就停下。目录名不是 <code>&lt;日期&gt;-&lt;run_id&gt;</code> 的跳过。</li>
+<li>读不到仓库时只记一句固定的话和 git 退出码，不带命令行和 git 的输出。learn 照常进行。</li>
+<li>学过哪些只记在本机 <code>myorch-data/learn/&lt;项目&gt;/takeaways.json</code>（<a href="https://github.com/leweii/myorch/blob/main/src/myorch/takeaways.py"><code>takeaways.py</code></a>），不写公司仓库，也不写 <code>myorch-knowledge</code>。</li>
+</ul>
+<h3 id="learn--analyze找哪几类知识">analyze：找哪几类知识</h3>
+<p>最多 8 条，证据不够就少提或不提。不重复知识库和仓库自带文档里已有的内容，措辞简短，沿用现有文件的风格。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>找什么</th>
+<th>写到哪里</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>record-decision</code></td>
+<td>人在需求分析或设计时回答过的、以后同类问题都适用的决定</td>
+<td><code>guide/decisions.md</code>（没有时新建）：什么情况、怎么做、为什么、出处。以后遇到同类问题照做，不再问人</td>
+</tr>
+<tr>
+<td><code>fill-gap</code></td>
+<td>返工的原因：接着改、复盘结论、实现偏离需求或设计、不得不做的假设</td>
+<td>开发、设计相关的指南。问的是「知识库早写了什么，第一次就能做对」</td>
+</tr>
+<tr>
+<td><code>add-rule</code></td>
+<td>反复出现的同类问题（至少 2 次运行，或 1 次但影响大）</td>
+<td>实现时要避开的规则，或 <code>review-guide.md</code></td>
+</tr>
+<tr>
+<td><code>relax-rule</code></td>
+<td>反复被反驳、或没改就合并的意见</td>
+<td>放宽 <code>review-guide.md</code></td>
+</tr>
+<tr>
+<td><code>add-check</code></td>
+<td>能用脚本判断的反复出现的问题，或反复失败的 CI 检查</td>
+<td><code>checks.sh</code> 或 <code>checks.env</code>。只加确定性的检查，会误报的只报警告。没把握写对时写进 <code>follow-ups.md</code></td>
+</tr>
+</tbody>
+</table>
+<p>另外两个文件不会被应用：<code>follow-ups.md</code> 是要改项目仓库本身的建议（lint、CI、测试），要另起 development；<code>flow-proposals.md</code> 是对 myorch 流程的建议（步骤顺序、提问时机、总失败或多余的步骤）。</p>
+<p>takeaway 当作信号，和其他证据一样核实：只采纳能推广到以后的项目知识，只对某个工单成立的不要。证据写成 <code>&lt;run_id&gt;: takeaway</code>。流程、平台、环境类的建议进 <code>flow-proposals.md</code>。</p>
+<p>每条建议的修改写成精确替换（<code>edits</code>：<code>old</code> 从当前文件逐字复制，在文件里只出现一次）或追加（<code>append</code>）。不用 diff，因为 agent 写的 diff 常常行号对不上。</p>
+<h2 id="learn--你介入的地方">你介入的地方</h2>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台 / Slack</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>choose</code>：选采纳哪几条</td>
+<td>在对话里回复编号，或点 <code>all</code>、<code>none</code></td>
+<td><code>uv run myorch reply &lt;run&gt; choose "1,3"</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>问题里每条建议一行，带类型和证据条数。详细内容在 <code>docs/learn/proposals.md</code>：控制台右栏「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/learn/proposals.md</code>。</li>
+<li>回复写编号就行：<code>1,3</code>、<code>1、3</code>、<code>1 3</code> 都可以。<code>all</code> 或 <code>全部</code> 是全部采纳，<code>none</code>、<code>无</code>、<code>0</code> 是一条都不要。编号不存在或看不懂时会再问一次。</li>
+<li>回复一旦被接收就开始执行，不能再改。想补采纳的，另跑一次 learn，或者手改项目包。</li>
+<li>24 小时不回复，这一步超时失败。定时发起的 learn 也停在这里等你。</li>
+</ul>
+<h2 id="learn--写回项目包">写回项目包</h2>
+<p><code>apply</code> 是宿主机动作 <code>project-apply</code>，<code>scope: learn</code>（<a href="https://github.com/leweii/myorch/blob/main/src/myorch/runner/actions.py"><code>actions.py</code></a>、<a href="https://github.com/leweii/myorch/blob/main/src/myorch/project.py"><code>project.py</code></a>）。sandbox 访问不到 <code>myorch-knowledge</code>，所以在宿主机上做。</p>
+<table>
+<thead>
+<tr>
+<th>能改</th>
+<th>不能改</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>guide/</code> 下的文件，可以新建</td>
+<td><code>risk-rules.yaml</code>、<code>security.md</code>、<code>setup.sh</code></td>
+</tr>
+<tr>
+<td><code>checks.sh</code>、<code>checks.env</code></td>
+<td><code>project.yaml</code>、<code>image/</code>、<code>policy.yaml</code>、<code>providers/</code>、<code>sources/</code> 等其他文件</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>只写项目自己的目录 <code>myorch-knowledge/&lt;项目&gt;/</code>，模板（例如 mdm 的 <code>_templates/core-ng/</code>）不变。项目只从模板继承的文件，第一次修改时先复制模板的内容再改。</li>
+<li>先在内存里校验所有采纳的修改：路径在允许的范围内、不跳出项目包、每个 <code>old</code> 恰好出现一次。<strong>任何一处不通过，就一处都不写</strong>，这一步失败并列出原因。</li>
+<li>写入后在 <code>myorch-knowledge</code> 里提交，只提交这次写的文件（别人暂存的改动不会带进去）。提交信息是 <code>learn(&lt;项目&gt;): #1 标题; #3 标题</code>，正文带 <code>myorch-run: &lt;run_id&gt; step: apply</code> 和采纳的编号。</li>
+<li>然后重新同步项目包快照。之后开始的运行用新知识，Mandate 里记录的项目包版本也跟着变。正在跑的运行继续用它们自己的快照。</li>
+<li>幂等：发现这一步已经提交过，就直接算成功，不写第二遍。</li>
+<li>某条建议效果不好：在 <code>myorch-knowledge</code> 里 <code>git revert &lt;提交&gt;</code>，再 <code>uv run myorch project sync &lt;项目&gt;</code>。</li>
+</ul>
+<h2 id="learn--产物">产物</h2>
+<p>都在工作区的 <code>docs/learn/</code> 下，控制台右栏「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/learn</code>。</p>
+<pre><code>docs/learn/
+  trail.json                 发起时写入：事件日志里的问答、意见、驳回、失败、重新执行
+  takeaways-learned.json     发起时写入：已经学过的 takeaway 的 run_id
+  findings.json, outcomes.md 发现和处理结果，统计表
+  signals.json, signals.md   review 以外的信号
+  takeaways.json, takeaways/&lt;日期&gt;-&lt;run_id&gt;/   这次读到的 takeaway
+  proposals.json, proposals.md                 建议
+  follow-ups.md, flow-proposals.md             不会自动应用的建议
+  accepted.json              你采纳的编号
+</code></pre>
+<h2 id="learn--定时跑">定时跑</h2>
+<p><code>myorch schedule add</code> 的 <code>--flow</code> 要写流程名 <code>learn</code>。定时任务和控制台用同一条路径发起，所以自动选运行、写 <code>trail.json</code> 和 <code>takeaways-learned.json</code> 都一样。</p>
+<ul>
+<li>上一次定时发起的运行还在跑（例如还停在 <code>choose</code>）时，这一次跳过。要同时跑，加 <code>--allow-overlap</code>。</li>
+<li>没有新运行时，这一次不会启动运行。即使仓库里有新的 takeaway 也一样，因为 takeaway 只在 learn 运行里读。</li>
+<li>运行的发起人是建定时任务的人。<code>uv run myorch schedule list</code> 看下次什么时候跑，<code>pause</code>、<code>delete</code> 停用。</li>
+</ul></section>
+<section class="chapter" id="ch-eval"><h1>eval <small>评测</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/eval.yaml</code>，说明 <code>flows/eval.md</code></td></tr><tr><td>角色</td><td><code>eval</code>（控制台里的任务「评测」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>重放一个评测案例，给 reviewer 打分。</td></tr><tr><td>片段</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a></td></tr></tbody></table><p>给 reviewer 打分：把一次历史 review 看过的改动原样重放，让 reviewer 再看一遍，和人确认过的真问题对比，算抓到几条、漏掉几条、多报几条。改了 reviewer 的 prompt、模型或项目包的 <code>guide/</code> 以后，用它判断变好还是变差。它对外什么都不写：不推送，不改代码，不改项目包。</p>
+<p>一次 eval 运行只重放一个案例、一种评审强度。案例的收集、确认、批量发起和打分都在本机由 <code>myorch eval</code> 做（<a href="https://github.com/leweii/myorch/blob/main/src/myorch/evals.py"><code>../src/myorch/evals.py</code></a>），流程本身只负责准备代码和跑一轮 review。</p>
+<pre><code class="language-sh">uv run myorch eval collect                              # 从历史运行收集候选案例
+uv run myorch eval list                                 # 案例和状态
+# 在控制台「流程 → 评测集」里，逐个案例勾选哪些发现是真问题
+uv run myorch eval run --depth quick --depth standard   # 每个已确认的案例，每种强度各起一次 eval
+uv run myorch eval run --case &lt;案例 ID&gt;                  # 只跑某个案例（默认强度 standard）
+uv run myorch eval report [--batch &lt;批次&gt;]               # 对比表
+</code></pre>
+<p>不要在控制台的「＋ 新运行」里或用 <code>myorch run</code> 直接发起它：只有 <code>myorch eval run</code>（和 postmortem 的回放）会把案例写进工作区，直接发起时 <code>prepare</code> 读不到案例，会失败。Slack 的发起弹窗不列这个流程。</p>
+<h2 id="eval--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>case</code></td><td>案例</td><td>文本</td><td>必填</td><td></td><td>案例 ID（流程 → 评测集）</td></tr><tr><td><code>depth</code></td><td>测哪种强度</td><td>选项：<code>quick</code> / <code>standard</code> / <code>deep</code></td><td></td><td><code>standard</code></td><td></td></tr></tbody></table><p>按输入 <code>depth</code> 选一组参数（presets）：</p><table><thead><tr><th>depth</th><th>reviewers</th><th>security</th><th>review_model</th></tr></thead><tbody><tr><td><code>quick</code></td><td>1</td><td>False</td><td>Haiku</td></tr><tr><td><code>standard</code></td><td>2</td><td>True</td><td>Sonnet</td></tr><tr><td><code>deep</code></td><td>3</td><td>True</td><td>Opus</td></tr></tbody></table><h2 id="eval--steps">步骤图</h2><p class="small">从 <code>flows/eval.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="prepare"><b>prepare</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-loop"><div class="fg-lh"><b>review-round</b> · 循环 · 最多 1 轮 · 直到 <code>steps.verify.outputs.blocking == 0</code> · <span class="">跑满后接受，继续往下</span> · <span class="use">lib/review-loop.yaml</span></div><div class="fg-row"><div class="fg-c k-script" title="ci"><b>ci</b><span>脚本 · dev-write</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="review"><b>review</b><span>agent · Sonnet · dev-read</span><div class="chips"><i class="chip">×2 并行</i></div></div><div class="fg-c k-agent" title="security"><b>security</b><span>agent · Sonnet · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="verify"><b>verify</b><span>agent · Sonnet · dev-read</span></div></div><div class="fg-reflect"><span>跑满仍未满足时先反思，再问你：再跑一轮 / 接受 / 终止</span><div class="fg-c k-agent" title="reflect"><b>reflect</b><span>agent · Sonnet · dev-read</span></div></div></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>prepare</code></td><td>脚本 · dev-git</td><td></td><td></td><td></td><td>超时 10m</td></tr><tr class="grp"><td colspan="6">循环 <code>review-round</code>：最多 1 轮，直到 <code>steps.verify.outputs.blocking == 0</code>，跑满后接受，继续往下。片段 <code>lib/review-loop.yaml</code></td></tr><tr><td><code>　ci</code></td><td>脚本 · dev-write</td><td></td><td></td><td></td><td>超时 15m</td></tr><tr><td><code>　review</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td>2 个实例并行</td><td>超时 20m</td></tr><tr><td><code>　security</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>findings</code></td><td></td><td>超时 20m</td></tr><tr><td><code>　verify</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>blocking</code>、<code>nits</code>、<code>pre_existing</code></td><td></td><td>超时 20m</td></tr><tr><td><code>　reflect</code></td><td>agent · Sonnet · dev-read</td><td></td><td><code>recommendation</code>、<code>reason</code></td><td></td><td>超时 15m</td></tr></tbody></table></details>
+
+<h2 id="eval--案例从哪里来">案例从哪里来</h2>
+<p>案例是一次历史 review 第 1 轮看过的改动，加上人确认过的真问题。存在本机的 <code>myorch-data/evals/cases/&lt;案例 ID&gt;.json</code>。</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>谁做</th>
+<th>做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>收集</td>
+<td><code>myorch eval collect</code></td>
+<td>扫描所有运行，第 1 轮的 <code>verified.json</code> 里有带文件位置的 Important 或 Nit 的 development、review 运行成为候选，案例 ID 就是那次运行的 ID。Pre-existing 不算这次改动的问题。记下比较范围（base 和 head 提交）、分支上的提交、当时的需求文档（<code>docs/requirements.md</code>，没有时用 <code>docs/pr.md</code>）和这些发现。已经有的案例不重复收集</td>
+</tr>
+<tr>
+<td>确认</td>
+<td>你，在控制台「流程 → 评测集」</td>
+<td>逐条勾选确实是问题的发现，点「收入评测集」，状态变成已确认。一条都不是时点「都不是真问题」，案例不要了。没有记录 head 的老运行，head 是推断的（分支上的第一个提交），页面上会提示你核对</td>
+</tr>
+<tr>
+<td>重放</td>
+<td><code>myorch eval run</code></td>
+<td>每个已确认的案例、每种强度起一次 eval，一批运行共用一个批次号。用项目包最新的版本，不挂知识源</td>
+</tr>
+<tr>
+<td>打分</td>
+<td><code>myorch eval report</code></td>
+<td>读每次重放的 <code>docs/review/round-1/verified.json</code>，和勾选的发现对比，见「怎么打分」</td>
+</tr>
+</tbody>
+</table>
+<p><a href="#ch-postmortem">postmortem</a> 也会生成案例（<code>origin: git</code>）：改动是项目仓库里引入问题的那个提交，不来自 myorch 运行，案例 ID 是复盘运行的 ID。复盘自己发起这些回放：用当时的知识库一次，你采纳了它提出的知识库修改时，用新的知识库再一次，<code>myorch eval report --batch &lt;复盘运行 ID&gt;</code> 能看。</p>
+<h2 id="eval--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>prepare</code></td>
+<td>读 <code>docs/eval/case.json</code>。从源运行自己的工作区克隆仓库（只读挂载，所以从没推到 GitHub 的提交也能重放）；复盘案例从 GitHub 克隆。切到案例的 head，然后删掉 <code>origin</code> remote、其他所有引用和 reflog，做一次 gc，再把 <code>origin/eval-base</code> 指向案例的 base。把当时的需求文档写进 <code>docs/eval/requirement.md</code></td>
+<td><code>repo/</code>、<code>docs/eval/requirement.md</code></td>
+</tr>
+<tr>
+<td><code>review-round</code> 循环（1 轮）</td>
+<td>和 <a href="#ch-review">review</a> 一样的一轮 review：<code>ci</code> → <code>review</code>（个数由强度决定）和 <code>security</code> → <code>verify</code>。比较基准是 <code>eval-base</code>，需求文档是 <code>docs/eval/requirement.md</code>。没有 <code>fix</code>，跑满自动接受</td>
+<td><code>docs/ci/round-1.md</code>、<code>docs/review/round-1/</code></td>
+</tr>
+</tbody>
+</table>
+<p>强度和 review 的三种一样，见上面的预设表。</p>
+<h2 id="eval--不泄露答案">不泄露答案</h2>
+<ul>
+<li><strong>标准答案不进工作区</strong>：<code>myorch eval run</code> 只把案例里能看的字段写进 <code>docs/eval/case.json</code>：来源、源运行、流程、仓库、base 和 head 提交、需求文档。人确认的发现留在本机的 <code>myorch-data/evals/cases/</code>。</li>
+<li><strong>后来的提交不留</strong>：源运行后来的修复提交会告诉 reviewer 问题在哪里，所以仓库里只留 head 能到达的历史，分支、远端引用、reflog 都删掉。</li>
+<li><strong>对外不可写</strong>：删掉 <code>origin</code> 以后，重放里的任何一步都推不出去。</li>
+<li>reviewer 也看不到源运行的技术设计、实现记录和工单原文：工作区里只有需求文档和改动。所以评测比真实开发流程里的 review 少了这些输入。</li>
+</ul>
+<h2 id="eval--怎么打分">怎么打分</h2>
+<p>在本机算，流程里不算：</p>
+<ul>
+<li>只比较 Important 和 Nit，两边都一样。</li>
+<li><strong>抓到</strong>：重放的某条发现和一条勾选的发现在同一个文件，行号相差不超过 10（任意一个位置对上就算）。</li>
+<li><strong>漏掉</strong>：勾选的发现里没被抓到的。</li>
+<li><strong>额外</strong>：重放报了、但没对上任何勾选发现的。它们可能是误报，也可能是当时没人标出的真问题。单独列出其中的 Important 条数。</li>
+<li><code>report</code> 先列每次运行（强度、案例、抓到/期望、额外），再按强度汇总：案例数、期望、抓到、漏掉、召回率（抓到 ÷ 期望）、额外、额外的 Important。复盘的回放按「强度·before」「强度·after」分开。还没跑完的运行不计入，最后提示还有几个在跑。</li>
+</ul>
+<h2 id="eval--你介入的地方">你介入的地方</h2>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>收集以后</td>
+<td>「流程 → 评测集」里逐个案例勾选真问题</td>
+<td>只能在控制台确认；<code>myorch eval list</code> 看状态</td>
+</tr>
+<tr>
+<td>跑完以后</td>
+<td>打开每次运行看 <code>docs/review/round-1/</code></td>
+<td><code>myorch eval report --batch &lt;批次&gt;</code></td>
+</tr>
+</tbody>
+</table>
+<p>运行本身没有提问和审批。</p></section>
+<section class="chapter" id="ch-onboard"><h1>onboard <small>接入项目</small></h1><table class="meta"><tbody><tr><td>文件</td><td><code>flows/onboard.yaml</code>，说明 <code>flows/onboard.md</code></td></tr><tr><td>角色</td><td><code>onboard</code>（控制台里的任务「接入项目」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>接入新项目：分析仓库，提出项目包的修改。</td></tr><tr><td>片段</td><td><a href="#fragments--sync-base"><code>lib/sync-base.yaml</code></a>、<a href="#fragments--choose-proposals"><code>lib/choose-proposals.yaml</code></a></td></tr></tbody></table><p>让 myorch 了解一个项目。它读仓库，拿最近几个提交试跑一次项目包的检查，然后提出补充或修正项目包的建议；你挑选采纳哪几条，写回 <code>myorch-knowledge/&lt;项目&gt;/</code>。以后的开发、review 和风险判定都依赖这些知识。</p>
+<p>新接一个项目时跑一次，仓库结构变化大时再跑。它对项目仓库什么都不推送，只改本地的 <code>myorch-knowledge</code>。和其他流程一样，所有项目共用它。和 <a href="#ch-learn">learn</a> 的区别：learn 从跑过的运行里学，onboard 只看仓库本身，能改的文件也更多（检查脚本、准备脚本、审批规则、安全重点）。</p>
+<pre><code class="language-sh">uv run myorch run flows/onboard.yaml --project &lt;项目&gt;
+uv run myorch run flows/onboard.yaml --project &lt;项目&gt; -i focus=&quot;数据库迁移&quot;
+</code></pre>
+<p>控制台：先选项目，任务选「接入项目」。第一条消息就是「要重点看的地方」，可以不写。</p>
+<h2 id="onboard--inputs">输入</h2><table><thead><tr><th>输入</th><th>标签</th><th>类型</th><th>必填</th><th>默认</th><th>说明</th></tr></thead><tbody><tr><td><code>focus</code></td><td>要重点看的地方</td><td>消息</td><td></td><td></td><td>可选，例如「前端检查」「数据库迁移」</td></tr></tbody></table><h2 id="onboard--steps">步骤图</h2><p class="small">从 <code>flows/onboard.yaml</code> 生成，按项目 <code>mdm</code> 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数），和 <code>myorch expand</code>、控制台「流程」看到的一样。</p><div class="fg"><div class="fg-row"><div class="fg-c k-script" title="sync"><b>sync</b><span>脚本 · dev-git</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script" title="try-checks"><b>try-checks</b><span>脚本 · dev-write</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-agent" title="analyze"><b>analyze</b><span>agent · Opus · dev-read</span></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-script cond" title="choose"><b>choose</b><span>脚本 · dev-read</span><div class="chips"><i class="chip ask">可能问你</i><i class="chip cond" title="steps.analyze.outputs.proposals &gt; 0">有条件</i></div></div></div><div class="fg-down"><i></i></div><div class="fg-row"><div class="fg-c k-host cond" title="apply"><b>apply</b><span>宿主机动作 · project-apply</span><div class="chips"><i class="chip cond" title="steps.choose.outputs.accepted &gt; 0">有条件</i></div></div></div><div class="fg-legend"><span><i class="sw agent"></i>agent</span><span><i class="sw script"></i>脚本</span><span><i class="sw host"></i>宿主机动作</span><span><i class="sw human"></i>需要你：审批、提问</span><span><i class="sw cond"></i>有条件（鼠标停在「有条件」上看表达式）</span><span>同一行的步骤并行</span></div></div><details class="facts"><summary>每一步的执行者、条件、输出（从 YAML 生成）</summary><table><thead><tr><th>步骤</th><th>执行</th><th>条件</th><th>outputs</th><th>人和并行</th><th>限制</th></tr></thead><tbody><tr><td><code>sync</code></td><td>脚本 · dev-git</td><td></td><td></td><td></td><td>超时 15m · 重试 1</td></tr><tr><td><code>try-checks</code></td><td>脚本 · dev-write</td><td></td><td><code>passed</code></td><td></td><td>超时 60m</td></tr><tr><td><code>analyze</code></td><td>agent · Opus · dev-read</td><td></td><td><code>proposals</code></td><td></td><td>超时 40m</td></tr><tr><td><code>choose</code></td><td>脚本 · dev-read</td><td><code>steps.analyze.outputs.proposals &gt; 0</code></td><td><code>accepted</code></td><td>可以向你提问</td><td>超时 30m</td></tr><tr><td><code>apply</code></td><td>宿主机动作 · project-apply</td><td><code>steps.choose.outputs.accepted &gt; 0</code></td><td></td><td></td><td>超时 5m</td></tr></tbody></table></details>
+
+<h2 id="onboard--开始之前">开始之前</h2>
+<p>项目包至少要有 <code>project.yaml</code>，并且已经 <code>uv run myorch project sync &lt;项目&gt;</code>。项目的 GitHub provider 要建好，开发镜像要构建好。步骤见 <a href="../index.html#07-projects--接入一个新项目">7. 项目包 · 接入一个新项目</a>。</p>
+<p><code>focus</code> 原样接在 analyze 的任务说明后面，例如「前端检查」「数据库迁移」，让它在这些地方多花功夫。</p>
+<h2 id="onboard--每一步做什么">每一步做什么</h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>做什么</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sync</code></td>
+<td>克隆仓库，切到最新的 base 分支，初始化子模块（<a href="https://github.com/leweii/myorch/blob/main/flows/lib/sync-base.yaml"><code>lib/sync-base.yaml</code></a>）</td>
+<td><code>repo/</code></td>
+</tr>
+<tr>
+<td><code>try-checks</code></td>
+<td>有 <code>setup.sh</code> 时先跑它，再把最近 5 个提交当作一次样本改动跑 <code>checks.sh</code>，记录结果和用时</td>
+<td><code>docs/onboard/checks/</code></td>
+</tr>
+<tr>
+<td><code>analyze</code></td>
+<td>读仓库、仓库自带的文档、当前项目包和试跑结果，写项目概况和修改建议。不改仓库，也不改项目包</td>
+<td><code>docs/onboard/report.md</code>、<code>proposals.json</code>、<code>proposals.md</code>、<code>open-questions.md</code></td>
+</tr>
+<tr>
+<td><code>choose</code></td>
+<td>列出建议，等你回复编号。没有建议时跳过（<a href="https://github.com/leweii/myorch/blob/main/flows/lib/choose-proposals.yaml"><code>lib/choose-proposals.yaml</code></a>）</td>
+<td><code>docs/onboard/accepted.json</code></td>
+</tr>
+<tr>
+<td><code>apply</code></td>
+<td>宿主机动作 <code>project-apply</code>，<code>scope: onboard</code>：校验、写回项目包、在 <code>myorch-knowledge</code> 里提交、重新同步快照。一条都没采纳时跳过</td>
+<td><code>myorch-knowledge</code> 的一个提交</td>
+</tr>
+</tbody>
+</table>
+<h3 id="onboard--try-checks试跑检查">try-checks：试跑检查</h3>
+<ul>
+<li>目的：看 <code>checks.sh</code> 是否找对了模块、要跑多久，哪些检查因为和改动无关的原因失败（环境、网络、缓存）。</li>
+<li>样本改动是 base 分支最近 5 个提交。仓库不足 6 个提交时，用全部历史（从空树算起）。改了哪些文件写在 <code>changed.txt</code>。</li>
+<li>检查按 <a href="../index.html#07-projects--checkssh-约定"><code>checks.sh</code> 的约定</a> 运行，<code>CHECKS_DIR</code> 是 <code>docs/onboard/checks/</code>。</li>
+<li>检查没通过、<code>setup.sh</code> 失败、没有 <code>checks.sh</code>，都只记进结果，这一步照样成功。这些正是 analyze 要看的。</li>
+</ul>
+<h3 id="onboard--analyze要弄清楚什么">analyze：要弄清楚什么</h3>
+<table>
+<thead>
+<tr>
+<th>方面</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>结构</td>
+<td>模块怎么划分，依赖关系，哪些是对外契约（接口、协议、数据库迁移），前端在哪</td>
+</tr>
+<tr>
+<td>构建和检查</td>
+<td>怎么构建，怎么只测受影响的部分，需要哪些私有依赖或环境；<code>checks.sh</code> 有没有找对模块、漏了检查、因为无关原因失败</td>
+</tr>
+<tr>
+<td>约定</td>
+<td>代码风格、测试写法、提交和 PR 约定，和 <code>guide/</code> 里写的是否一致</td>
+</tr>
+<tr>
+<td>风险</td>
+<td>哪些路径的改动需要更多人审批（<code>risk-rules.yaml</code> 有没有漏的或误伤的），安全上要特别注意什么</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>每条结论注明依据（文件路径）。</li>
+<li>建议最多 8 条，类型是 <code>fill-gap</code>（补知识）、<code>fix-checks</code>（修检查）、<code>fix-rule</code>（修审批规则）、<code>security</code>（安全重点）。</li>
+<li><code>guide/</code> 只写仓库自带文档里没有、而且会影响 agent 判断的内容，措辞简短。</li>
+<li>需要人回答才能定的问题写进 <code>open-questions.md</code>。流程不会问你这些问题。看完以后手改项目包，或带着 <code>focus</code> 再跑一次。</li>
+</ul>
+<h2 id="onboard--你介入的地方">你介入的地方</h2>
+<table>
+<thead>
+<tr>
+<th>时机</th>
+<th>控制台 / Slack</th>
+<th>命令行</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>choose</code>：选采纳哪几条</td>
+<td>在对话里回复编号，或点 <code>all</code>、<code>none</code></td>
+<td><code>uv run myorch reply &lt;run&gt; choose "1,3"</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>先看 <code>docs/onboard/report.md</code> 和 <code>proposals.md</code>：控制台右栏「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/onboard</code>。</li>
+<li>回复写编号就行：<code>1,3</code>、<code>1、3</code>、<code>1 3</code> 都可以。<code>all</code> 或 <code>全部</code> 是全部采纳，<code>none</code>、<code>无</code>、<code>0</code> 是一条都不要。编号不存在或看不懂时会再问一次。</li>
+<li>回复一旦被接收就开始执行，不能再改。24 小时不回复，这一步超时失败。</li>
+</ul>
+<h2 id="onboard--写回项目包">写回项目包</h2>
+<table>
+<thead>
+<tr>
+<th>能改</th>
+<th>不能改</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>guide/</code> 下的文件，可以新建</td>
+<td><code>project.yaml</code>、<code>image/</code>、<code>policy.yaml</code>、<code>providers/</code>、<code>sources/</code></td>
+</tr>
+<tr>
+<td><code>checks.sh</code>、<code>setup.sh</code></td>
+<td><code>checks.env</code>（learn 能改）</td>
+</tr>
+<tr>
+<td><code>risk-rules.yaml</code>、<code>security.md</code></td>
+<td>其他文件，包括 <code>prompts/</code></td>
+</tr>
+</tbody>
+</table>
+<p>开发流程按项目的设置（<code>project.yaml</code> 的 <code>flows.development</code>、<code>prompts/</code>，见 <a href="#development--按项目的不同">development 的「按项目的不同」</a>）onboard 改不了，要改时由人手改。</p>
+<p>修改有三种写法：精确替换（<code>edits</code>，<code>old</code> 必须在文件里恰好出现一次）、追加（<code>append</code>）、整个文件（<code>content</code>）。</p>
+<ul>
+<li>只写项目自己的目录 <code>myorch-knowledge/&lt;项目&gt;/</code>，模板 <code>_templates/&lt;模板&gt;/</code> 不变。</li>
+<li><code>guide/</code>、<code>checks.sh</code>、<code>setup.sh</code> 是覆盖式继承：项目只从模板继承的文件，第一次修改时先复制模板的内容再改，所以 <code>edits</code> 可以引用快照里看到的原文。</li>
+<li><code>risk-rules.yaml</code> 和 <code>security.md</code> 是拼接式继承：快照里是模板的内容加项目的内容，项目自己的文件里只有项目特有的部分。所以 <code>security.md</code> 只用 <code>append</code>，<code>risk-rules.yaml</code> 只用 <code>content</code>，写完整的项目规则文件（<code>rules:</code> 列表，可选 <code>default:</code>）。同步快照时再和模板的规则拼起来。</li>
+<li>其余规则和 learn 一样，见 <a href="#learn--写回项目包">learn 的「写回项目包」</a>：全部校验通过才写，只提交自己写的文件，写完重新同步快照，可以 <code>git revert</code>。提交信息是 <code>onboard(&lt;项目&gt;): #1 标题; …</code>，正文带 <code>myorch-run: &lt;run_id&gt;</code>。</li>
+</ul>
+<h2 id="onboard--产物">产物</h2>
+<p>都在工作区的 <code>docs/onboard/</code> 下。</p>
+<pre><code>docs/onboard/
+  checks/
+    changed.txt        样本改动的文件
+    report.md          checks.sh 的报告
+    result.json        passed、failed、skipped
+  report.md            项目概况和结论，每条带依据
+  proposals.json, proposals.md   建议
+  open-questions.md    要人回答的问题
+  accepted.json        你采纳的编号
+</code></pre></section>
+<section class="chapter" id="ch-fragments"><h1>片段</h1><p>片段是 <code>flows/lib/</code> 下可以复用的步骤或循环。流程用 <code>use:</code> 引用它，发起时展开。写法见<a href="../index.html#ch-08-flow-syntax">使用手册 · 8. 写流程</a>。这张表从片段文件生成。</p><table><thead><tr><th>文件</th><th>类型</th><th>做什么</th><th>参数</th><th>用它的流程</th></tr></thead><tbody><tr id="fragments--choose-proposals"><td><code>flows/lib/choose-proposals.yaml</code></td><td>步骤</td><td>列出建议，让人挑选采纳哪几条</td><td><code>dir</code>、<code>what</code></td><td><a href="#ch-learn">learn</a>、<a href="#ch-onboard">onboard</a>、<a href="#ch-postmortem">postmortem</a></td></tr><tr id="fragments--deliver"><td><code>flows/lib/deliver.yaml</code></td><td>步骤</td><td>审批通过后推送分支，写交付说明（不调用平台 API）</td><td><code>approved</code></td><td><a href="#ch-development">development</a></td></tr><tr id="fragments--e2e"><td><code>flows/lib/e2e.yaml</code></td><td>循环</td><td>端到端测试：项目的固定冒烟用例 +（可选）按验收标准写的用例 →（可选）fix，按轮循环直到全部通过</td><td><code>image</code>、<code>profile</code>、<code>acceptance</code>、<code>base</code>、<code>max_rounds</code>、<code>fix</code>、<code>on_exhausted</code>、<code>requirement_doc</code>、<code>check_model</code>、<code>fix_model</code></td><td><a href="#ch-review">review</a></td></tr><tr id="fragments--review-loop"><td><code>flows/lib/review-loop.yaml</code></td><td>循环</td><td>CI → 并行 reviewer + security → verify 投票 →（可选）fix，按轮循环直到没有阻塞问题</td><td><code>base</code>、<code>reviewers</code>、<code>max_rounds</code>、<code>security</code>、<code>fix</code>、<code>on_exhausted</code>、<code>since</code>、<code>requirement_doc</code>、<code>review_model</code>、<code>verify_model</code>、<code>fix_model</code></td><td><a href="#ch-development">development</a>、<a href="#ch-eval">eval</a>、<a href="#ch-review">review</a></td></tr><tr id="fragments--sync-base"><td><code>flows/lib/sync-base.yaml</code></td><td>步骤</td><td>克隆或更新项目仓库，切到最新的 base 分支，初始化子模块</td><td>无</td><td><a href="#ch-development">development</a>、<a href="#ch-onboard">onboard</a>、<a href="#ch-sweep">sweep</a></td></tr></tbody></table></section>
+</main>
+<script>
+  const links = [...document.querySelectorAll('aside a')];
+  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
+  const targets = [...document.querySelectorAll('section.chapter, section.chapter h2')];
+  let current = null;
+  function setActive(id) {
+    if (id === current) return;
+    current = id;
+    links.forEach(a => a.classList.remove('active'));
+    document.querySelectorAll('aside li.ch').forEach(li => li.classList.remove('open'));
+    const a = byId.get(id); if (!a) return;
+    a.classList.add('active');
+    const ch = a.closest('li.ch');
+    ch?.classList.add('open');
+    ch?.querySelector('.ch-link')?.classList.add('active');
+    a.scrollIntoView({block: 'nearest'});
+  }
+  function onScroll() {
+    let best = null;
+    for (const t of targets) { if (t.getBoundingClientRect().top < 120) best = t; }
+    if (best) setActive(best.id);
+  }
+  window.addEventListener('scroll', onScroll, {passive: true});
+  onScroll();
+  const q = document.getElementById('q');
+  q.addEventListener('input', () => {
+    const v = q.value.trim().toLowerCase();
+    document.querySelectorAll('aside li.ch').forEach(li => {
+      const hit = !v || li.textContent.toLowerCase().includes(v);
+      li.classList.toggle('hidden', !hit);
+      li.classList.toggle('open', !!v && hit);
+      li.querySelectorAll('ul.sub li').forEach(s => s.classList.toggle('hidden', !!v && !s.textContent.toLowerCase().includes(v) && !li.querySelector('.ch-link').textContent.toLowerCase().includes(v)));
+    });
+  });
+  // Diagrams are drawn on a fixed canvas (docs/diagrams/gen.py); scale each one to the width it has.
+  function fitDiagrams() {
+    document.querySelectorAll('.diagram .dg').forEach(d => {
+      const avail = d.parentElement.clientWidth - 40;
+      d.style.zoom = Math.min(1.15, avail / parseFloat(d.style.width));
+    });
+  }
+  fitDiagrams();
+  window.addEventListener('resize', fitDiagrams);
+  // Theme (shared with the console): light, dark, or auto (follow the system).
+  (() => {
+    const apply = (t) => {
+      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else document.documentElement.removeAttribute("data-theme");
+      document.querySelectorAll("[data-theme-pick]").forEach(b => b.classList.toggle("on", b.dataset.themePick === t));
+    };
+    let cur = "auto"; try { cur = localStorage.getItem("myorch.theme") || "auto"; } catch {}
+    cur = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[cur] || cur;
+    if (!["light", "dark", "auto"].includes(cur)) cur = "auto";
+    apply(cur);
+    document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
+      apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
+    }));
+  })();
+  // The other language: chapter ids (#ch-…) are the same in both, heading ids are not; keep the chapter.
+  document.getElementById('other-lang').addEventListener('click', e => {
+    let ch = null;
+    for (const s of document.querySelectorAll('section.chapter')) { if (s.getBoundingClientRect().top < 120) ch = s; }
+    if (ch) e.currentTarget.href = e.currentTarget.getAttribute('href').split('#')[0] + '#' + ch.id;
+  });
+  document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
+</script>
+</body>
+</html>

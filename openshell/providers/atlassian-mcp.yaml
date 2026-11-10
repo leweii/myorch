@@ -1,0 +1,36 @@
+# Atlassian Rovo MCP server (Jira, Confluence) for an MCP knowledge source. The organisation admin
+# must first allow API token authentication for the Rovo MCP server.
+#
+#   openshell provider profile lint   -f openshell/providers/atlassian-mcp.yaml
+#   openshell provider profile import -f openshell/providers/atlassian-mcp.yaml
+#   read -s ATLASSIAN_TOKEN && export ATLASSIAN_TOKEN   # personal API token (auth: basic) or service account key (auth: bearer)
+#   openshell provider create --name atlassian-mcp --type atlassian-mcp --credential ATLASSIAN_TOKEN
+#   unset ATLASSIAN_TOKEN
+#
+# Then register the source in the console (流程 → 知识库 → ＋ 登记知识源, type MCP), with only read
+# tools in `tools` (e.g. getJiraIssue, searchJiraIssuesUsingJql): tools/myorch-mcp denies the rest.
+# Every MCP call is a POST to the same path, so the gateway cannot tell reads from writes: the tool
+# allowlist and a token that can only read are what keep it read only.
+id: atlassian-mcp
+display_name: Atlassian Rovo MCP
+description: Query Jira and Confluence through Atlassian's remote MCP server
+category: other
+credentials:
+  - name: api_token
+    description: Atlassian API token (with the owner's email, auth basic) or a service account API key (auth bearer)
+    env_vars: [ATLASSIAN_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_token]
+endpoints:
+  - host: mcp.atlassian.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: POST, path: "/v1/mcp" }
+      - allow: { method: GET, path: "/v1/mcp" }
+      - allow: { method: DELETE, path: "/v1/mcp" }
+binaries: [/usr/bin/claude, /usr/bin/python3, /usr/bin/python3.12, /usr/bin/node]   # claude makes the calls; python3: tools/myorch-mcp lists the tools

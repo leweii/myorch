@@ -1,0 +1,7 @@
+# channels.yaml: who is who across platforms (myorch/channels/model.py). Copy this file to channels.yaml
+# (git-ignored) and put yourself in; deploy/bootstrap-mac.sh does it for you. The relay uses it to fill in
+# the person behind an account (initiator, approver) and the Mandate's aliases. Design:
+# docs/notes/2026-11-02-channel-layer.md.
+
+identities:                 # one person, their account in each platform (initiator / approver = the person)
+  you: {github: your-github-login, slack: U0XXXXXXXXX}   # slack: member id (U...); DM the bot once and it replies with yours

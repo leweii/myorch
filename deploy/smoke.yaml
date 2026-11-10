@@ -1,0 +1,31 @@
+# Smoke test for a new installation: two script steps, no credentials, no project. Checks the whole
+# path without a model: Temporal -> worker -> openshell gateway -> sandbox -> artifacts volume, and
+# that a step reads its upstream step's output.
+#
+#   docker compose -f deploy/compose.yaml exec worker myorch run deploy/smoke.yaml --wait
+flow: smoke
+image: openshell-claude-code:latest
+
+steps:
+  - id: write
+    harness: script
+    profile: dev-read
+    limits: { timeout: 5m }
+    prompt: |
+      set -eu
+      echo "hello from $(hostname) as $(id -u)" > /sandbox/out/hello.txt
+      cat > /sandbox/out/manifest.json <<'EOF'
+      {"status": "ok", "summary": "wrote hello.txt", "files": [{"path": "hello.txt", "description": "greeting"}]}
+      EOF
+
+  - id: read
+    needs: [write]
+    harness: script
+    profile: dev-read
+    limits: { timeout: 5m }
+    prompt: |
+      set -eu
+      got=$(cat /sandbox/in/write/hello.txt)
+      cat > /sandbox/out/manifest.json <<EOF
+      {"status": "ok", "summary": "upstream said: $got"}
+      EOF

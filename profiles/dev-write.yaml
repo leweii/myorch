@@ -1,0 +1,5 @@
+# Changes code in the run's repo (implement, fix, CI). No GitHub access; private package
+# registries only if the project maps the artifacts role (and allows them in its policy).
+providers: [artifacts]
+policy: project
+repo: rw

@@ -1,0 +1,53 @@
+# Clone the project's repository into the run's workspace (or fetch it, when the host already put a
+# copy of a local clone there: myorch/localrepo.py), reset to the latest
+# base branch, and initialise submodules. GitHub access through the project's github provider.
+#
+#   - use: lib/sync-base.yaml
+#     id: sync-master
+fragment: sync-base
+description: 克隆或更新项目仓库，切到最新的 base 分支，初始化子模块
+
+params: {}
+
+item:
+  harness: script
+  profile: dev-git
+  shared: [git-mirror]       # a bare mirror of the repository kept across runs (clone from it, then dissociate)
+  limits: { timeout: 15m, retries: 1 }
+  prompt: |
+      set -euo pipefail
+      # git never sends credentials up front, so pass the provider's placeholder explicitly.
+      # GitHub's git endpoint only accepts Basic auth; OpenShell decodes Basic credentials,
+      # swaps the placeholder for the real token and re-encodes. Not persisted in .git/config.
+      auth=(-c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)")
+      cd "$MYORCH_WORKSPACE/repo"
+      if [ ! -d .git ]; then
+        # A full clone of a large repository takes ~10 minutes. Keep a bare mirror in the project's
+        # shared dir, bring it up to date under a lock (runs may start together), clone with it as a
+        # reference and dissociate, so repo/ owns all its objects (a replay can cut history freely).
+        mirror_dir="$MYORCH_WORKSPACE/shared/git-mirror"
+        mirror="$mirror_dir/repo.git"
+        if [ -d "$mirror_dir" ] && (
+          flock -w 600 9 || exit 1
+          [ -d "$mirror/objects" ] || git "${auth[@]}" clone --quiet --bare "https://github.com/$MYORCH_PROJECT_REPO.git" "$mirror"
+          git "${auth[@]}" -C "$mirror" fetch --quiet --prune origin '+refs/heads/*:refs/heads/*'
+        ) 9>"$mirror_dir/.lock"; then
+          git "${auth[@]}" clone --quiet --reference "$mirror" --dissociate "https://github.com/$MYORCH_PROJECT_REPO.git" .
+        else
+          echo "git mirror unavailable, cloning from GitHub" >&2
+          git "${auth[@]}" clone --quiet "https://github.com/$MYORCH_PROJECT_REPO.git" .
+        fi
+      fi
+      git "${auth[@]}" fetch --quiet origin "$MYORCH_PROJECT_BASE"
+      # repo/ may come from a local clone (myorch/localrepo.py) or an interrupted attempt:
+      # nothing local stays, the base is exactly origin/<base>.
+      git checkout --quiet -f -B "$MYORCH_PROJECT_BASE" "origin/$MYORCH_PROJECT_BASE"
+      git reset --quiet --hard "origin/$MYORCH_PROJECT_BASE"
+      git clean -ffdq
+      if [ -n "$MYORCH_PROJECT_SUBMODULES" ]; then  # private submodules go through the same credential
+        git "${auth[@]}" submodule update --init --recursive --quiet
+      fi
+      sha=$(git rev-parse --short HEAD)
+      echo "- sync-master: $MYORCH_PROJECT_BASE @ $sha" >> "$MYORCH_WORKSPACE/memory/MEMORY.md"
+      printf '{"status":"ok","summary":"%s 同步到 %s","outputs":{"base_sha":"%s"}}' \
+        "$MYORCH_PROJECT_BASE" "$sha" "$sha" > /sandbox/out/manifest.json

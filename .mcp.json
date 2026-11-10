@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "myorch": {
+      "command": "uv",
+      "args": ["run", "--quiet", "python", "-m", "myorch.channels.claude_code"],
+      "env": {
+        "MYORCH_URL": "http://127.0.0.1:8800",
+        "MYORCH_SCOPE": "mine"
+      }
+    }
+  }
+}

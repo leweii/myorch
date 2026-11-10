@@ -1,0 +1,5 @@
+# Reads the project's tickets (Jira REST API, GET only) through the project's `jira` provider.
+# No GitHub, no write access to the repository.
+providers: [jira]
+policy: project
+repo: ro

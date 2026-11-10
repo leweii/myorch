@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# Run the project's checks on everything this run changed.
+#
+#   myorch-checks [--base <ref>] [--out <dir>]
+#
+# Changed files = commits since the base + staged + unstaged + new untracked files, so the checks
+# also see work that is not committed yet (a new migration, a new test). Then runs the project's
+# setup.sh and checks.sh (contract: BASE_REF, $CHECKS_DIR/changed.txt in; report.md and
+# result.json out), prints the report, and exits 0 only when result.json says passed.
+# Used by agents (implement, fix) and by the review loop's CI step, so both see the same files.
+set -uo pipefail
+
+base="origin/${MYORCH_PROJECT_BASE:-main}"
+out="/tmp/checks"
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --base) base="$2"; shift 2 ;;
+    --out) out="$2"; shift 2 ;;
+    *) echo "myorch-checks: unknown argument $1" >&2; exit 2 ;;
+  esac
+done
+
+project="${MYORCH_WORKSPACE:-/sandbox/workspace}/project"
+cd "${MYORCH_WORKSPACE:-/sandbox/workspace}/repo" || { echo "myorch-checks: no repository at repo/" >&2; exit 2; }
+mkdir -p "$out"
+{
+  git diff --name-only "$base...HEAD"
+  git diff --name-only HEAD
+  git ls-files --others --exclude-standard
+} 2>/dev/null | sort -u > "$out/changed.txt"
+echo "myorch-checks: $(wc -l < "$out/changed.txt" | tr -d ' ') changed files (base $base)"
+
+if [ -f "$project/setup.sh" ]; then bash "$project/setup.sh" > /dev/null 2>&1 || true; fi
+if [ ! -f "$project/checks.sh" ]; then
+  echo "myorch-checks: the project has no checks.sh" >&2
+  printf '{"passed": false, "failed": ["no checks.sh"], "skipped": []}' > "$out/result.json"
+  exit 1
+fi
+BASE_REF="$base" CHECKS_DIR="$out" bash "$project/checks.sh" > "$out/checks.log" 2>&1
+cat "$out/report.md" 2>/dev/null || { echo "myorch-checks: checks.sh wrote no report, see $out/checks.log"; tail -20 "$out/checks.log"; }
+python3 -c "import json,sys; sys.exit(0 if json.load(open(sys.argv[1])).get('passed') else 1)" "$out/result.json" 2>/dev/null

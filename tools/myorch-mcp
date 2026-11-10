@@ -1,0 +1,171 @@
+#!/usr/bin/env python3
+"""Start the agent with the run's MCP knowledge servers, allowing only their registered tools.
+
+Usage: myorch-mcp <spec.json> -- claude <args...>
+       myorch-mcp --check <spec.json> [--call <tool> <json-args>]
+
+--check (myorch knowledge check, in a sandbox like a step's): connect to each server the same way,
+compare its tools with the registered ones, optionally make one call with a registered tool, print
+a report and exit 0 only if everything works. It starts nothing.
+
+spec.json (written by the runner, myorch/knowledge.py mcp_spec):
+  {"servers": [{"name", "url", "token_env", "auth": "bearer"|"basic", "email", "tools": [...]}]}
+
+For each server it builds the Authorization header from the provider's placeholder variable (the
+gateway swaps in the real token at egress; for basic it is base64 of email:placeholder), asks the
+server for its tools, and denies every tool that is not registered (--disallowedTools: the only
+rule Claude enforces while permission prompts are skipped). If the list cannot be read, the whole
+server is denied: fail closed. Then it runs the command with --mcp-config added.
+"""
+import base64
+import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
+CONFIG = "/tmp/myorch-mcp-config.json"
+
+
+def header(s):
+    token = os.environ.get(s.get("token_env") or "", "")
+    if s.get("auth") == "basic":
+        return "Basic " + base64.b64encode(f"{s.get('email', '')}:{token}".encode()).decode()
+    return f"Bearer {token}"
+
+
+def rpc(url, auth, body, session=None):
+    # A User-Agent of our own: Atlassian's edge (Cloudflare, error 1010) answers 403 to urllib's default one.
+    h = {"Authorization": auth, "Content-Type": "application/json", "Accept": "application/json, text/event-stream",
+         "User-Agent": "myorch-mcp/1.0"}
+    if session:
+        h["Mcp-Session-Id"] = session
+    req = urllib.request.Request(url, data=json.dumps(body).encode(), headers=h, method="POST")
+    try:
+        r = urllib.request.urlopen(req, timeout=60)
+    except urllib.error.HTTPError as e:  # the body says why (e.g. a token problem, or the edge blocking us)
+        raise RuntimeError(f"HTTP {e.code}: {e.read(300).decode('utf-8', 'replace').strip()}") from None
+    with r:
+        sid = r.headers.get("Mcp-Session-Id") or session
+        text = r.read().decode("utf-8", "replace")
+    if not text.strip():
+        return None, sid
+    if "text/event-stream" in (r.headers.get("Content-Type") or ""):
+        for line in text.splitlines():
+            if line.startswith("data:"):
+                msg = json.loads(line[5:])
+                if msg.get("id") == body.get("id"):
+                    return msg, sid
+        return None, sid
+    return json.loads(text), sid
+
+
+def connect(s):
+    """initialize: (auth header, session id, server info)."""
+    auth = header(s)
+    init, sid = rpc(s["url"], auth, {"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {
+        "protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "myorch-mcp", "version": "1"}}})
+    if not init or "error" in init:
+        raise RuntimeError(f"initialize: {init and init.get('error')}")
+    rpc(s["url"], auth, {"jsonrpc": "2.0", "method": "notifications/initialized"}, sid)
+    return auth, sid, (init.get("result") or {}).get("serverInfo") or {}
+
+
+def list_tools(s, conn=None):
+    auth, sid, _ = conn or connect(s)
+    names, cursor, n = [], None, 2
+    while True:
+        res, sid = rpc(s["url"], auth, {"jsonrpc": "2.0", "id": n, "method": "tools/list",
+                                        "params": {"cursor": cursor} if cursor else {}}, sid)
+        if not res or "error" in res:
+            raise RuntimeError(f"tools/list: {res and res.get('error')}")
+        names += [t["name"] for t in res["result"].get("tools", [])]
+        cursor, n = res["result"].get("nextCursor"), n + 1
+        if not cursor:
+            return names
+
+
+def check(spec, call=None):
+    """The --check report. call: (tool, arguments) to try on the server that registers the tool."""
+    ok = True
+    for s in spec.get("servers", []):
+        name, allowed = s["name"], set(s.get("tools") or [])
+        print(f"== {name}  {s['url']}  (auth {s.get('auth', 'bearer')}{', ' + s['email'] if s.get('email') else ''})")
+        if not os.environ.get(s.get("token_env") or ""):
+            print(f"   ✗ 没有 {s.get('token_env')}：sandbox 没有挂这个 provider，或者 provider 里没有这个凭证")
+            ok = False
+            continue
+        try:
+            conn = connect(s)
+            print(f"   ✓ 连接：{conn[2].get('name', '?')} {conn[2].get('version', '')}".rstrip())
+            tools = list_tools(s, conn)
+        except Exception as e:
+            print(f"   ✗ 连接失败：{e}")
+            ok = False
+            continue
+        have = set(tools)
+        print(f"   服务器提供 {len(tools)} 个工具：{', '.join(sorted(tools)) or '（没有）'}")
+        print(f"   ✓ 登记并且可用：{', '.join(sorted(allowed & have)) or '（没有）'}")
+        if allowed - have:
+            ok = False
+            print(f"   ✗ 登记了但服务器没有：{', '.join(sorted(allowed - have))}"
+                  "（工具名不对，或者 token 的 scope 不够：服务器只提供 token 能用的工具）")
+        if have - allowed:
+            print(f"   · 服务器有但没登记（运行时禁用）：{', '.join(sorted(have - allowed))}")
+        if call and call[0] in allowed:
+            tool, args = call
+            if tool not in have:
+                print(f"   ✗ 调用 {tool}：服务器没有这个工具")
+                ok = False
+                continue
+            res, _ = rpc(s["url"], conn[0], {"jsonrpc": "2.0", "id": 99, "method": "tools/call",
+                                             "params": {"name": tool, "arguments": args}}, conn[1])
+            result = (res or {}).get("result") or {}
+            text = "\n".join(c.get("text", "") for c in result.get("content", []) if c.get("type") == "text")
+            if not res or "error" in res or result.get("isError"):
+                ok = False
+                print(f"   ✗ 调用 {tool} 失败：{(res or {}).get('error') or text[:500]}")
+            else:
+                print(f"   ✓ 调用 {tool}：返回 {len(text)} 个字符")
+                print("     " + text[:1500].replace("\n", "\n     "))
+    if call and not any(call[0] in (s.get("tools") or []) for s in spec.get("servers", [])):
+        print(f"✗ {call[0]} 没有登记在任何服务器的 tools 里，不调用")
+        ok = False
+    print("RESULT: ok" if ok else "RESULT: failed")
+    return 0 if ok else 1
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv[:1] == ["--check"] and len(argv) >= 2:
+        call = (argv[3], json.loads(argv[4] if len(argv) > 4 else "{}")) if len(argv) > 3 and argv[2] == "--call" else None
+        sys.exit(check(json.load(open(argv[1])), call))
+    if len(argv) < 3 or argv[1] != "--":
+        sys.exit("usage: myorch-mcp <spec.json> -- <command...>")
+    spec = json.load(open(argv[0]))
+    servers, deny = {}, []
+    for s in spec.get("servers", []):
+        name, allowed = s["name"], set(s.get("tools") or [])
+        servers[name] = {"type": "http", "url": s["url"], "headers": {"Authorization": header(s)}}
+        try:
+            tools = list_tools(s)
+        except Exception as e:  # unknown tools: deny the server rather than let anything through
+            deny.append(f"mcp__{name}")
+            print(f"myorch-mcp: {name}: 读不到工具列表，整个服务器不可用（{e}）", file=sys.stderr)
+            continue
+        blocked = [t for t in tools if t not in allowed]
+        deny += [f"mcp__{name}__{t}" for t in blocked]
+        missing = sorted(allowed - set(tools))
+        print(f"myorch-mcp: {name}: 允许 {len(tools) - len(blocked)} 个工具，禁用 {len(blocked)} 个"
+              + (f"；登记了但服务器没有：{', '.join(missing)}" if missing else ""), file=sys.stderr)
+    with open(CONFIG, "w") as f:
+        json.dump({"mcpServers": servers}, f)
+    os.chmod(CONFIG, 0o600)
+    cmd = argv[2:] + ["--mcp-config", CONFIG, "--strict-mcp-config"]
+    if deny:
+        cmd += ["--disallowedTools", ",".join(deny)]
+    os.execvp(cmd[0], cmd)
+
+
+if __name__ == "__main__":
+    main()

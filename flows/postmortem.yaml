@@ -1,0 +1,313 @@
+# Postmortem: a problem got through. Find the change that brought it in, decide which layer should
+# have stopped it, propose knowledge changes, and turn the change into an eval case. It changes no
+# project code (fixing is development's job).
+#
+#   uv run myorch run flows/postmortem.yaml --project mdm -i commit=<fix or revert commit>
+#   uv run myorch run flows/postmortem.yaml --project mdm -i bad=<the commit that brought it in>
+#
+# commit: a revert (the reverted commit is the bad one) or a fix (the lines it changes are blamed);
+# bad: the bad commit itself, when known. One of the two is required. The CLI and the console fill
+# `runs` with the project's development and review runs; locate keeps those that touched the change.
+#
+# The replays are separate eval runs (myorch/evals.py, case id = this run): reviewers there see the
+# change only, never this run's workspace (the incident, the fix, the analysis).
+flow: postmortem
+role: postmortem
+require_one_of: [[commit, bad]]   # the console and the CLI refuse to start without one of them
+inputs:
+  commit:
+    type: string
+    label: 修复或 revert 提交
+    hint: 提交 SHA。和下一项二选一
+  bad:
+    type: string
+    label: 引入问题的提交
+    hint: 知道时直接填 SHA
+  runs:
+    type: hidden          # the project's recent runs, filled in by the CLI / console
+defaults:
+  commit: ""
+  bad: ""
+  runs: ""
+image: "{{project.image}}"
+model: claude-sonnet-5-5
+
+steps:
+  - id: locate
+    harness: script
+    profile: dev-git
+    observe_runs: "{{inputs.runs}}"
+    outputs:
+      bad: "引入问题的提交"
+      fix: "修复提交（没有时为空）"
+      kind: "revert / fix / bad：从哪种提交找到的"
+      matched: "碰过这次改动的 myorch 运行数"
+      matched_runs: "这些运行的 ID，逗号分隔"
+    limits: { timeout: 15m, retries: 1 }
+    prompt: |
+      set -euo pipefail
+      python3 - <<'PY'
+      import base64, collections, json, os, re, subprocess
+      ws, repo_name, base = os.environ["MYORCH_WORKSPACE"], os.environ["MYORCH_PROJECT_REPO"], os.environ["MYORCH_PROJECT_BASE"]
+      out = f"{ws}/docs/postmortem"
+      os.makedirs(out, exist_ok=True)
+      auth = "http.extraHeader=Authorization: Basic " + base64.b64encode(f"x-access-token:{os.environ['GITHUB_TOKEN']}".encode()).decode()
+      full = "/tmp/full"  # outside the workspace: the full history (with the fix) stays out of the run
+      subprocess.run(["git", "-c", auth, "clone", "--quiet", "--no-checkout", f"https://github.com/{repo_name}.git", full],
+                     check=True, capture_output=True)
+      def git(*a, check=True, where=full):
+          r = subprocess.run(["git", "-c", "safe.directory=*", "-C", where, *a], capture_output=True, text=True)
+          if check and r.returncode:
+              raise SystemExit(f"git {' '.join(a)}: {r.stderr.strip()}")
+          return r.stdout.strip() if r.returncode == 0 else ""
+      def resolve(ref):
+          if not ref:
+              return ""
+          s = git("rev-parse", "--verify", "--quiet", ref + "^" + "{commit}", check=False)
+          if not s:  # not on a branch (an unmerged PR): GitHub serves any reachable commit
+              subprocess.run(["git", "-c", auth, "-C", full, "fetch", "--quiet", "origin", ref], capture_output=True)
+              s = git("rev-parse", "--verify", "--quiet", ref + "^" + "{commit}", check=False)
+          if not s:
+              raise SystemExit(f"提交 {ref} 不在 {repo_name} 里")
+          return s
+      def fail(msg):
+          json.dump({"status": "failed", "summary": msg}, open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
+          raise SystemExit(msg)
+
+      given, bad = resolve(os.environ.get("MYORCH_INPUT_COMMIT", "").strip()), resolve(os.environ.get("MYORCH_INPUT_BAD", "").strip())
+      if not given and not bad:
+          fail("要给 commit（修复或 revert 提交）或 bad（引入问题的提交）中的一个")
+      blamed = collections.Counter()
+      if bad:
+          kind, fix = "bad", (given if given != bad else "")
+      else:
+          fix, msg = given, git("log", "-1", "--format=%B", given)
+          m = re.search(r"This reverts commit ([0-9a-f]{7,40})", msg)
+          if m:
+              kind, bad = "revert", resolve(m[1])
+          else:  # a fix: who wrote the lines it changes (or, for pure additions, the lines around them)
+              kind, path = "fix", None
+              for line in git("diff", "-U0", "--no-color", f"{given}^", given).splitlines():
+                  if line.startswith("--- "):
+                      path = line[6:] if line.startswith("--- a/") else None
+                  h = re.match(r"@@ -(\d+)(?:,(\d+))? ", line)
+                  if h and path:
+                      start, count = int(h[1]), int(h[2] if h[2] is not None else 1)
+                      lo, hi = (start, start + count - 1) if count else (max(1, start - 2), start + 2)
+                      blame = git("blame", "--porcelain", "-L", f"{lo},{hi}", f"{given}^", "--", path, check=False)
+                      for b in re.findall(r"^([0-9a-f]{40}) \d+ \d+", blame, re.M):
+                          blamed[b] += 1
+              if not blamed:
+                  fail(f"{given[:8]} 改动的行找不到来源。用 -i bad=<提交> 直接指定引入问题的提交")
+              bad = blamed.most_common(1)[0][0]
+      parents = git("rev-list", "--parents", "-n", "1", bad).split()[1:]
+      if not parents:
+          fail(f"{bad[:8]} 是第一个提交，没有可以对比的基准")
+      base_sha = parents[0]  # a merge commit: the whole PR against its base
+
+      def gh(path):
+          r = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+          try:
+              return json.loads(r.stdout) if r.returncode == 0 else None
+          except ValueError:
+              return None
+      prs = gh(f"repos/{repo_name}/commits/{bad}/pulls") or []
+      pr = prs[0] if prs else {}
+
+      def text(p):
+          try:
+              return open(p, encoding="utf-8").read()
+          except OSError:
+              return ""
+      def run_pr(d):
+          try:
+              p = (json.load(open(f"{d}/.myorch/mandate.json")).get("request") or {}).get("pr")
+          except (OSError, ValueError):
+              p = None
+          m = re.search(r"# PR #(\d+)", text(f"{d}/docs/pr.md")) or re.search(r"/pull/(\d+)", text(f"{d}/.myorch/steps/push-and-pr/out/manifest.json"))
+          return str(p or (m[1] if m else "")) or None
+      matched = []
+      for run in [r.strip() for r in os.environ.get("MYORCH_INPUT_RUNS", "").split(",") if r.strip()]:
+          d = f"{ws}/observed/{run}"
+          # the run's own commit: on its branch, not on the base it started from (any later clone has it)
+          r = lambda *a: subprocess.run(["git", "-c", "safe.directory=*", "-C", f"{d}/repo", *a], capture_output=True).returncode == 0
+          has = os.path.isdir(f"{d}/repo/.git") and r("merge-base", "--is-ancestor", bad, "HEAD") \
+              and not r("merge-base", "--is-ancestor", bad, f"origin/{base}")
+          if has or (pr.get("number") and run_pr(d) == str(pr["number"])):
+              matched.append(run)
+      requirement = next((text(f"{ws}/observed/{r}/docs/requirements.md") or text(f"{ws}/observed/{r}/docs/pr.md") for r in matched), "")
+      if not requirement:
+          requirement = git("log", "-1", "--format=%B", bad) + (f"\n\nPR #{pr['number']}：{pr.get('title', '')}\n\n{pr.get('body') or ''}" if pr else "")
+
+      subject = git("log", "-1", "--format=%s", bad)
+      target = {"repo": repo_name, "base_ref": base, "kind": kind, "given": given, "bad_sha": bad, "bad_subject": subject,
+                "base_sha": base_sha, "fix_sha": fix, "pr": pr.get("number"), "pr_title": pr.get("title"),
+                "pr_merged_at": pr.get("merged_at"), "matched_runs": matched, "requirement": requirement,
+                "blamed": [{"commit": c, "lines": n, "subject": git("log", "-1", "--format=%s", c)} for c, n in blamed.most_common(5)]}
+      json.dump(target, open(f"{out}/target.json", "w"), ensure_ascii=False, indent=1)
+      open(f"{out}/bad.diff", "w").write(git("show", "--stat", "--patch", "--format=commit %H%nAuthor: %an%nDate: %ad%n%n%B", f"{base_sha}..{bad}" if len(parents) > 1 else bad)[:300000])
+      if fix:
+          open(f"{out}/fix.diff", "w").write(git("show", "--stat", "--patch", fix)[:300000])
+      how = {"revert": f"revert 提交 {given[:8]} 撤销了它", "fix": f"修复提交 {given[:8]} 改的行大多来自它", "bad": "直接指定"}[kind]
+      json.dump({"status": "ok",
+                 "summary": f"引入问题的提交：{bad[:8]} {subject}（{how}）" + (f"，PR #{pr['number']}" if pr else "")
+                            + (f"，{len(matched)} 个 myorch 运行碰过它" if matched else "，不是 myorch 运行做的改动"),
+                 "outputs": {"bad": bad, "fix": fix, "kind": kind, "matched": len(matched), "matched_runs": ",".join(matched)}},
+                open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
+      PY
+
+  # Today's reviewers on the change, before anything here is adopted: a separate eval run.
+  - id: replay-before
+    action: postmortem-replay
+    needs: [locate]
+    args: {phase: before, depth: standard}
+    limits: { timeout: 5m }
+
+  # What each layer saw at the time, from the runs that touched the change.
+  - id: trace
+    harness: script
+    profile: dev-read
+    needs: [locate]
+    observe_runs: "{{steps.locate.outputs.matched_runs}}"
+    limits: { timeout: 10m }
+    prompt: |
+      set -euo pipefail
+      python3 - <<'PY'
+      import glob, json, os, re
+      ws = os.environ["MYORCH_WORKSPACE"]
+      t = json.load(open(f"{ws}/docs/postmortem/target.json"))
+      def text(p):
+          try:
+              return open(p, encoding="utf-8").read()
+          except OSError:
+              return ""
+      def load(p, default):
+          try:
+              return json.load(open(p, encoding="utf-8"))
+          except (OSError, ValueError):
+              return default
+      # the lines the bad change touched, per file (new side), to find findings near them
+      touched, path = {}, None
+      for line in text(f"{ws}/docs/postmortem/bad.diff").splitlines():
+          if line.startswith("+++ "):
+              path = line[6:] if line.startswith("+++ b/") else None
+          h = re.match(r"@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+          if h and path:
+              s, n = int(h[1]), int(h[2] if h[2] is not None else 1)
+              touched.setdefault(path, []).append((s, s + max(n, 1) - 1))
+      def near(f):
+          locs = [(l.get("file"), l.get("line")) for l in f.get("locations") or [] if isinstance(l, dict)] or [(f.get("file"), f.get("line"))]
+          return any(fl in touched and (ln is None or any(a - 10 <= int(ln) <= b + 10 for a, b in touched[fl])) for fl, ln in locs)
+
+      runs = []
+      for run in t["matched_runs"]:
+          d = f"{ws}/observed/{run}"
+          mandate = load(f"{d}/.myorch/mandate.json", {})
+          rounds = []
+          for p in sorted(glob.glob(f"{d}/docs/review/round-*/verified.json"), key=lambda p: int(re.search(r"round-(\d+)", p)[1])):
+              r = int(re.search(r"round-(\d+)", p)[1])
+              raw = [f for n in ("reviewer-*", "security") for q in glob.glob(f"{d}/docs/review/round-{r}/{n}.json")
+                     for f in (load(q, {}).get("findings", []) if isinstance(load(q, {}), dict) else load(q, []))
+                     if isinstance(f, dict)]
+              ver = [f for f in load(p, []) if isinstance(f, dict)]
+              rounds.append({"round": r,
+                             "verified_near": [{k: f.get(k) for k in ("severity", "status", "title", "file", "line")} for f in ver if near(f)],
+                             "raw_near": len([f for f in raw if near(f)]), "verified": len(ver),
+                             "rebuttal": bool(text(f"{d}/docs/review/round-{r}/rebuttal.md"))})
+          ci = [{"round": int(re.search(r"round-(\d+)", p)[1]), **{k: v for k, v in load(p, {}).items() if k in ("ok", "status", "failed", "summary")}}
+                for p in sorted(glob.glob(f"{d}/docs/ci/round-*/result.json"))]
+          runs.append({"run": run, "flow": (mandate.get("flow") or {}).get("name"), "initiator": mandate.get("initiator"),
+                       "requested_at": mandate.get("requested_at"), "knowledge_version": (mandate.get("project") or {}).get("version"),
+                       "knowledge": mandate.get("knowledge") or [],
+                       "requirement_mentions": [f for f in touched if os.path.basename(f) in text(f"{d}/docs/requirements.md")],
+                       "risk": text(f"{d}/docs/risk.md")[:1500], "review": rounds, "ci": ci,
+                       "delivery": text(f"{d}/docs/delivery.md")[:1500]})
+      json.dump({"touched": touched, "runs": runs}, open(f"{ws}/docs/postmortem/trace.json", "w"), ensure_ascii=False, indent=1)
+      md = [f"# 当时每一层看到了什么\n\n改动：{t['bad_sha'][:8]} {t['bad_subject']}，涉及 {len(touched)} 个文件。\n"]
+      if not runs:
+          md.append("没有 myorch 运行碰过这次改动：当时没有经过 myorch 的需求、review、风险判定和审批。只能看知识库和 CI 有没有覆盖。\n")
+      for r in runs:
+          md.append(f"## {r['run']}（{r['flow']}，{r['initiator']}，知识库 {r['knowledge_version'] or '?'}）\n")
+          md.append(f"- 需求文档提到的相关文件：{', '.join(r['requirement_mentions']) or '无'}")
+          for rd in r["review"]:
+              near_f = "；".join(f"{f['severity']}/{f.get('status') or '-'} {f['file']}:{f.get('line')} {f['title']}" for f in rd["verified_near"]) or "无"
+              md.append(f"- review 第 {rd['round']} 轮：核实 {rd['verified']} 条；改动附近 reviewer 原始发现 {rd['raw_near']} 条，核实后 {len(rd['verified_near'])} 条：{near_f}" + ("；有反驳" if rd["rebuttal"] else ""))
+          md.append(f"- CI：{'；'.join(json.dumps(c, ensure_ascii=False) for c in r['ci']) or '没有记录'}")
+          md.append(f"- 风险判定：见 observed/{r['run']}/docs/risk.md\n")
+      open(f"{ws}/docs/postmortem/trace.md", "w", encoding="utf-8").write("\n".join(md) + "\n")
+      flagged = sum(len(rd["verified_near"]) for r in runs for rd in r["review"])
+      json.dump({"status": "ok", "summary": f"{len(runs)} 个运行；改动附近有 {flagged} 条核实过的发现" if runs else "不是 myorch 运行做的改动，没有当时的记录",
+                 "outputs": {"runs": len(runs), "flagged": flagged}}, open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
+      PY
+
+  - id: analyze
+    harness: claude-code
+    profile: dev-read
+    model: claude-opus-5-5
+    needs: [trace]
+    observe_runs: "{{steps.locate.outputs.matched_runs}}"
+    outputs:
+      layer: "最早该拦住它的一层：requirement / implementation / review / security / risk / ci / approval / none"
+      category: "no-rule / rule-not-applied / flagged-not-handled / human-let-through / not-detectable"
+      proposals: "知识库修改建议条数（0 到 5）"
+      expected: "评测案例里期望的发现条数"
+    limits: { timeout: 30m }
+    prompt: |
+      你负责一次复盘：一个问题已经进了代码，找出它为什么没被拦住。只读，不改任何东西，只写 docs/postmortem/ 下的文件。
+
+      ## 输入
+      - docs/external/request.md：发起人对问题的描述（可能没有）。
+      - docs/postmortem/target.json：引入问题的提交、修复提交、PR、碰过它的 myorch 运行。
+      - docs/postmortem/bad.diff：引入问题的改动。docs/postmortem/fix.diff：修复（可能没有）。
+      - docs/postmortem/trace.md 和 trace.json：当时每一层看到了什么。
+      - observed/<run_id>/docs/：碰过这次改动的运行的需求、实现记录、各轮 review、风险判定、CI 结果。
+      - project/guide/、project/security.md、project/risk-rules.yaml、project/checks.sh：这个项目现在的知识和检查。
+
+      ## 判断
+      1. 问题是什么：用一两句话说清，引用 bad.diff 里的具体文件和行。
+      2. 最早该在哪一层拦住（outputs.layer）：
+         requirement（需求分析该问到）、implementation（实现指南该避开）、review、security、risk（该判成高风险要人看）、ci（确定性检查）、approval（审批人该看到），或 none。
+      3. 为什么没拦住（outputs.category）：
+         - no-rule：知识库和检查里都没有覆盖这类问题。
+         - rule-not-applied：有相关规则，但这次没用上。说明是哪条规则，为什么没用上。
+         - flagged-not-handled：reviewer 或 CI 指出过，但被反驳、降级或忽略了。引用 trace 里的那条发现。
+         - human-let-through：人看到了风险，仍然放行。
+         - not-detectable：事先确实发现不了（例如依赖外部状态）。不要轻易用这一类。
+         不是 myorch 运行做的改动时，判断的是：如果当时经过 myorch，哪一层该拦住。
+
+      ## 写这些文件
+      - docs/postmortem/postmortem.md：问题、该拦住的层和原因、证据、建议。简短，给人看。
+      - docs/postmortem/proposals.json：知识库修改建议，最多 5 条，格式和 learn 一样：
+        [{"id": 1, "title": "一句话", "kind": "add-rule|relax-rule|fill-gap", "evidence": ["<出处>"],
+          "changes": [{"file": "project/guide/<文件>", "edits": [{"old": "<文件里恰好出现一次的原文>", "new": "<替换后>"}]}
+                      或 {"file": "project/guide/<文件>", "append": "<追加的 markdown>"}]}]
+        old 从当前文件逐字复制；不确定就用 append。只能改 project/guide/ 下的文件。规则要写成能用到同类问题上的样子，不要只写这一个 bug。
+        不要重复知识库里已经有的内容。没有值得改的，写 []。
+      - docs/postmortem/proposals.md：给人看的版本。
+      - docs/postmortem/follow-ups.md：适合做成确定性检查（lint、CI、测试）的建议，要另起 development 去做。可以为空。
+      - docs/postmortem/case.json：评测案例里期望 reviewer 报出的发现，JSON 数组：
+        [{"severity": "Important", "title": "一句话", "file": "<bad.diff 里的文件>", "line": <改动后文件里的行号>, "evidence": "为什么是问题"}]
+        只写 review 看改动本身就应该发现的问题。category 是 not-detectable，或者只有 CI 才能发现时，写 []。
+
+      outputs.proposals 是 proposals.json 的条数，outputs.expected 是 case.json 的条数。
+
+  - use: lib/choose-proposals.yaml
+    id: choose
+    needs: [analyze]
+    when: "steps.analyze.outputs.proposals > 0"
+    with: {dir: docs/postmortem, what: 知识库修改建议}
+
+  - id: apply
+    action: project-apply
+    needs: [choose]
+    when: "steps.choose.outputs.accepted > 0"
+    args: {scope: learn, proposals: docs/postmortem/proposals.json, accepted: docs/postmortem/accepted.json}
+    limits: { timeout: 5m }
+
+  # The expected findings go into the case (the person confirms it in 流程 → 评测集); with adopted
+  # proposals, the change is replayed again on the new knowledge.
+  - id: replay-after
+    action: postmortem-replay
+    needs: [apply, replay-before]
+    args: {phase: after, depth: standard}
+    limits: { timeout: 5m }

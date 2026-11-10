@@ -1,0 +1,58 @@
+[project]
+name = "myorch"
+version = "0.1.0"
+description = "Workflow-engine-driven agent platform on OpenShell"
+requires-python = ">=3.12"
+license = "MIT"
+dependencies = [
+    "aiohttp>=3.9",
+    "markdown>=3.11.2",
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+    "slack-sdk>=3.33",
+    "starlette>=0.40",
+    "temporalio>=1.9",
+    "uvicorn>=0.30",
+]
+
+[project.scripts]
+myorch = "myorch.cli:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8",
+    "pytest-asyncio>=0.23",
+    "import-linter>=2.1",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/myorch"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+
+[tool.importlinter]
+root_package = "myorch"
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Layers: engines -> runner -> storage -> core"
+type = "layers"
+layers = [
+    "myorch.engines",
+    "myorch.runner",
+    "myorch.storage",
+    "myorch.core",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only engines.temporal may import temporalio"
+type = "forbidden"
+source_modules = ["myorch.core", "myorch.storage", "myorch.runner"]
+forbidden_modules = ["temporalio"]

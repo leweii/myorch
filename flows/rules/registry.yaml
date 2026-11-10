@@ -1,0 +1,96 @@
+# Rules in the prompts that make up for something a model got wrong, and why each one is there.
+#
+# A harness encodes assumptions about what the model cannot do; they go stale when the model gets
+# better, and then they only cost tokens and attention. So every such rule says where it came from,
+# and can be switched off for an eval: in a prompt it sits between `[[rule:<id>/<place>]]` and
+# `[[/rule]]` (core/fragment.py drops the markers, or the block when the rule is ablated). Replay the
+# eval cases with and without it (`myorch run ... -i at=... --set flows.ablate=<id>`); a rule that
+# no longer changes the outcome on today's models can go.
+#
+# id: the group; places: where it is marked (<id>/<place>; `--set flows.ablate=<id>` turns off all of
+# them, `<id>/<place>` only one). Cases and gaps (#nn) are in myorch-workspace evals/dev (tasks/<case>/
+# gaps.md, fix-plan.md, iterations/). Models when added: develop and fix claude-opus-5-5, reviewers
+# claude-sonnet-5-5, verify claude-opus-5-5. `checked`: the last ablation and its outcome.
+# tests/test_rules.py keeps this list and the markers in the flows the same.
+
+rules:
+  - id: ticket-table
+    places: [develop]
+    what: 需求文档列「工单对照」表：工单原文每条要求照抄一行，对应的验收标准覆盖它的每个动作
+    makes_up_for: 需求文档漏掉工单的一部分要求（工单要求两处都做，只写了一处；规则被改写成作者自己的定义）
+    origin: {cases: [MD-18742], gap: "#26", change: "leweii/myorch#7 (b716eeb)", date: 2026-11-06}
+    checked: null
+  - id: ticket-check
+    places: [review, verify]
+    what: reviewer 对照工单原文检查需求文档和对照表，漏掉或改写工单要求算 Important；verify 对照原文核实
+    makes_up_for: 同上，作者自己写的需求文档 review 不看
+    origin: {cases: [MD-18742], gap: "#26", change: "leweii/myorch#6 (0603426), #7 (b716eeb)", date: 2026-11-06}
+    checked: null
+  - id: named-scope
+    places: [develop, review, verify]
+    what: 工单点名的模块、功能、场景不能由 agent 自己划进「明确不做的事」，要问人；review 发现了算 Important
+    makes_up_for: agent 自己缩小范围，不问人（BYO 命名）
+    origin: {cases: [MD-18713], gap: "#29", change: "leweii/myorch#19 (0beff01)", date: 2026-11-10}
+    checked: null
+  - id: entry-points
+    places: [develop, review, verify]
+    what: 加校验或要求多处一致时，用报错文案和字段名两种方式反查，列全入口；review 查漏掉的入口，算 Important
+    makes_up_for: 只改了一个入口（写保护漏一处、漏改更新时的名称检查）
+    origin: {cases: [MD-18627, MD-18713], gap: "#28", change: "leweii/myorch#19 (0beff01)", date: 2026-11-10}
+    checked: null
+  - id: guarded-checks
+    places: [develop, review, verify]
+    what: 删除或放宽已有判断前，用注释和 git log 查清它为什么存在，保护的东西不再成立时问人；review 查到算 Important
+    makes_up_for: 删掉一个判断，手填的值被自动计算覆盖
+    origin: {cases: [MD-18627], gap: "#32", change: "leweii/myorch#19 (0beff01)", date: 2026-11-10}
+    checked: null
+  - id: reuse
+    places: [develop, review, verify]
+    what: 先找同类的已有实现，能用就调用，形状不合适就改成能共用的，不复制；review 查没复用、复制分支，算 Important
+    makes_up_for: 自己重写一份已有的校验或计算，两条路径以后不一致
+    origin: {cases: [MD-18784, MD-18483], gap: "#17", change: "leweii/myorch#6 (0603426)", date: 2026-11-06}
+    checked: null
+  - id: invariants
+    places: [develop]
+    what: 复用或修改已有代码时，注释里写明的约定（「每个请求只发一次」）也是需求，冲突时照做或问人，不删注释
+    makes_up_for: 改代码时绕过注释里写明的不变量
+    origin: {cases: [MD-18643], gap: "第二轮修复「守住写明的约定」", change: "leweii/myorch#7 (b716eeb)", date: 2026-11-06}
+    checked: null
+  - id: contract-comments
+    places: [develop, review]
+    what: 接口行为变了时，设计写明要同步的契约注释，实现一起改；review 查新结果是否沿用接口已有的返回方式、注释是否同步
+    makes_up_for: 接口行为变了，接口定义上的契约注释没改，调用方不知道新行为
+    origin: {cases: [MD-18550], gap: "#14", change: "leweii/myorch#7 (b716eeb)", date: 2026-11-06}
+    checked: null
+  - id: boundary-tests
+    places: [develop]
+    what: 测试计划里每条验收标准列出隐含的边界和反例（空、零、等于上下限、超过一点、同时出现），判断类逻辑正反都断言
+    makes_up_for: 测试只测主路径，漏边界
+    origin: {cases: [MD-18550, MD-18483, MD-18643, MD-18742], gap: "#27", change: "leweii/myorch#19 (0beff01)", date: 2026-11-10}
+    checked: null
+  - id: independent-first
+    places: [review]
+    what: reviewer 先只看需求、设计和 diff 独立找问题，最后才读实现记录核对作者的说法
+    makes_up_for: reviewer 被作者的解释带着走，放过有问题的代码
+    origin: {cases: [], gap: "", change: "b0b41a4", date: 2026-11-06, note: 设计时加的，没有对应的案例}
+    checked: null
+  - id: nit-cap
+    places: [verify]
+    what: Nit 最多保留 5 条
+    makes_up_for: 风格意见太多，淹没阻塞问题
+    origin: {cases: [], gap: "", change: "705475c", date: 2026-10-31, note: 第一版流程就有，没有对应的案例}
+    checked: null
+
+# Not prompt text, but the same kind of assumption: switch them with --set on a replay.
+settings:
+  - key: flows.development.reviewers
+    default: 3
+    what: 每轮几个 reviewer 并行，verify 合并、核实
+  - key: flows.development.max_rounds
+    default: 3
+    what: review 和修复最多几轮
+  - key: flows.development.security
+    default: true
+    what: 每轮单独的安全 reviewer
+# Not switchable yet: develop's escalate_when (ask anyway when the agent says it decided without
+# asking), the loop's reflect step, the one question before any code is written.

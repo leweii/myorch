@@ -1,0 +1,140 @@
+# myorch on one machine: Temporal, OpenShell gateway, worker, console. Setup: deploy/README.md
+#
+#   docker compose -f deploy/compose.yaml up -d --build
+#
+# Sandboxes are sibling containers on the host's Docker (the gateway and the worker use the mounted
+# docker.sock); nothing here runs Docker in Docker. Mounting docker.sock gives these containers root on
+# the host: the sandbox boundary is unchanged, but this stack itself is not a security boundary.
+#
+# Settings come from deploy/.env (see .env.example). Defaults fit a fresh machine.
+name: ${COMPOSE_PROJECT_NAME:-myorch}
+
+x-myorch: &myorch
+  build:
+    context: ..
+    dockerfile: deploy/Dockerfile
+  image: myorch:local
+  user: "0"                      # docker.sock access
+  environment: &myorch-env
+    MYORCH_TEMPORAL: temporal:7233
+    MYORCH_VOLUME: ${MYORCH_VOLUME:-myorch-artifacts}
+    OPENSHELL_GATEWAY_ENDPOINT: http://gateway:17671
+    TZ: ${TZ:-Asia/Shanghai}
+    # Who the console and the CLI act as (getpass.getuser() reads USER / LOGNAME): the host's user,
+    # as in channels.yaml identities, not root. Set MYORCH_USER when compose runs without a login shell.
+    USER: ${MYORCH_USER:-${USER:-}}
+    LOGNAME: ${MYORCH_USER:-${USER:-}}
+    # Knowledge sources of kind dir: the host's knowledge root is mounted read-only at the same
+    # absolute path, and `~` in a registered path means the host's home, so a run started from the
+    # console, Slack or a schedule mounts the same folder as one started from the host's CLI.
+    MYORCH_HOST_HOME: ${HOME}
+    MYORCH_KB_ROOT: ${MYORCH_KB_ROOT:-${HOME}/orca/kb}
+  volumes:
+    - /var/run/docker.sock:/var/run/docker.sock
+    - ${MYORCH_KB_ROOT:-${HOME}/orca/kb}:${MYORCH_KB_ROOT:-${HOME}/orca/kb}:ro
+    - ${MYORCH_KNOWLEDGE_DIR:-../../myorch-knowledge}:/knowledge
+    - ${MYORCH_DATA_DIR:-../../myorch-data}:/data
+    # Who is who across platforms (identities): mounted, not baked in, so an edit needs no rebuild.
+    # The file is read at startup: after editing, `docker compose up -d --force-recreate ui worker`
+    # (a recreate, because an editor that saves a new file leaves the old one mounted).
+    - ../channels.yaml:/app/channels.yaml:ro
+  restart: unless-stopped
+
+services:
+  temporal:
+    image: temporalio/temporal:1.9.1
+    user: "0"
+    command: [server, start-dev, --ip, 0.0.0.0, --db-filename, /data/temporal.db]
+    volumes:
+      - ${MYORCH_DATA_DIR:-../../myorch-data}:/data
+    ports:
+      - 127.0.0.1:${TEMPORAL_PORT:-7233}:7233
+      - 127.0.0.1:${TEMPORAL_UI_PORT:-8233}:8233
+    restart: unless-stopped
+
+  # Sandbox launch-signing keys (Ed25519), made once into the gateway's state volume. The brew
+  # package does this in its service script; macOS LibreSSL cannot make Ed25519 keys, hence openssl here.
+  gateway-init:
+    image: alpine:3.22
+    volumes:
+      - gateway-state:/state
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        d=/state/tls/jwt
+        if [ -s $$d/signing.pem ]; then echo "keys present"; exit 0; fi
+        apk add -q --no-cache openssl
+        mkdir -p $$d && cd $$d
+        openssl genpkey -algorithm ed25519 -out signing.pem
+        openssl pkey -in signing.pem -pubout -out public.pem
+        head -c 8 /dev/urandom | od -An -tx1 | tr -d ' \n' > kid
+        chmod 600 signing.pem
+        echo "keys created"
+
+  gateway:
+    image: ghcr.io/nvidia/openshell/gateway:0.1.6
+    user: "0"                    # docker.sock access
+    depends_on:
+      gateway-init: { condition: service_completed_successfully }
+    command: [--config, /cfg/gateway.toml, --bind-address, 0.0.0.0, --port, "17671", --disable-tls,
+              --compute-driver, docker]
+    environment:
+      XDG_STATE_HOME: /state
+      HOME: /state
+      OPENSHELL_LOCAL_TLS_DIR: /state/tls
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - gateway-state:/state
+      - ./gateway.toml:/cfg/gateway.toml:ro
+    ports:
+      # Fixed: gateway.toml's grpc_endpoint names this port, and the supervisors reach it through the host.
+      - 127.0.0.1:17671:17671
+    restart: unless-stopped
+
+  # Creates the artifacts volume with its approval labels and installs tools/ into it. Idempotent.
+  init:
+    <<: *myorch
+    command: [init]
+    restart: "no"
+
+  # Loads provider profiles and credentials from deploy/secrets/providers.yaml into the gateway
+  # (deploy/provision.py). Only this service mounts the secrets. Without the file it does nothing.
+  providers:
+    <<: *myorch
+    entrypoint: [python, /app/deploy/provision.py]
+    command: []
+    volumes:
+      - ${MYORCH_KNOWLEDGE_DIR:-../../myorch-knowledge}:/knowledge:ro
+      - ${MYORCH_SECRETS_DIR:-./secrets}:/secrets:ro
+    depends_on:
+      gateway: { condition: service_started }
+    restart: "no"
+
+  worker:
+    <<: *myorch
+    command: [worker]
+    depends_on:
+      init: { condition: service_completed_successfully }
+      providers: { condition: service_completed_successfully }
+      temporal: { condition: service_started }
+      gateway: { condition: service_started }
+
+  ui:
+    <<: *myorch
+    # Slack channel credentials (channels/slack.py), for this service only: the worker and the
+    # sandboxes never see them. Without the file the console runs without Slack.
+    env_file:
+      - path: ${MYORCH_SECRETS_DIR:-./secrets}/slack.env
+        required: false
+    # Same port inside and out: the console only accepts Host 127.0.0.1:<its port> (DNS rebinding).
+    command: [ui, --host, 0.0.0.0, --port, "${MYORCH_UI_PORT:-8800}"]
+    ports:
+      - 127.0.0.1:${MYORCH_UI_PORT:-8800}:${MYORCH_UI_PORT:-8800}
+    depends_on:
+      init: { condition: service_completed_successfully }
+      temporal: { condition: service_started }
+
+volumes:
+  gateway-state:

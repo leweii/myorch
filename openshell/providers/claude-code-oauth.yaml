@@ -1,0 +1,41 @@
+# Claude Code with a subscription token (`claude setup-token`). Provider `claude` (the claude-code
+# harness default) uses this type. Exported from the brew gateway on 2026-11-04, where it had been
+# imported by hand without a file in this repository.
+#
+#   openshell provider profile import -f openshell/providers/claude-code-oauth.yaml
+id: claude-code-oauth
+display_name: Claude Code (subscription OAuth token)
+description: Long-lived token from `claude setup-token`, injected as Authorization Bearer at api.anthropic.com only.
+category: agent
+credentials:
+  - name: oauth_token
+    description: CLAUDE_CODE_OAUTH_TOKEN from `claude setup-token`
+    env_vars:
+      - CLAUDE_CODE_OAUTH_TOKEN
+    required: true
+    auth_style: bearer
+    header_name: Authorization
+    query_param: ""
+endpoints:
+  - host: api.anthropic.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: statsig.anthropic.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: sentry.io
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/bin/claude
+  - /usr/local/bin/claude
+inference_capable: false
+discovery:
+  credentials:
+    - oauth_token

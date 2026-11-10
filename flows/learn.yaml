@@ -1,0 +1,323 @@
+# Learn from past runs: keep what the team learned, so the next run starts with it. Sources: review
+# findings and their outcomes; the questions people answered (decisions); change requests and
+# rejections; failed steps and CI checks; the implementation's assumptions and deviations; why a run
+# was continued on its branch (what was missed); postmortem conclusions. The user picks which
+# proposals to adopt; they are written back to the project pack (guide/, checks.sh).
+#
+#   uv run myorch run flows/learn.yaml --project mdm
+#
+# Without -i runs, the CLI picks the project's finished development and review runs since its last
+# learn run (at most 20) and prints them; -i runs=<id>,<id> chooses by hand (`myorch list
+# --project mdm` shows what there is).
+#
+# The CLI / console also write docs/learn/trail.json (myorch/trail.py): what the event log knows
+# about those runs (answers, change requests, rejections, failures, resumes), and
+# docs/learn/takeaways-learned.json: the runs whose takeaways an earlier learn already took in
+# (myorch/takeaways.py, kept in myorch-data). collect reads the takeaways from the project repository's
+# base branch (myorch/<date>-<run_id>/ that development commits with each change when the project
+# sets flows.development.takeaway, so only merged PRs), skips the learned ones, and takes in the oldest first within a size budget; the rest wait for the
+# next learn. takeaways-learned records what was taken in, whatever was adopted. Only the project's
+# guide/ and checks.sh / checks.env change (myorch-knowledge/<project>/); changes are committed to
+# the myorch-knowledge git repo and the snapshot re-synced. Flow changes are only proposed.
+flow: learn
+role: learn
+inputs:
+  runs:
+    type: string
+    label: 要学习的运行
+    hint: 可选。逗号分隔的运行 ID；留空时自动选上次 learn 之后的运行
+image: "{{project.image}}"
+model: claude-sonnet-5-5
+
+steps:
+  # Gathers every verified finding from the observed runs and what happened to it afterwards.
+  # GitHub is only read here (whether the PR was merged or closed); no repo code is run. myorch no
+  # longer comments on PRs, so outcomes come from the runs themselves (later rounds, rebuttals).
+  - id: collect
+    harness: script
+    profile: dev-git
+    observe_runs: "{{inputs.runs}}"
+    outputs:
+      findings: "收集到的发现条数"
+    limits: { timeout: 10m, retries: 1 }
+    prompt: |
+      set -euo pipefail
+      python3 - <<'PY'
+      import glob, json, os, re, subprocess
+      ws, repo = os.environ["MYORCH_WORKSPACE"], os.environ["MYORCH_PROJECT_REPO"]
+      runs = [r.strip() for r in os.environ["MYORCH_INPUT_RUNS"].split(",") if r.strip()]
+      def load(p, default=None):
+          try:
+              return json.load(open(p, encoding="utf-8"))
+          except (OSError, ValueError):
+              return default
+      def gh(path):
+          res = subprocess.run(["gh", "api", path], capture_output=True, text=True)
+          return json.loads(res.stdout) if res.returncode == 0 else None
+      def text(p):
+          try:
+              return open(p, encoding="utf-8").read()
+          except OSError:
+              return ""
+
+      findings, per_run = [], []
+      for run in runs:
+          d = f"{ws}/observed/{run}"
+          flow = (re.search(r"^flow:\s*(\S+)", text(f"{d}/.myorch/flow.yaml"), re.M) or [None, "?"])[1]
+          role = (re.search(r"^role:\s*(\S+)", text(f"{d}/.myorch/flow.yaml"), re.M) or [None, ""])[1] \
+              or (flow if flow in ("development", "review", "postmortem") else flow.partition("-")[2])
+          rounds = sorted(glob.glob(f"{d}/docs/review/round-*/verified.json"), key=lambda p: int(re.search(r"round-(\d+)", p)[1]))
+          verified = [(int(re.search(r"round-(\d+)", p)[1]), load(p, []) or []) for p in rounds]
+          rebuttals = " ".join(text(p) for p in glob.glob(f"{d}/docs/review/round-*/rebuttal.md"))
+
+          # Which PR did the run touch? review runs: the reviewed PR; development runs: the PR they opened.
+          pr = (load(f"{d}/.myorch/mandate.json", {}) or {}).get("request", {}).get("pr")
+          if not pr:
+              m = re.search(r"# PR #(\d+)", text(f"{d}/docs/pr.md")) or re.search(r"/pull/(\d+)", text(f"{d}/.myorch/steps/push-and-pr/out/manifest.json"))
+              pr = m[1] if m else None
+          pr_info = gh(f"repos/{repo}/pulls/{pr}") if pr else None
+
+          for rnd, items in verified:
+              for f in items:
+                  if f.get("status") == "fixed":
+                      continue
+                  title = str(f.get("title") or "")
+                  later = [x for r2, its in verified if r2 > rnd for x in its]
+                  outcome = "unknown"
+                  if any(x.get("status") == "fixed" and x.get("file") == f.get("file") for x in later):
+                      outcome = "fixed"
+                  elif title and title[:12] in rebuttals:
+                      outcome = "rebutted"
+                  elif role == "review" and pr_info:
+                      if pr_info.get("merged"):
+                          outcome = "merged_unchanged"
+                      elif pr_info.get("state") == "closed":
+                          outcome = "closed"
+                      else:
+                          outcome = "open"
+                  elif f.get("severity") != "Important":
+                      outcome = "not_required"       # Nit / Pre-existing: never blocks
+                  findings.append({"run": run, "flow": flow, "round": rnd, "pr": pr, **{k: f.get(k) for k in ("severity", "file", "line", "title", "evidence", "class")}, "outcome": outcome})
+          per_run.append({"run": run, "flow": flow, "rounds": len(verified), "pr": pr,
+                          "pr_state": (pr_info or {}).get("state"), "merged": (pr_info or {}).get("merged")})
+
+      # Everything else the runs tell: decisions, rework, failures (docs/learn/signals.json / .md).
+      def section(t, name):
+          out, level = [], 0
+          for line in t.splitlines():
+              m = re.match(r"^(#+)\s+(.*)", line)
+              if level and m and len(m.group(1)) <= level:
+                  break
+              if level:
+                  out.append(line)
+              elif m and name in m.group(2):
+                  level = len(m.group(1))
+          return "\n".join(out).strip()[:2000]
+      trail = {t["run"]: t for t in (load(f"{ws}/docs/learn/trail.json", []) or [])}
+      signals = []
+      for run in runs:
+          d = f"{ws}/observed/{run}"
+          impl = text(f"{d}/docs/implementation.md")
+          ci_failed = []
+          for p in sorted(glob.glob(f"{d}/docs/ci/round-*/result.json")):
+              r = load(p, {}) or {}
+              if r.get("failed"):
+                  ci_failed.append({"round": int(re.search(r"round-(\d+)", p)[1]), "failed": r.get("failed")})
+          sig = {"run": run, **{k: v for k, v in trail.get(run, {}).items() if k != "run"},
+                 "assumptions": section(impl, "假设"), "off_requirement": section(impl, "和需求文档的差异"),
+                 "off_design": section(impl, "和设计的差异"), "ci_failed": ci_failed,
+                 "continued_because": text(f"{d}/docs/external/request.md")[:2000] if text(f"{d}/docs/previous/RUN") else "",
+                 "postmortem": text(f"{d}/docs/postmortem/postmortem.md")[:4000],
+                 "postmortem_follow_ups": text(f"{d}/docs/postmortem/follow-ups.md")[:2000]}
+          signals.append(sig)
+      os.makedirs(f"{ws}/docs/learn", exist_ok=True)
+      json.dump(signals, open(f"{ws}/docs/learn/signals.json", "w"), ensure_ascii=False, indent=1)
+
+      # Takeaways from the repository's base branch: myorch/<YYYY-MM-DD>-<run_id>/{task,takeaway}.md, committed
+      # by development with each change (flows.development.takeaway), so they are there once the PR is merged. Not the ones an earlier
+      # learn took in (takeaways-learned.json, from myorch-data); oldest first, within a size budget.
+      BUDGET, MAX_TAKEAWAYS = 300_000, 30  # bytes and entries per learn run; the rest roll over
+      base, repo_dir = os.environ["MYORCH_PROJECT_BASE"], f"{ws}/repo"
+      token = os.environ.get("GITHUB_TOKEN", "")
+      auth = ["-c", "http.extraHeader=Authorization: Basic " + __import__("base64").b64encode(f"x-access-token:{token}".encode()).decode()] if token else []
+      def gitr(*a, check=True):
+          return subprocess.run(["git", *auth, "-C", repo_dir, *a], capture_output=True, text=True, check=check)
+      takeaway_note = ""
+      try:
+          if not os.path.isdir(f"{repo_dir}/.git"):  # no local copy: just what is needed, no checkout
+              os.makedirs(repo_dir, exist_ok=True)
+              subprocess.run(["git", *auth, "clone", "-q", "--filter=blob:none", "--no-checkout", "--depth", "1", "--branch", base,
+                              f"https://github.com/{repo}.git", repo_dir], capture_output=True, text=True, check=True)
+          else:
+              gitr("fetch", "-q", "origin", base, check=False)  # a local copy that cannot fetch still has what it had
+          listing = gitr("ls-tree", "--name-only", f"origin/{base}", "myorch/").stdout.split()
+      except (subprocess.CalledProcessError, OSError) as e:
+          # Never the command line or git's stderr: the auth header carries the token's placeholder.
+          code = getattr(e, "returncode", None)
+          listing, takeaway_note = [], "读不到仓库的 myorch/" + (f"（git 退出码 {code}）" if code is not None else f"（{type(e).__name__}）")
+      try:
+          learned = set(json.load(open(f"{ws}/docs/learn/takeaways-learned.json", encoding="utf-8")))
+      except (OSError, ValueError, TypeError):
+          learned = set()
+      entries = []
+      for path in listing:
+          m = re.match(r"^myorch/(\d{4}-\d{2}-\d{2})-([a-z0-9][a-z0-9-]{0,62})$", path)  # run ids: core/types.py ID_PATTERN
+          if m and m[2] not in learned:
+              entries.append((path.split("/", 1)[1], m[1], m[2]))
+      entries.sort()  # the date comes first: oldest first
+      picked, used, unreadable, misses = [], 0, [], 0
+      for name, date, run_id in entries:
+          files = {}
+          for f in ("task.md", "takeaway.md"):
+              r = gitr("show", f"origin/{base}:myorch/{name}/{f}", check=False)  # a blobless clone fetches here
+              if r.returncode == 0:
+                  files[f] = r.stdout[:60000]
+          if not files.get("takeaway.md", "").strip():
+              # Not read (network, a partial clone) or empty: not taken in, so not recorded as learned.
+              unreadable.append(run_id)
+              misses += 1
+              if misses >= 3:
+                  break  # reads keep failing: try again next learn
+              continue
+          misses = 0
+          size = sum(len(v.encode()) for v in files.values())
+          if picked and (used + size > BUDGET or len(picked) >= MAX_TAKEAWAYS):
+              break
+          used += size
+          os.makedirs(f"{ws}/docs/learn/takeaways/{name}", exist_ok=True)
+          for f, t in files.items():
+              open(f"{ws}/docs/learn/takeaways/{name}/{f}", "w", encoding="utf-8").write(t)
+          t = files.get("takeaway.md", "")
+          picked.append({"run": run_id, "date": date, "dir": f"docs/learn/takeaways/{name}",
+                         "problems": section(t, "遇到的问题"), "missing": section(t, "缺了什么知识"),
+                         "suggestions": section(t, "对流程或平台的建议")})
+      left = len(entries) - len(picked) - len(unreadable)
+      if unreadable:
+          takeaway_note = (takeaway_note + "；" if takeaway_note else "") + f"{len(unreadable)} 条读不到 takeaway.md，下次再试"
+      json.dump({"picked": picked, "left": left, "unreadable": unreadable, "note": takeaway_note},
+                open(f"{ws}/docs/learn/takeaways.json", "w"), ensure_ascii=False, indent=1)
+      with open(f"{ws}/docs/learn/signals.md", "w", encoding="utf-8") as out:
+          out.write("# 过程中的信号（除了 review 的发现）\n\n")
+          for g in signals:
+              out.write(f"## {g['run']}（{g.get('flow') or '?'}，{g.get('status') or '?'}）\n\n")
+              if g.get("continued_from"):
+                  out.write(f"- 接着 {g['continued_from']} 改。原因（这次的请求）：{g['continued_because'][:400] or '（没有写）'}\n")
+              for q in g.get("qa") or []:
+                  out.write(f"- 问（{q['step']}）：{q['question'][:300]}\n  答：{q['answer'][:300]}\n")
+              for c in g.get("changes") or []:
+                  out.write(f"- 修改意见（{c['by']}）：{c['text'][:300]}\n")
+              for r in g.get("rejected") or []:
+                  out.write(f"- 审批被驳回：{r['step']}，{r['by']}\n")
+              for f in g.get("failures") or []:
+                  out.write(f"- 步骤失败：{f['step']}（第 {f.get('attempts')} 次）：{(f.get('error') or '')[:200]}\n")
+              for c in g["ci_failed"]:
+                  out.write(f"- CI 第 {c['round']} 轮失败：{', '.join(map(str, c['failed']))}\n")
+              for k, label in (("assumptions", "实现时的假设"), ("off_requirement", "和需求的差异"), ("off_design", "和设计的差异")):
+                  if g[k] and g[k].strip() not in ("无", "无。"):
+                      out.write(f"- {label}：{g[k][:400]}\n")
+              if g["postmortem"]:
+                  out.write(f"- 复盘结论：见 observed/{g['run']}/docs/postmortem/postmortem.md\n")
+              out.write("\n")
+          if picked:
+              out.write(f"# 仓库里的 takeaway（{len(picked)} 条，全文在 docs/learn/takeaways/" + (f"；还有 {left} 条留给下次" if left else "") + "）\n\n")
+              for k in picked:
+                  out.write(f"## {k['run']}（{k['date']}，{k['dir']}）\n\n")
+                  for key, label in (("problems", "遇到的问题"), ("missing", "缺了什么知识"), ("suggestions", "对流程或平台的建议")):
+                      if k[key] and k[key].strip() not in ("无", "无。"):
+                          out.write(f"- {label}：{k[key][:600]}\n")
+                  out.write("\n")
+      json.dump({"runs": per_run, "findings": findings}, open(f"{ws}/docs/learn/findings.json", "w"), ensure_ascii=False, indent=1)
+      counts = {}
+      for f in findings:
+          counts[f["outcome"]] = counts.get(f["outcome"], 0) + 1
+      with open(f"{ws}/docs/learn/outcomes.md", "w", encoding="utf-8") as out:
+          out.write(f"# 发现与处理结果（{len(runs)} 次运行，{len(findings)} 条）\n\n")
+          out.write("| 处理结果 | 条数 |\n|---|---|\n" + "".join(f"| {k} | {v} |\n" for k, v in sorted(counts.items())))
+          out.write("\n| run | flow | 轮数 | PR | 状态 |\n|---|---|---|---|---|\n")
+          out.write("".join(f"| {r['run']} | {r['flow']} | {r['rounds']} | {r['pr'] or '-'} | {'merged' if r['merged'] else (r['pr_state'] or '-')} |\n" for r in per_run))
+      n_qa = sum(len(g.get("qa") or []) for g in signals)
+      n_rework = sum(1 for g in signals if g.get("continued_from")) + sum(1 for g in signals if g["postmortem"])
+      json.dump({"status": "ok", "summary": f"{len(runs)} 次运行，{len(findings)} 条发现（" + "、".join(f"{k} {v}" for k, v in sorted(counts.items()))
+                 + f"），{n_qa} 个人回答过的问题，{n_rework} 次返工或复盘，仓库里 {len(picked)} 条新 takeaway"
+                 + (f"（还有 {left} 条留给下次）" if left else "") + (f"；{takeaway_note}" if takeaway_note else ""),
+                 "outputs": {"findings": len(findings), "outcomes": counts, "answers": n_qa, "rework": n_rework,
+                             "takeaways": len(picked), "takeaways_left": left}},
+                open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
+      PY
+
+  - id: analyze
+    harness: claude-code
+    profile: dev-read
+    model: claude-opus-5-5
+    needs: [collect]
+    observe_runs: "{{inputs.runs}}"
+    outputs:
+      proposals: "提出的知识库修改建议条数（0 到 5）"
+      follow_ups: "不自动应用、需要另起 development 的建议条数"
+    limits: { timeout: 20m }
+    prompt: |
+      你负责从过往运行中沉淀知识，让下一次运行一开始就知道这次学到的东西。不要修改任何东西，只写建议文件。
+
+      ## 输入
+      - docs/learn/findings.json 和 outcomes.md：各次运行核实过的 review 发现，以及之后的处理结果
+        （fixed 修了 / rebutted 被反驳 / merged_unchanged 没改就合并 / not_required 不阻塞 / open、closed、unknown）。
+      - docs/learn/signals.md 和 signals.json：review 以外的信号——人回答过的问题（决定）、修改意见、驳回、
+        失败的步骤、CI 失败、实现时的假设和偏差、为什么在分支上接着改（第一次漏了什么）、复盘结论。
+      - docs/learn/takeaways/<日期>-<run_id>/ 和 takeaways.json：开发运行自己写下的任务信息（task.md）和经验
+        （takeaway.md：遇到的问题、缺了什么知识、对流程或平台的建议），随 PR 合并进了仓库。这些运行不一定在 observed/ 里。
+        当作信号，和其他证据一样核实：只采纳能推广到以后的项目知识，同一条在几次运行里都出现更可信。
+        只对某个工单成立的内容不要采纳。流程、平台、环境类的建议写进 flow-proposals.md。
+        引用时证据写 "<run_id>: takeaway"。没有这个目录就是没有新的 takeaway。
+      - observed/<run_id>/docs/：每次运行的需求、设计、实现记录、各轮 review、风险判定、复盘，需要细节时去读。
+      - project/guide/：这个项目当前的知识（myorch 维护），这是你要改进的主要对象。
+      - project/checks.sh、project/checks.env：每次运行都跑的确定性检查。project/risk-rules.yaml、project/security.md 只读参考。
+      - 仓库自带的知识（见工作区说明）只读，不要重复里面已有的内容。
+
+      ## 找这几类知识，每条都要有证据（哪次运行、哪一轮、哪条发现、哪个回答，或哪条 takeaway）
+      1. 人做过的决定（kind: record-decision）：需求分析或设计时人回答的问题，以后同类问题照这个做，就不用再问。
+         写进 project/guide/decisions.md：一条一项，写清楚「什么情况 → 怎么做 → 为什么（人的原话或理由）→ 出处」。
+         只记能推广到以后的决定。只对这一次有效的选择（例如这次改哪一篇）不要记。
+      2. 返工的原因（kind: fill-gap）：在分支上接着改的原因、复盘结论、实现偏离需求或设计、实现时不得不做的假设。
+         问一句：如果知识库里早写了什么，第一次就能做对？把它写进 development.md、design 相关的指南，或 writing-conventions.md。
+      3. 反复出现的同类问题（kind: add-rule）：至少 2 次运行，或 1 次但影响大。写进实现时要避开的规则，或者 review-guide.md 让 reviewer 识别。
+      4. 太严或判错的规则（kind: relax-rule）：反复被反驳、或没改就合并的意见，放宽 review-guide.md。
+      5. 确定性检查（kind: add-check）：反复出现、能用脚本判断的问题，或者反复失败的 CI 检查。
+         改 project/checks.sh（或 checks.env）。遵守 checks.sh 文件开头写的约定（输入、report.md、result.json、退出码）。
+         只加确定性的检查，会误报的只报警告，不要让检查失败。不确定怎么写对时，写进 follow-ups，不要改脚本。
+      6. 流程问题：步骤的顺序、提问的时机、某一步总是失败或总是多余。不能自动应用，写进 docs/learn/flow-proposals.md。
+      不要重复知识库里已经写了的内容；措辞简短，沿用现有文件的风格；最多 8 条。没有足够证据就少提甚至不提。
+
+      ## 写这些文件
+      - docs/learn/proposals.json：JSON 数组，每项
+        {"id": 1, "title": "一句话", "kind": "record-decision|fill-gap|add-rule|relax-rule|add-check", "evidence": ["<run_id>: <出处>", ...],
+         "changes": [{"file": "project/guide/<文件>", "edits": [{"old": "<文件里恰好出现一次的原文>", "new": "<替换后>"}]}
+                     或 {"file": "project/guide/<文件>", "append": "<追加到文件末尾的 markdown>"}]}
+        old 必须从当前文件里逐字复制，并且在文件里只出现一次；不确定就用 append。
+        只能改 project/guide/ 下的文件（可以新建，用 append）和 project/checks.sh、project/checks.env。
+        guide/decisions.md 不存在时，第一条 record-decision 用 append 新建，开头写「# 已经决定的事」和一句说明：需求分析和技术设计遇到同类问题时照这里做，不再问人。
+      - docs/learn/proposals.md：给人看的版本，每条：编号、类型、标题、证据数量、具体改什么（几行以内）。
+      - docs/learn/follow-ups.md：要改项目仓库本身的建议（lint 规则、CI 配置、测试），要另起 development。可以为空。
+      - docs/learn/flow-proposals.md：对 myorch 流程的建议（第 6 类）。可以为空。
+
+  - use: lib/choose-proposals.yaml
+    id: choose
+    needs: [analyze]
+    when: "steps.analyze.outputs.proposals > 0"
+    with: {dir: docs/learn, what: 知识库修改建议}
+
+  # Host action: validates every change (managed files only, each edit matches exactly once),
+  # writes all or nothing, commits to the myorch-knowledge git repo, then re-syncs the snapshot.
+  - id: apply
+    action: project-apply
+    needs: [choose]
+    when: "steps.choose.outputs.accepted > 0"
+    args: {scope: learn}
+    limits: { timeout: 5m }
+
+  # Host action: record in myorch-data which runs' takeaways this learn took in (docs/learn/takeaways.json),
+  # whatever was adopted, so the next learn skips them. Nothing is written to the repository.
+  - id: takeaways-learned
+    action: takeaways-learned
+    needs: [apply]
+    when: "steps.collect.outputs.takeaways > 0"
+    limits: { timeout: 2m }

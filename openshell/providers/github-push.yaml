@@ -1,0 +1,58 @@
+# GitHub provider that may push branches and open pull requests, scoped to one repository.
+# Adapted from OpenShell's providers/github.yaml example (clone/fetch only, push denied).
+#
+#   openshell provider profile lint   -f openshell/providers/github-push.yaml
+#   openshell provider profile import -f openshell/providers/github-push.yaml
+#
+# Updating an imported profile needs the gateway's current resource_version (optimistic lock):
+#   RV=$(openshell profile export github-push | awk '/^resource_version:/{print $2}')
+#   { echo "resource_version: $RV"; cat openshell/providers/github-push.yaml; } > /tmp/p.yaml
+#   openshell provider profile update -f /tmp/p.yaml github-push
+#
+# No project uses this profile since 2026-11-05: the blog moved to the operator's own account
+# (provider github-blog, profile from `myorch project github-profile blog`). It stays for the spare
+# provider `github`.
+#
+# Credential (until 2026-11-05): a classic token (scope `repo`) of the bot account leweiibot, stored as provider
+# github-bot. leweiibot is only a collaborator on leweii/leweii.github.io, and the endpoint rules
+# below allow nothing else. (Fine-grained tokens cannot reach a repo the bot does not own.)
+#
+# gh sends the GITHUB_TOKEN placeholder itself. git does not send credentials up front, and
+# GitHub's git endpoint rejects Bearer tokens (401, wants Basic). Pass
+#   -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+# OpenShell decodes Basic credentials, swaps the placeholder and re-encodes at egress.
+id: github-push
+display_name: GitHub (push + PR, single repo)
+description: Clone, fetch and push one repository; create pull requests and post reviews via the REST API
+category: source_control
+credentials:
+  - name: api_token
+    description: GitHub token of the bot account, collaborator on leweii/leweii.github.io
+    env_vars: [GITHUB_TOKEN, GH_TOKEN]
+    required: true
+    auth_style: bearer
+    header_name: authorization
+discovery:
+  credentials: [api_token]
+endpoints:
+  # Git smart HTTP for this repository only: clone/fetch (upload-pack) and push (receive-pack).
+  - host: github.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/leweii/leweii.github.io.git/**" }
+      - allow: { method: POST, path: "/leweii/leweii.github.io.git/git-upload-pack" }
+      - allow: { method: POST, path: "/leweii/leweii.github.io.git/git-receive-pack" }
+  # REST API for this repository: read, create pull requests, post PR reviews (COMMENT only by convention).
+  - host: api.github.com
+    port: 443
+    protocol: rest
+    enforcement: enforce
+    rules:
+      - allow: { method: GET, path: "/repos/leweii/leweii.github.io/**" }
+      - allow: { method: GET, path: "/repos/leweii/leweii.github.io" }
+      - allow: { method: POST, path: "/repos/leweii/leweii.github.io/pulls" }
+      - allow: { method: POST, path: "/repos/leweii/leweii.github.io/pulls/*/reviews" }
+      - allow: { method: POST, path: "/repos/leweii/leweii.github.io/issues/*/comments" }
+binaries: [/usr/bin/gh, /usr/local/bin/gh, /usr/bin/git, /usr/local/bin/git]

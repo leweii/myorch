@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+images/dev-blog/deps/
+.DS_Store
+deploy/secrets/
+deploy/.env
+.idea/
+deploy/.failed
+channels.yaml
