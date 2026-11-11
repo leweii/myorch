@@ -14,6 +14,7 @@ belongs to that platform's adapter. Design: docs/notes/2026-11-02-channel-layer.
 from __future__ import annotations
 
 import asyncio
+import itertools
 import logging
 import re
 from collections.abc import AsyncIterator
@@ -108,24 +109,29 @@ class Relay:
     async def runs(self, limit: int = 60, label: str | None = None) -> list[dict[str, Any]]:
         """Recent runs: what each run_started event said, with the engine's status and the run's labels
         (myorch/runs.py). The status comes from Temporal because a run terminated from outside (temporal
-        workflow terminate) never writes run_finished.
+        workflow terminate) never writes run_finished. Runs Temporal no longer keeps (closed longer ago
+        than the namespace's retention, 24h with start-dev) follow, newest first, with the status of
+        their run_finished event: without them the list is empty after a quiet day.
         `label`: only runs with this label (any case), or whose id contains it. The whole log is searched
-        before `limit` applies; a run Temporal no longer keeps (older than its retention) is found too,
-        with the status of its run_finished event."""
+        before `limit` applies."""
         started, ended = await asyncio.to_thread(self._started_events)
         labels = label_index(started, flow_inputs_of(self.config_dir / "flows", self.kb_root))
 
         def row(rid: str, status: str) -> dict[str, Any]:
             return {"run_id": rid, "status": status, **started.get(rid, {}), "labels": labels.get(rid, [])}
 
-        if not (label or "").strip():
-            return [row(rid, status) for rid, status in await tc.list_runs(self.client, limit)]
-        live = await tc.list_runs(self.client, SEARCH_ENGINE_RUNS)
+        search = bool((label or "").strip())
+
+        def wanted(rid: str) -> bool:
+            return not search or label_matches(label, rid, labels.get(rid, []))
+
+        live = await tc.list_runs(self.client, SEARCH_ENGINE_RUNS if search else limit)
         known = {rid for rid, _ in live}
-        hits = [row(rid, status) for rid, status in live if label_matches(label, rid, labels.get(rid, []))]
-        hits += [row(rid, ENDED_STATUS.get(ended.get(rid, ""), "UNKNOWN")) for rid in reversed(started)
-                 if rid not in known and label_matches(label, rid, labels[rid])]
-        return hits[:limit]
+        rows = [row(rid, status) for rid, status in live if wanted(rid)]
+        gone = (rid for rid in reversed(started) if rid not in known and wanted(rid))
+        rows += [row(rid, ENDED_STATUS.get(ended.get(rid, ""), "UNKNOWN"))
+                 for rid in itertools.islice(gone, max(0, limit - len(rows)))]
+        return rows[:limit]
 
     def run_labels(self, run_id: str) -> list[str]:
         """One run's labels, from its run_started and those of the runs its inputs name."""

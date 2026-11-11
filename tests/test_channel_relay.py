@@ -136,6 +136,8 @@ async def test_runs_carry_labels_and_a_search_looks_past_the_limit(relay, calls,
 
     monkeypatch.setattr(relay_mod.tc, "list_runs", list_runs)
     rows = {r["run_id"]: r for r in await relay.runs(limit=10)}
+    assert rows["dev-1f29e33a"]["status"] == "COMPLETED"  # gone from Temporal: listed from the event log
+    assert [r["run_id"] for r in await relay.runs(limit=3)] == ["eval-fetch-tickets-bb", "eval-hidden-tests-aa", "r1"]
     assert rows["eval-hidden-tests-aa"]["labels"] == ["MD-18700"]  # inherited from the run it names
     assert rows["eval-fetch-tickets-bb"]["labels"] == ["batch2", "MD-1", "MD-18700"]  # md-2: not upper case
 
