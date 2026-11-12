@@ -256,7 +256,11 @@ function flRenderMain() {
     const presetSel = f?.presets_by ? el("select", { class: "small", onchange: (e) => { FL.inputs = { ...FL.inputs, [f.presets_by]: e.target.value }; flRefreshGraph(); } },
       f.presets.map((p) => el("option", { value: p, text: p }))) : null;
     if (presetSel) presetSel.value = FL.inputs[f.presets_by] || f.defaults?.[f.presets_by] || f.presets[0];
-    main = el("section", { class: "fd-main", onclick: () => { FL.sel = null; flRenderMain(); } }, f ? [
+    // A click on empty space clears the selected step. Not on the controls: a redraw would close an open select.
+    main = el("section", { class: "fd-main", onclick: (e) => {
+      if (!FL.sel || e.target.closest(".fd-controls, select, input, button, a, label")) return;
+      FL.sel = null; flRenderMain();
+    } }, f ? [
       el("div", { class: "fd-title" }, el("span", { class: "big", text: f.flow }), el("span", { class: "file", text: f.file }),
         f.doc ? el("span", { class: "muted small", text: `· 说明 ${f.doc}` }) : null, el("span", { class: "spacer" }), flLive()),
       f.description ? el("div", { class: "desc", text: f.description }) : null,
