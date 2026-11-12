@@ -1,0 +1,62 @@
+# Claude Code on Google Vertex AI with a GCP service account. Alternative type for provider `claude`
+# (the claude-code harness default), in place of claude-code-oauth.
+#
+#   openshell provider profile lint   -f openshell/providers/claude-code-vertex.yaml
+#   openshell provider profile import -f openshell/providers/claude-code-vertex.yaml
+#
+# How the key stays out of the sandbox: the gateway keeps the service account's client_email and
+# private_key as refresh material (`openshell provider refresh configure ... --strategy
+# google-service-account-jwt`, done by deploy/provision.py from `service_account_json:`), signs a
+# JWT and exchanges it at oauth2.googleapis.com for an access token, renewed before it expires. The
+# sandbox only gets a placeholder in GCP_SA_ACCESS_TOKEN. The claude-code adapter runs Claude Code
+# with CLAUDE_CODE_SKIP_VERTEX_AUTH and sends the placeholder as `Authorization: Bearer` itself
+# (ANTHROPIC_CUSTOM_HEADERS); the supervisor swaps in the current token on the way to
+# aiplatform.googleapis.com. (OpenShell's GCE metadata emulator, which also serves
+# GCP_SA_ACCESS_TOKEN, is not active with the docker compute driver of 0.1.6.)
+#
+# The harness side (CLAUDE_CODE_USE_VERTEX, ANTHROPIC_VERTEX_PROJECT_ID, CLOUD_ML_REGION) is set by
+# the claude-code adapter from the worker's MYORCH_VERTEX_PROJECT / MYORCH_VERTEX_REGION.
+# Adapted from OpenShell's providers/google-cloud.yaml and google-vertex-ai.yaml examples.
+id: claude-code-vertex
+display_name: Claude Code (Google Vertex AI, service account)
+description: Claude models on Vertex AI; access token minted by the gateway from a service account key
+category: agent
+credentials:
+  - name: service_account_token
+    description: GCP access token minted by the gateway from the service account JWT
+    env_vars: [GCP_SA_ACCESS_TOKEN]
+    required: false
+    auth_style: bearer
+    header_name: authorization
+    refresh:
+      strategy: google_service_account_jwt
+      token_url: https://oauth2.googleapis.com/token
+      scopes: [https://www.googleapis.com/auth/cloud-platform]
+      refresh_before_seconds: 300
+      max_lifetime_seconds: 3600
+      material:
+        - name: client_email
+          description: Service account email address
+          required: true
+        - name: private_key
+          description: Service account RSA private key (PEM)
+          required: true
+          secret: true
+discovery:
+  credentials: [service_account_token]
+endpoints:
+  # CLOUD_ML_REGION=global uses aiplatform.googleapis.com; a region uses <region>-aiplatform.googleapis.com.
+  - host: aiplatform.googleapis.com
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+  - host: "*-aiplatform.googleapis.com"
+    port: 443
+    protocol: rest
+    access: read-write
+    enforcement: enforce
+binaries:
+  - /usr/bin/claude
+  - /usr/local/bin/claude
+inference_capable: false

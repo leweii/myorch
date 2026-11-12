@@ -23,6 +23,18 @@ providers:
     credentials:
       CLAUDE_CODE_OAUTH_TOKEN: "<from: claude setup-token>"
 
+  # Or Claude on Google Vertex AI with a GCP service account (instead of the block above). Put the
+  # service account's JSON key next to this file (deploy/secrets/, chmod 600) and set
+  # MYORCH_VERTEX_PROJECT (and MYORCH_VERTEX_REGION, default global) in deploy/.env. The gateway keeps
+  # the private key and mints the access tokens; sandboxes never see either. The service account
+  # needs roles/aiplatform.user on that project.
+  # claude:
+  #   type: claude-code-vertex
+  #   refresh:
+  #     GCP_SA_ACCESS_TOKEN:
+  #       strategy: google-service-account-jwt
+  #       service_account_json: vertex-sa.json   # in deploy/secrets/: client_email and private_key are read from it
+
   # github-blog:                   # blog; needs blog in github_profiles
   #   type: github-blog
   #   credentials:

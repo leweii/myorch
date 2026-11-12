@@ -1031,7 +1031,7 @@ collect（只读汇总历史运行的发现和处理结果，到 GitHub 只读�
 ## 15. 待定和待验证
 
 - [ ] `base` 镜像里实际有哪些 harness CLI，各自的非交互参数和输出格式
-- [ ] provider 的命名规范；是否改为统一走 `inference.local`（目前 claude-code 直连 `api.anthropic.com`，凭证由名为 `claude`、类型 `claude-code-oauth` 的 provider 注入，gateway 默认 policy 即可放行）
+- [ ] provider 的命名规范；是否改为统一走 `inference.local`（目前 claude-code 直连 `api.anthropic.com`，凭证由名为 `claude`、类型 `claude-code-oauth` 的 provider 注入，gateway 默认 policy 即可放行；用 Vertex AI 时类型是 `claude-code-vertex`，连 `aiplatform.googleapis.com`，token 由 gateway 用 service account 换取）
 - [ ] 修改已完成的步骤：步骤成功后用户追加一轮"改一下 X"，复用续轮机制。现在的做法是 `from_run`：新开一个运行，在原分支上接着改
 - [ ] 批准后 HEAD 变了时，在原 run 里重新打开审批（现在只能拒绝推送、整个 run 重来）
 - [x] 事故复盘（2026-11-03，现在是 `flows/postmortem.yaml`，独立于 learn）：从修复或 revert 提交找到引入问题的提交。然后判断本该由哪一层拦住，改进 `guide/`，并生成评测案例。回放是独立的 eval 运行（`flows/eval.yaml`），由宿主机动作 `postmortem-replay` 通过 worker 的回调启动（`engines/temporal/replay.py`），reviewer 看不到复盘运行的工作区

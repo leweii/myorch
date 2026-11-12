@@ -61,6 +61,9 @@ providers:
 - 文件不存在时，`providers` 服务什么也不做。
 - 改了 token 以后，执行 `docker compose -f deploy/compose.yaml run --rm providers` 就能生效，不用重启其他服务。
 - provider 的值全部为空时跳过，日志里写 `skipped, no value yet`，可以以后再填。
+- 改了 provider 的 `type`（比如 `claude` 从 `claude-code-oauth` 换成 `claude-code-vertex`）时，先删掉旧的再按新类型建。
+- 有 `refresh:` 的 provider，由 gateway 自己换取短期 token：`service_account_json:` 指向 secrets 目录里的 GCP service account JSON key，`client_email` 和 `private_key` 作为刷新材料交给 gateway（私钥只在 gateway 里），然后立即换一次 token。key 不对或没有权限时，`providers` 在这一步失败。
+- 用 Vertex AI 时（`claude` 的类型是 `claude-code-vertex`），还要在 `deploy/.env` 里设 `MYORCH_VERTEX_PROJECT`（和 `MYORCH_VERTEX_REGION`，默认 `global`），写法见 `deploy/providers.example.yaml`。
 - 文件写错（只填了一部分值、类型不存在）时，`providers` 以失败退出，worker 不启动。用 `docker compose -f deploy/compose.yaml logs providers` 查看原因。
 
 gateway 的状态（凭证、provider profile）在 volume `<项目名>_gateway-state` 里（默认 `myorch_gateway-state`）。

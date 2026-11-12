@@ -21,7 +21,7 @@ from myorch.core.prompt import build_interrupted_prompt, build_prompt
 from myorch.core.run import Instance, RunState, continued_session, interrupted_by_platform, key_attempt
 from myorch.core.types import NullRunContext, StepKey, StepResult
 from myorch.runner.harnesses import HarnessTask, default_harnesses
-from myorch.runner.harnesses.claude_code import ClaudeCodeAdapter
+from myorch.runner.harnesses.claude_code import VERTEX_SH, ClaudeCodeAdapter, Vertex
 from myorch.runner.openshell import SandboxStatus
 from myorch.runner.runner import StepRequest, StepRunner, sandbox_name, session_id
 from myorch.storage.base import run_dir, step_dir
@@ -305,6 +305,21 @@ def test_claude_code_resumes_on_turn_one_when_told():
     argv = a.build_command(HarnessTask(**base, resume=True))
     assert argv[argv.index("--resume") + 1] == "s" and "--session-id" not in argv
     assert a.session_file("s") == "s.jsonl" and a.session_entries("s") == ["s.jsonl", "s"]
+
+
+def test_claude_code_on_vertex_sends_the_token_placeholder_itself():
+    assert Vertex.from_env({}) is None and Vertex.from_env({"MYORCH_VERTEX_PROJECT": " "}) is None
+    v = Vertex.from_env({"MYORCH_VERTEX_PROJECT": "proj"})
+    assert v == Vertex("proj", "global")
+    task = HarnessTask(prompt="p", instruction="i", turn=1, session_id="s", session_dir="/d")
+    plain = ClaudeCodeAdapter().build_command(task)
+    argv = ClaudeCodeAdapter(vertex=Vertex("proj", "europe-west1")).build_command(task)
+    assert "CLAUDE_CODE_USE_VERTEX=1" not in plain and not any("GCP_SA_ACCESS_TOKEN" in a for a in plain)
+    head = argv[:argv.index("myorch-vertex") + 1]
+    assert {"CLAUDE_CODE_USE_VERTEX=1", "CLAUDE_CODE_SKIP_VERTEX_AUTH=1", "ANTHROPIC_VERTEX_PROJECT_ID=proj",
+            "CLOUD_ML_REGION=europe-west1"} <= set(head)
+    assert head[-3:] == ["-c", VERTEX_SH, "myorch-vertex"] and "$GCP_SA_ACCESS_TOKEN" in VERTEX_SH
+    assert argv[len(head):] == plain[2:]  # the rest (stream wrapper, claude ...) is unchanged
 
 
 def test_prompts_name_the_interruption():

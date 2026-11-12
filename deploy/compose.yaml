@@ -20,6 +20,9 @@ x-myorch: &myorch
     MYORCH_VOLUME: ${MYORCH_VOLUME:-myorch-artifacts}
     OPENSHELL_GATEWAY_ENDPOINT: http://gateway:17671
     TZ: ${TZ:-Asia/Shanghai}
+    # Claude on Vertex AI (runner/harnesses/claude_code.py); empty: api.anthropic.com.
+    MYORCH_VERTEX_PROJECT: ${MYORCH_VERTEX_PROJECT:-}
+    MYORCH_VERTEX_REGION: ${MYORCH_VERTEX_REGION:-global}
     # Who the console and the CLI act as (getpass.getuser() reads USER / LOGNAME): the host's user,
     # as in channels.yaml identities, not root. Set MYORCH_USER when compose runs without a login shell.
     USER: ${MYORCH_USER:-${USER:-}}

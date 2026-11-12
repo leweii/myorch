@@ -99,7 +99,7 @@ providers:
 
 | provider | 账号 | 放行范围 | 用于 |
 |---|---|---|---|
-| `claude` | 你的 Claude 订阅（`claude setup-token`） | Claude API | 所有 agent 步骤。名字必须是 `claude` |
+| `claude` | 你的 Claude 订阅（`claude setup-token`，类型 `claude-code-oauth`），或 GCP service account（Vertex AI，类型 `claude-code-vertex`，再设 `MYORCH_VERTEX_PROJECT`） | Claude API，或 Vertex AI 的 `aiplatform.googleapis.com` | 所有 agent 步骤。名字必须是 `claude` |
 | `github-blog` | 你本人 `leweii` | 只放行 `leweii/leweii.github.io` | blog |
 | `github-mdm` | 你本人 `leweii` | mdm 的仓库，子模块仓库只读 | mdm |
 | `github-myorch` | 你本人 `leweii` | 只放行 `leweii/myorch` | myorch |

@@ -99,7 +99,7 @@ Current providers:
 
 | provider | Account | Allowed scope | Used for |
 |---|---|---|---|
-| `claude` | Your Claude subscription (`claude setup-token`) | Claude API | All agent steps. The name must be `claude` |
+| `claude` | Your Claude subscription (`claude setup-token`, type `claude-code-oauth`), or a GCP service account (Vertex AI, type `claude-code-vertex`, plus `MYORCH_VERTEX_PROJECT`) | Claude API, or Vertex AI's `aiplatform.googleapis.com` | All agent steps. The name must be `claude` |
 | `github-blog` | You, `leweii` | Only `leweii/leweii.github.io` | blog |
 | `github-mdm` | You, `leweii` | mdm's repository; submodule repositories read-only | mdm |
 | `github-myorch` | You, `leweii` | Only `leweii/myorch` | myorch |

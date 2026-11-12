@@ -1031,7 +1031,7 @@ Finalized and implemented on 2026-11-02: richer events, the relay layer (`channe
 ## 15. Open and unverified
 
 - [ ] Which harness CLIs the `base` image actually has, and the non-interactive flags and output format of each
-- [ ] Provider naming conventions; whether to route everything through `inference.local` (claude-code currently connects directly to `api.anthropic.com`; the credentials are injected by a provider named `claude` of type `claude-code-oauth`, which the gateway's default policy allows)
+- [ ] Provider naming conventions; whether to route everything through `inference.local` (claude-code currently connects directly to `api.anthropic.com`; the credentials are injected by a provider named `claude` of type `claude-code-oauth`, which the gateway's default policy allows; on Vertex AI the type is `claude-code-vertex`, it connects to `aiplatform.googleapis.com`, and the gateway mints the token from a service account)
 - [ ] Changing a finished step: after a step succeeds, the user adds a turn like "change X", reusing the turn mechanism. The current approach is `from_run`: start a new run that continues on the original branch
 - [ ] When HEAD changed after approval, reopen the approval in the original run (currently it can only refuse to push, and the whole run starts over)
 - [x] Incident postmortem (2026-11-03, now `flows/postmortem.yaml`, separate from learn): find the commit that introduced the problem from the fix or revert commit. Then judge which layer should have caught it, improve `guide/`, and generate eval cases. The replay is a separate eval run (`flows/eval.yaml`), started by the host action `postmortem-replay` through a worker callback (`engines/temporal/replay.py`); the reviewer cannot see the postmortem run's workspace
