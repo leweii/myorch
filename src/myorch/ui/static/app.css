@@ -14,6 +14,7 @@
   --shadow-card: 0 1px 2px rgba(15,15,20,.05), 0 0 0 1px var(--line);
   --shadow-float: 0 12px 32px -8px rgba(15,15,20,.18), 0 0 0 1px var(--line);
   --scrim: rgba(15,15,20,.32);
+  --selection: rgba(37,99,235,.30);
   --c-com: #8a8a92; --c-kw: #a3367a; --c-str: #2f7a3e; --c-num: #b25a00; --c-fn: #1f5bc4; --c-attr: #2b2b30;
   --c-key: #1f5bc4; --c-meta: #8a6a2a; --c-del: #b42d1c; --c-punc: #6e6e76;
   --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
@@ -32,6 +33,7 @@
   --shadow-card: 0 0 0 1px var(--line);
   --shadow-float: 0 16px 40px -8px rgba(0,0,0,.6), 0 0 0 1px var(--line-strong);
   --scrim: rgba(0,0,0,.55);
+  --selection: rgba(91,155,255,.45);
   --c-com: #7d7d88; --c-kw: #f28fca; --c-str: #8fd99a; --c-num: #f5b676; --c-fn: #8ab8ff; --c-attr: #e4e4e7;
   --c-key: #8ab8ff; --c-meta: #d8b98a; --c-del: #ff9a8a; --c-punc: #a1a1aa;
   color-scheme: dark;
@@ -48,6 +50,7 @@
     --shadow-card: 0 0 0 1px var(--line);
     --shadow-float: 0 16px 40px -8px rgba(0,0,0,.6), 0 0 0 1px var(--line-strong);
     --scrim: rgba(0,0,0,.55);
+    --selection: rgba(91,155,255,.45);
     --c-com: #7d7d88; --c-kw: #f28fca; --c-str: #8fd99a; --c-num: #f5b676; --c-fn: #8ab8ff; --c-attr: #e4e4e7;
     --c-key: #8ab8ff; --c-meta: #d8b98a; --c-del: #ff9a8a; --c-punc: #a1a1aa;
     color-scheme: dark;
@@ -57,7 +60,8 @@
 html, body { height: 100%; margin: 0; }
 body { background: var(--surface); color: var(--text); font: 400 13.5px/1.6 var(--font); display: flex; flex-direction: column;
   font-variant-numeric: tabular-nums; -webkit-font-smoothing: antialiased; }
-::selection { background: var(--accent-soft); color: var(--text-strong); }
+/* not --accent-soft: that is the background of the user's bubbles and diff hunks, a selection there vanished */
+::selection { background: var(--selection); color: var(--text-strong); }
 a { color: var(--accent-text); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 b, strong { font-weight: 600; color: var(--text-strong); }
@@ -555,6 +559,20 @@ table.findings th { font-weight: 600; font-size: 12px; color: var(--text-faint);
 .liveout .lo-err { color: var(--danger-text); }
 .liveout .lo-meta { color: var(--text-faint); }
 .liveout .lo-sep { color: var(--text-ghost); text-align: center; margin: 6px 0; }
+.logview .liveout { border-radius: 0; }
+
+/* ---- maximise (app.js setMax): the panel pinned over the page, in place ------------------------- */
+.dbar { display: flex; align-items: center; gap: 8px; }
+.maxscrim { position: fixed; inset: 0; z-index: 50; background: var(--scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+body.has-max { overflow: hidden; }
+.maxed { position: fixed; inset: 4vh max(3vw, calc((100vw - 1600px) / 2)); z-index: 51; margin: 0 !important; display: flex; flex-direction: column;
+  background: var(--surface); border-radius: 14px; box-shadow: var(--shadow-float); overflow: hidden; animation: dlgin .16s ease-out; }
+.maxed > .vbar { padding: 10px 12px 10px 18px; }
+.maxed > .vbar .vpath { font-size: 13px; }
+.maxed > .liveout { max-height: none; flex: 1; min-height: 0; padding: 14px 18px; font-size: 12.5px; }
+.diffbox.maxed > .dbar { padding: 10px 12px 10px 18px; background: var(--well); border-bottom: 1px solid var(--line); }
+.diffbox.maxed > .dbody { flex: 1; min-height: 0; overflow: auto; padding: 4px 20px 24px; }
+.diffbox.maxed pre.diff { font-size: 12.5px; }
 
 /* knowledge registration form (流程 → 知识库) */
 .kbform { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 640px; margin: 12px 0; }

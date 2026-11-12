@@ -311,7 +311,7 @@ function renderStep() {
 // it. One stream at a time, for the shown step while it runs. The panel element survives redraws of the
 // step pane, so its lines and scroll position stay. The full log is under 「产物和日志」 when it ends.
 
-const LO = { key: "", es: null, box: null, partial: "", turn: "", stick: true };
+const LO = { key: "", es: null, box: null, body: null, partial: "", turn: "", stick: true };
 const LO_MAX_LINES = 4000;
 
 function liveOutputFor(i) {
@@ -323,8 +323,12 @@ function liveOutputFor(i) {
   if (LO.key === key && LO.box) return LO.box;
   stopLiveOutput();
   LO.key = key;
-  LO.box = el("div", { class: "liveout" }, el("div", { class: "lo-meta", text: "等待输出…" }));
-  LO.box.addEventListener("scroll", () => { LO.stick = LO.box.scrollTop + LO.box.clientHeight >= LO.box.scrollHeight - 24; });
+  LO.body = el("div", { class: "liveout" }, el("div", { class: "lo-meta", text: "等待输出…" }));
+  LO.body.addEventListener("scroll", () => { LO.stick = LO.body.scrollTop + LO.body.clientHeight >= LO.body.scrollHeight - 24; });
+  const box = el("div", { class: "viewer logview" });
+  box.append(el("div", { class: "vbar" }, el("span", { class: "vpath", text: `${i.id} · 实时输出` }), el("span", { class: "spacer" }), maxButton(box)), LO.body);
+  box.addEventListener("maxchange", () => { if (LO.stick) LO.body.scrollTop = LO.body.scrollHeight; });
+  LO.box = box;
   if (window.EventSource) {
     LO.es = new EventSource(`/channel/output?run=${encodeURIComponent(S.run)}&step=${encodeURIComponent(i.id)}`);
     LO.es.addEventListener("output", (m) => {
@@ -338,7 +342,7 @@ function liveOutputFor(i) {
 
 function stopLiveOutput() {
   if (LO.es) LO.es.close();
-  Object.assign(LO, { key: "", es: null, box: null, partial: "", turn: "", stick: true });
+  Object.assign(LO, { key: "", es: null, box: null, body: null, partial: "", turn: "", stick: true });
 }
 
 function liveLineClass(line) {
@@ -350,7 +354,7 @@ function liveLineClass(line) {
 }
 
 function appendLiveOutput(c) {
-  const box = LO.box;
+  const box = LO.body;
   if (!box) return;
   if (box.firstChild && box.firstChild.textContent === "等待输出…" && box.childElementCount === 1) box.replaceChildren();
   const turn = `${c.attempt}/${c.turn}`;
@@ -536,6 +540,42 @@ function openFull(f, st) {
   if (!dlg.open) dlg.showModal();
 }
 
+// ---- maximise: a panel fills the window where it is ------------------------------------------------
+// The element is pinned over the page (.maxed) rather than moved into a dialog, so a live log keeps
+// streaming into it and keeps its scroll position. Esc, the scrim or the button put it back.
+const MAX = { box: null, scrim: null, watch: null };
+
+function maxButton(box) {
+  return el("button", { type: "button", class: "vbtn maxbtn", text: "⤢ 最大化", title: "铺满窗口查看（Esc 还原）",
+    onclick: () => setMax(box, MAX.box !== box) });
+}
+
+function setMax(box, on) {
+  if (on && MAX.box && MAX.box !== box) setMax(MAX.box, false);
+  if (!on && MAX.box !== box) return;
+  box.classList.toggle("maxed", on);
+  const b = box.querySelector(":scope > * > .maxbtn");
+  if (b) { b.textContent = on ? "⤡ 还原" : "⤢ 最大化"; b.title = on ? "还原（Esc）" : "铺满窗口查看（Esc 还原）"; }
+  if (!MAX.scrim) {
+    MAX.scrim = el("div", { class: "maxscrim", hidden: true, onclick: () => MAX.box && setMax(MAX.box, false) });
+    document.body.append(MAX.scrim);
+  }
+  MAX.scrim.hidden = !on;
+  document.body.classList.toggle("has-max", on);
+  MAX.box = on ? box : null;
+  // the pane may be redrawn under it (step ended, run switched): drop the scrim with it
+  if (MAX.watch) { MAX.watch.disconnect(); MAX.watch = null; }
+  if (on) {
+    MAX.watch = new MutationObserver(() => { if (MAX.box && !MAX.box.isConnected) setMax(MAX.box, false); });
+    MAX.watch.observe(document.body, { childList: true, subtree: true });
+  }
+  box.dispatchEvent(new Event("maxchange"));
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape" && MAX.box && !document.querySelector("dialog[open]")) { e.preventDefault(); setMax(MAX.box, false); }
+});
+
 async function loadChanges(force = false) {
   const pane = $("#tab-changes");
   if (!S.run) return;
@@ -553,13 +593,17 @@ async function loadChanges(force = false) {
     kids.push(el("p", { class: "muted small", text: d.no_diff_reason ? "这个运行没有代码仓库，或者还没有拉取代码。" : "没有改动。" }));
   } else {
     const added = d.files.reduce((n, f) => n + f.added, 0), removed = d.files.reduce((n, f) => n + f.removed, 0);
-    kids.push(el("div", { class: "small muted", text: `${d.files.length} 个文件，+${added} −${removed}` }));
-    if (d.log) kids.push(el("pre", { class: "small", text: d.log }));
     const diffs = el("div", { class: "diffs" });
-    kids.push(el("div", { class: "filelist" }, d.files.map((f, n) => el("div", { class: "f", onclick: () => diffs.children[n]?.scrollIntoView({ block: "start" }) },
-      el("span", { text: f.path }), el("span", { class: "add", text: ` +${f.added}` }), el("span", { class: "del", text: ` −${f.removed}` })))));
     for (const f of d.files) diffs.append(renderDiff(f));
-    kids.push(diffs);
+    const box = el("div", { class: "diffbox" });
+    box.append(el("div", { class: "dbar" }, el("span", { class: "small muted", text: `${d.files.length} 个文件，+${added} −${removed}` }),
+      el("span", { class: "spacer" }), maxButton(box)),
+    el("div", { class: "dbody" },
+      d.log ? el("pre", { class: "small", text: d.log }) : null,
+      el("div", { class: "filelist" }, d.files.map((f, n) => el("div", { class: "f", onclick: () => diffs.children[n]?.scrollIntoView({ block: "start" }) },
+        el("span", { text: f.path }), el("span", { class: "add", text: ` +${f.added}` }), el("span", { class: "del", text: ` −${f.removed}` })))),
+      diffs));
+    kids.push(box);
   }
   if (d.review_round) {
     kids.push(el("h4", { text: `Review 结论（第 ${d.review_round} 轮）` }));
