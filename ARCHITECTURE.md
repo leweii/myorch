@@ -898,7 +898,7 @@ view 需要覆盖的场景：
 分两步做：
 
 1. **先做 CLI**（`cli.py`：`myorch run / list / status / logs / out / ws / approve / reject / changes / reply / cancel / resume / review` 等）：开发阶段最快，可以写进脚本，也是测试的入口。
-2. **再做本地网页**：已实现，即本地控制台 `myorch ui`（`src/myorch/ui/`）。它是 channel 层的一个适配器：读事件日志拼出运行（`ui/runview.py`），读工作区的内容，经 relay 发命令。它显示流程、对话、产物和改动，审批是按钮。控制台里没有 agent。说明见 `docs/03-architecture.md` 的「控制台怎么工作」和 `docs/05-cli.md` 的 `ui`。步骤执行中，右栏显示实时输出（2026-11-03）。
+2. **再做本地网页**：已实现，即本地控制台 `myorch ui`（`src/myorch/ui/`）。它是 channel 层的一个适配器：读事件日志拼出运行（`ui/runview.py`），读工作区的内容，经 relay 发命令。它显示流程、对话、产物和改动，审批是按钮。控制台里没有 agent。说明见 `docs/03-architecture.md` 的「控制台怎么工作」和 `docs/05-cli.md` 的 `ui`。步骤执行中，显示实时输出（2026-11-03）；控制台在 2026-11-12 改成了工作台布局（侧栏、标签页、底部面板）。
 
 之后又加了 Slack 和 Claude Code 两个适配器（§14e），它们和控制台读同一份事件、发同样的命令。
 

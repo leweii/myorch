@@ -1,5 +1,5 @@
 // Knowledge sources in the console (myorch/knowledge.py, docs/notes/2026-11-03-knowledge-mounts.md):
-// the picker under the new-run form, and the step page's record of what the agent read or queried.
+// the picker in the new-run tab, and the step page's record of what the agent read or queried.
 // Syncing is not done here: `myorch knowledge sync <name>` in a terminal. Uses el/api/$/S/fileView
 // from app.js. All source text is inserted as textContent.
 "use strict";
@@ -21,7 +21,7 @@ function knowledgeUsable(r) {
 
 async function loadKnowledgePick() {
   const box = $("#sfKnowledge");
-  if (!box || $("#newPanel").hidden) return;
+  if (!box || !S.newMode) return;
   const project = NR.project || null;  // newrun.js
   if (project !== KN.project) { KN.project = project; KN.touched = false; KN.rows = null; }
   try {
@@ -58,33 +58,25 @@ function renderKnowledgePick() {
 }
 
 // ---- the step page: what the agent read or queried ---------------------------------------------
+// d: /api/runs/<id>/steps/<iid>/knowledge, loaded by the step page (app.js renderStep) when it opens.
 
-function knowledgeUseSection(iid) {
-  const out = el("div", { class: "kuse" });
-  const btn = el("button", { class: "ghost", text: "读取知识库使用记录", onclick: async () => {
-    btn.disabled = true;
-    try {
-      const d = await api(`/api/runs/${encodeURIComponent(S.run)}/steps/${encodeURIComponent(iid)}/knowledge`);
-      const kids = [];
-      if (!d.transcripts) kids.push(el("p", { class: "muted small", text: "这个步骤没有会话记录（脚本步骤，或者还没开始）。" }));
-      else if (!d.queries.length && !d.reads.length) kids.push(el("p", { class: "muted small", text: "这个步骤没有用到知识库。" }));
-      if (d.reads.length) {
-        kids.push(el("h4", { text: `读了 ${d.reads.length} 次知识库文件` }),
-          el("div", { class: "filelist" }, d.reads.map((r) => el("div", { class: "f", title: JSON.stringify(r.input) },
-            el("span", { class: "tag", text: r.tool }), " ", (r.target || "").replace("/sandbox/workspace/knowledge/", "")))));
-      }
-      if (d.queries.length) {
-        kids.push(el("h4", { text: `查询了 ${d.queries.length} 次 MCP 知识库` }));
-        d.queries.forEach((q, n) => kids.push(fileView({ path: "result.json", title: `${n + 1}. ${q.tool} ${JSON.stringify(q.input)}`, text: q.result || "（没有返回内容）", html: null })));
-      }
-      out.replaceChildren(...kids);
-    } catch (e) { out.replaceChildren(el("div", { class: "muted small", text: e.message })); }
-    btn.disabled = false;
-  } });
-  return [el("h4", { text: "知识库" }), btn, out];
+function renderKnowledgeUse(out, d) {
+  const kids = [];
+  if (!d.transcripts) kids.push(el("p", { class: "muted small", text: "这个步骤没有会话记录（脚本步骤，或者还没开始）。" }));
+  else if (!d.queries.length && !d.reads.length) kids.push(el("p", { class: "muted small", text: "这个步骤没有用到知识库。" }));
+  if (d.reads.length) {
+    kids.push(el("div", { class: "muted small", text: `读了 ${d.reads.length} 次知识库文件` }),
+      el("div", { class: "filelist" }, d.reads.map((r) => el("div", { class: "f", title: JSON.stringify(r.input) },
+        el("span", { class: "tag", text: r.tool }), " ", (r.target || "").replace("/sandbox/workspace/knowledge/", "")))));
+  }
+  if (d.queries.length) {
+    kids.push(el("div", { class: "muted small", text: `查询了 ${d.queries.length} 次 MCP 知识库` }));
+    d.queries.forEach((q, n) => kids.push(fileView({ path: "result.json", title: `${n + 1}. ${q.tool} ${JSON.stringify(q.input)}`, text: q.result || "（没有返回内容）", html: null })));
+  }
+  out.replaceChildren(...kids);
 }
 
 // ---- wiring --------------------------------------------------------------------------------------
 
 document.addEventListener("newrun:change", (e) => { if (e.detail.project !== KN.project) loadKnowledgePick(); });  // newrun.js
-new MutationObserver(() => { if (!$("#newPanel").hidden) loadKnowledgePick(); }).observe($("#newPanel"), { attributes: true, attributeFilter: ["hidden"] });
+document.addEventListener("newrun:open", () => loadKnowledgePick());  // the new-run tab is shown

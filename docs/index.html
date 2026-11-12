@@ -2864,7 +2864,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <p>Diagram file: <a href="diagrams/en/console.html">diagrams/en/console.html</a>.</p>
 <ul>
 <li>The console is the web adapter of the channel layer. It neither calls Temporal directly nor reads the volume directly; all reads and writes go through <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/channels/relay.py"><code>channels/relay.py</code></a>. The run state is built from events by <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/ui/runview.py"><code>ui/runview.py</code></a>, and the browser receives new events through SSE (<code>/channel/events</code>). Old runs without detailed events fall back to a Temporal query for now.</li>
-<li>There is no agent in the console. The conversation in the middle is the selected run. The first message you write is the request, and its original text is written to <code>docs/external/request.md</code>. Later messages are sent unchanged to the step that is asking.</li>
+<li>There is no agent in the console. A run's tab is its conversation. The first message you write is the request, and its original text is written to <code>docs/external/request.md</code>. Later messages are sent unchanged to the step that is asking.</li>
 <li>Approvals are buttons. The approver is the local user. In compose, the container gets the host's user name (<code>USER</code>, <code>LOGNAME</code>), so it is not <code>root</code>.</li>
 <li>What the console shows comes from the run and is not trusted. The console has these protections:</li>
 <li>Host must be <code>127.0.0.1:&lt;port&gt;</code> or <code>localhost:&lt;port&gt;</code>, against DNS rebinding.</li>
@@ -3419,7 +3419,7 @@ uv run lint-imports    # checks the layer dependencies
 <li><code>--host</code> defaults to <code>127.0.0.1</code> (or the env var <code>MYORCH_UI_HOST</code>). Set it to <code>0.0.0.0</code> only in the container; compose then publishes the port on the host's <code>127.0.0.1</code>.</li>
 <li>The console accepts only requests whose Host is <code>127.0.0.1:&lt;port&gt;</code> or <code>localhost:&lt;port&gt;</code>. Others get 403 <code>bad host</code>. So the port must be the same inside and outside the container.</li>
 </ul>
-<p>There is no agent in the console. People start runs, reply and approve here. The conversation in the middle is the selected run; what you write goes to that run unchanged.</p>
+<p>There is no agent in the console. People start runs, reply and approve here. The console is a workbench: each thing opens as a tab in the editor area. A run's tab is its conversation; what you write goes to that run unchanged.</p>
 <table>
 <thead>
 <tr>
@@ -3429,24 +3429,36 @@ uv run lint-imports    # checks the layer dependencies
 </thead>
 <tbody>
 <tr>
-<td>Top bar</td>
-<td>The run dropdown: filter by project, or search by <a href="#05-cli--tags-finding-runs-by-ticket">tag</a> or run id (searches all runs, not only recent ones). Each run is followed by its tags; click one to search by it. <strong>Flows</strong> (流程): all flow definitions. <strong>+ New run</strong> (＋ 新运行). The <strong>Waiting on you</strong> list (等你处理): questions, approvals, loops that ran out of rounds, watchdog reminders. The menu in the top right corner switches the theme</td>
+<td>Activity bar (far left)</td>
+<td>Switches the side bar: <strong>Runs</strong> (运行), <strong>Waiting on you</strong> (等你处理, with a count), <strong>Flow definitions</strong> (流程定义). Clicking the current icon again folds the side bar. The theme is at the bottom</td>
+</tr>
+<tr>
+<td>Side bar: Runs</td>
+<td>A tree of project › run › steps. Filter by project, or search by <a href="#05-cli--tags-finding-runs-by-ticket">tag</a> or run id (searches all runs, not only recent ones). Click a run to open its conversation; click ▸ to show its steps: in <code>needs</code> order, ∥ marks parallel steps, a loop shows the steps of its current round, a step with replicas has one row per replica</td>
+</tr>
+<tr>
+<td>Side bar: Waiting on you</td>
+<td>Questions, approvals, loops that ran out of rounds, watchdog reminders. Click one to open that run's conversation and reply or approve there</td>
+</tr>
+<tr>
+<td>Side bar: Flow definitions</td>
+<td>All flow definitions, fragments, eval cases and knowledge sources. Click one to open it in the editor area</td>
+</tr>
+<tr>
+<td>Editor tabs</td>
+<td>A run's conversation: the request, each step's progress and digest, questions, replies, approvals, the end, with the input box below. Its header has <strong>Changes</strong> (改动), <strong>Docs</strong> (文档) and <strong>Flow definition</strong> (流程定义). A step: error, question, digest, outputs, artifacts and the last turn's log, the knowledge record, read as soon as it opens. <strong>Changes</strong>: the diff against base, the review conclusion, the risk verdict. <strong>Docs</strong>: the workspace's <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>; images (for example ticket screenshots) are shown directly. Files, a new run and flow definitions get a tab each too. A single click in the tree opens a preview tab (italic) that the next single click replaces; a double click, or typing in it, keeps it. Tabs survive a reload, and the address names the active tab (<code>#run=…&amp;step=…</code>), so it can be shared</td>
 </tr>
 <tr>
 <td>New run</td>
-<td>First pick the project, then the task (this project's flows), then fill in the fields the flow asks for and the knowledge sources. Finally write the first message and click <strong>Start</strong> (启动). The first message is written verbatim to the run's <code>docs/external/request.md</code>; <code>task</code> takes its first line</td>
+<td>A tab: first pick the project, then the task (this project's flows), then fill in the fields, the first message and the knowledge sources; the steps it will run are on the right. Rarely used fields (<code>more: true</code> in the spec) fold under <strong>More options</strong> (更多选项). ⌘+Enter or <strong>Start</strong> (启动). The first message is written verbatim to the run's <code>docs/external/request.md</code>; <code>task</code> takes its first line</td>
 </tr>
 <tr>
-<td>Left pane</td>
-<td>The run's flow. Steps are laid out in execution order by <code>needs</code>, parallel steps side by side; loops can switch between rounds. The step that is running and the steps waiting on you are highlighted</td>
+<td>Bottom panel</td>
+<td>Live output. It comes up when you open a step that is running, or click a step's <strong>Live output</strong> (实时输出). One tab per step; drag it taller, maximise or fold it. Output is kept 7 days, so finished steps can be read back; <strong>Full log</strong> (完整日志) opens the last turn's log file</td>
 </tr>
 <tr>
-<td>Middle</td>
-<td>The run's conversation: your request, each step's progress and digest, the agent's questions, your replies, approvals, the pushed branch, the end</td>
-</tr>
-<tr>
-<td>Right pane</td>
-<td><strong>Step</strong> (步骤): digest, outputs, artifacts, logs. While a step runs, <strong>Live output</strong> (实时输出) shows output as it is produced. <strong>Docs</strong> (文档): the workspace's <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>; images (for example ticket screenshots) are shown directly. <strong>Changes</strong> (改动): the diff against base, the review conclusion, the risk verdict</td>
+<td>Status bar</td>
+<td>Whether the event stream is connected, how many runs are running, how many things wait for you, a warning when the data volume cannot be read, show or fold the bottom panel</td>
 </tr>
 </tbody>
 </table>
@@ -3661,7 +3673,7 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;name&gt;
 <li>The tags of another run referenced in an input, one level only: <code>from_run</code>, or an input whose value is exactly a run id (for example <code>-i run=development-1f29e33a</code>). A comma-separated batch of runs (learn's <code>runs</code>) does not count.</li>
 </ol>
 <p>At start, 1, 2 and whatever of 3 can be read are recorded in the mandate (<code>labels</code> in <code>.myorch/mandate.json</code>) and in the <code>run_started</code> event. When listing runs, rules 2 and 3 are applied again, so old runs from before tags existed can also be found. The rules are in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/inputs.py"><code>core/inputs.py</code></a> (tags) and <code>runs.py</code> (derivation when listing).</p>
-<p>Where to search: the search box of the console's run dropdown; <code>myorch list --label</code>; <code>GET /api/runs?label=</code>, <code>GET /channel/runs?label=</code> (also accepts <code>q=</code>); the <code>label</code> parameter of the Claude Code channel's <code>runs</code> tool. The console and the endpoints also list old runs that Temporal has already deleted (finished more than 24 hours ago); their state comes from their <code>run_finished</code> event.</p>
+<p>Where to search: the search box of the console's <strong>Runs</strong> side bar; <code>myorch list --label</code>; <code>GET /api/runs?label=</code>, <code>GET /channel/runs?label=</code> (also accepts <code>q=</code>); the <code>label</code> parameter of the Claude Code channel's <code>runs</code> tool. The console and the endpoints also list old runs that Temporal has already deleted (finished more than 24 hours ago); their state comes from their <code>run_finished</code> event.</p>
 <h3 id="05-cli--status"><code>status</code></h3>
 <pre><code class="language-sh">uv run myorch status &lt;run_id&gt;
 </code></pre>
@@ -4045,7 +4057,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <li>The differences between projects live in the project pack. You do not choose them when you start a run. <code>flows.development</code> in <code>project.yaml</code> sets the review strength, what happens when the loop runs out of rounds, and whether there is a takeaway and an <code>incident</code> input. <code>prompts/&lt;slot&gt;.md</code> holds project clauses that are inserted into prompts. Whether the project has Jira or an e2e image decides the ticket input, <code>fetch-ticket</code> and the end-to-end tests. The flows use <code>if:</code> to trim themselves per project. See <a href="#07-projects--project-settings-for-the-shared-flows-flows">7. Project packs · Project settings for the shared flows</a>.</li>
 <li>From 2026-11-03 to 2026-11-10 the software development flows were copied per project (<code>ck-</code>, <code>blog-</code>, <code>mo-</code>). After that they were merged back into one set. Old run IDs still carry the old names (e.g. <code>ck-development-1f29e33a</code>). They are still found by role, and you can still continue them.</li>
 <li><code>role:</code> at the top of a flow file sets its role. myorch identifies flows by role. <code>projects:</code> can restrict a flow to certain projects. None of the current flows set it.</li>
-<li>The <strong>Flows</strong> page (流程) in the console's top bar lists all flow definitions and fragments, grouped by <code>projects:</code> (all are in the <strong>General</strong> group (通用) now). You can pick a project and inputs to preview the expanded steps.</li>
+<li>The <strong>Flow definitions</strong> side bar (流程定义) in the console lists all flow definitions and fragments, grouped by <code>projects:</code> (all are in the <strong>General</strong> group (通用) now). A flow opens in a tab, where you can pick a project and inputs to preview the expanded steps.</li>
 <li>For the syntax of flow files, see <a href="#ch-08-flow-syntax">8. Flow syntax</a>. After changing a flow, regenerate the Flow manual: <code>uv run --with markdown python docs/workflows/build.py</code>.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/06-flows.md"><code>docs/en/06-flows.md</code></a></p></section>
 <section class="chapter" id="ch-07-projects"><h1 id="07-projects--7-project-packs">7. Project packs</h1>
@@ -4930,6 +4942,7 @@ steps: [...]                      # steps and loops
   depth:
     type: select
     options: [{value: quick, label: &quot;quick: 1 reviewer&quot;}, standard]   # strings, or {value, label}
+    more: true                    # the console folds it under More options (更多选项): a rarely used input. A required one is shown as usual
   task:
     type: message                 # not drawn as a field: the first message fills it, and the original text is also saved to docs/external/request.md
     from_message: first_line      # first_line: only the first line (at most 120 characters). Default text: the whole text
@@ -5406,7 +5419,7 @@ item:                             # one step (has id) or one loop (has loop). Th
 </tr>
 </tbody>
 </table>
-<p>The <strong>Fragments</strong> group (片段) on the console's <strong>Flows</strong> page (流程) lists all fragments, their parameters and the flows that use them.</p>
+<p>The <strong>Fragments</strong> group (片段) in the console's <strong>Flow definitions</strong> side bar (流程定义) lists all fragments, their parameters and the flows that use them.</p>
 <h2 id="08-flow-syntax--per-project-trimming-if">Per-project trimming: <code>if:</code></h2>
 <p>One set of flows serves all projects. When a flow's shape varies by project, write <code>if:</code> in the flow. The expression is evaluated on <code>project</code> (the project configuration merged with its template, the same values as <code>{{project.x}}</code>). It is evaluated at submission, before fragments are expanded (<code>apply_project_if</code> in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/fragment.py"><code>core/fragment.py</code></a>), and is not visible at run time.</p>
 <p>Where <code>if:</code> can be written:</p>
@@ -5836,7 +5849,7 @@ steps:
 <li>Ask one concrete question at a time, give structured options, and do not bury it in a long report.</li>
 <li>Stop by impact, not by amount of work. Carry a local change through until it can be reviewed. When a design decision is needed, stop with one clear question.</li>
 <li>Speak only when someone must act or the result is useful. Send no message when all is well.</li>
-<li>The <strong>Waiting on you</strong> list (等你处理) in the console's top bar lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.</li>
+<li>The console's <strong>Waiting on you</strong> list (等你处理) lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.</li>
 </ul>
 <h2 id="09-principles--12-external-actions-are-idempotent">12. External actions are idempotent</h2>
 <p>A step that pushes code, writes the project pack or starts runs first checks whether the action was already done. Temporal retries failed activities, and a retry must not do the action a second time.</p>
@@ -5887,7 +5900,7 @@ steps:
 <li><strong>Run <code>expand</code> before you start a run.</strong> After changing a flow, a fragment or a project pack, run <code>uv run myorch expand &lt;flow&gt; --project &lt;p&gt;</code> to see the expanded result and catch errors before submitting.</li>
 <li><strong>Run <code>sync</code> when the project pack changes.</strong> A run uses the snapshot on the volume, not the <code>myorch-knowledge</code> directory itself. The mandate records which version was used.</li>
 <li><strong>One run, one task.</strong> Write development requests concretely with a small scope, and split large requests into several runs. Only with a small scope is the review accurate and the approval meaningful.</li>
-<li><strong>Each time you come back, check the Waiting on you list first</strong> (等你处理). Look at the console's top bar, or run <code>uv run myorch list</code>. Waiting too long fails on a timeout; questions default to 24 hours.</li>
+<li><strong>Each time you come back, check the Waiting on you list first</strong> (等你处理). Look at <strong>Waiting on you</strong> in the console's activity bar on the left (it shows a count), or run <code>uv run myorch list</code>. Waiting too long fails on a timeout; questions default to 24 hours.</li>
 <li><strong>Look at the evidence before approving.</strong> Look at the console's <strong>Changes</strong> (改动) page, or <code>myorch review &lt;run&gt;</code>: the diff, the review verdict, the risk verdict, the implementation notes. An approval is bound to a commit. If the code changes after approval, the delivery step (<code>deliver</code>) refuses to push, and the run must be redone.</li>
 <li><strong>People always open PRs and merge.</strong> myorch only pushes the approved commit to the run's own branch; it never opens a PR and never merges. When the current branch is the base branch, the delivery step refuses to push. For the blog, pushing to master puts it live.</li>
 <li><strong>Cancel when you are not satisfied.</strong> Cancel in the console or with <code>myorch cancel &lt;run&gt;</code>. myorch deletes its sandbox so it does not keep running for nothing.</li>
@@ -6018,11 +6031,11 @@ steps:
 </tr>
 <tr>
 <td>Which step a run is stuck on, the error message</td>
-<td>The step details in the console's left and right columns, or <code>uv run myorch status &lt;run&gt;</code></td>
+<td>Expand the run in the console's side bar to see its steps' states, and open one for its details; or <code>uv run myorch status &lt;run&gt;</code></td>
 </tr>
 <tr>
 <td>What an agent or script printed</td>
-<td>The log in the console's right column, or <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
+<td>A step's <strong>Log (last turn)</strong> (日志（最后一轮）) and the live output in the bottom panel, or <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
 </tr>
 <tr>
 <td>Artifacts, manifests</td>

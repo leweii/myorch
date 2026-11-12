@@ -1,7 +1,8 @@
-// Flow definitions, drawn live from flows/*.yaml (ui/flowgraph.py): a "流程" sheet opened from the
-// title block, and a preview of the steps under the new-run form. Both poll /api/flowdefs/version
-// while visible and redraw when a flow or fragment file changes. Uses el/rows/st/EXEC/api from
-// app.js (loaded first). All flow text is inserted as textContent.
+// Flow definitions, drawn live from flows/*.yaml (ui/flowgraph.py): the side bar's 流程定义 view lists
+// flows, fragments, eval cases and knowledge sources; each opens as a tab (ref {t: flow|frag|kb|ev|kbform,
+// id}). The new-run tab shows the steps it will run. Both poll /api/flowdefs/version while visible and
+// redraw when a flow or fragment file changes. Uses el/st/EXEC/api/openTab from app.js (loaded first).
+// All flow text is inserted as textContent.
 "use strict";
 
 const FL = { filter: "", groups: {}, overview: null, flow: null, frag: null, kb: null, kbForm: null, knowledge: [], cases: [], ev: null, project: null, inputs: {}, graph: null, sel: null, version: null, at: null };
@@ -15,6 +16,44 @@ function flQuery(flow, project, inputs) {
 }
 
 // ---- drawing a definition tree ---------------------------------------------------------------
+
+// Items in stage order, each stage numbered; the items of one stage side by side.
+function rows(items, cellOf) {
+  const byStage = new Map();
+  for (const it of items) { const k = it._stage; if (!byStage.has(k)) byStage.set(k, []); byStage.get(k).push(it); }
+  const keys = [...byStage.keys()].sort((a, b) => a - b);
+  return keys.map((k, n) => el("div", { class: "stage" },
+    el("div", { class: "rail" }, el("span", { class: "num", text: String(n + 1) }), n < keys.length - 1 ? el("span", { class: "line" }) : null),
+    el("div", { class: `cells${byStage.get(k).length > 1 ? " par" : ""}` }, byStage.get(k).map(cellOf),
+      byStage.get(k).length > 1 ? el("div", { class: "parnote", text: "并行" }) : null)));
+}
+
+// The compact form (the new-run tab's preview): one row per step, stage numbers, ∥ for parallel steps,
+// a loop's steps indented under it.
+function defOutline(tree, onPick) {
+  const out = [];
+  const tags = (s) => [s.model ? s.model.replace("claude-", "") : "", s.when ? "条件" : "", s.interaction === "allowed" ? "可提问" : "",
+    s.approval ? `审批 ${s.approval.count}` : "", s.fanout > 1 ? `×${s.fanout}` : ""].filter(Boolean).join(" · ");
+  const row = (s, depth, num, par) => el("div", { class: "orow", style: `--d:${depth}`, title: s.when ? `当 ${s.when}` : "", onclick: () => onPick(s) },
+    el("span", { class: "onum", text: num }), el("span", { class: "par", text: par ? "∥" : "" }),
+    el("span", { class: `ic k-${s.kind === "loop" ? "loop" : s.exec}`, text: s.kind === "loop" ? "↻" : (EXEC[s.exec] || ["·"])[0] }),
+    el("span", { class: "nm", text: s.id }), el("span", { class: "meta", text: s.kind === "loop" ? `最多 ${s.max_rounds} 轮` : tags(s) }));
+  const stages = (items, stageOf) => { const ks = [...new Set(items.map(stageOf))].sort((a, b) => a - b); const n = new Map(); for (const it of items) n.set(stageOf(it), (n.get(stageOf(it)) || 0) + 1); return { num: (it) => ks.indexOf(stageOf(it)) + 1, par: (it) => n.get(stageOf(it)) > 1 }; };
+  const byStage = (items, stageOf) => items.map((it, n) => [it, n]).sort((a, b) => stageOf(a[0]) - stageOf(b[0]) || a[1] - b[1]).map(([it]) => it);
+  const top = stages(tree, (t) => t.stage);
+  let last = null;
+  for (const t of byStage(tree, (x) => x.stage)) {
+    const num = top.num(t);
+    out.push(row(t, 0, num !== last ? String(num) : "", top.par(t)));
+    last = num;
+    if (t.kind === "loop") {
+      const ls = stages(t.steps, (s) => t.stages[s.id]);
+      for (const s of byStage(t.steps, (x) => t.stages[x.id])) out.push(row(s, 1, "", ls.par(s)));
+      if (t.reflect) out.push(row(t.reflect, 1, "", false));
+    }
+  }
+  return el("div", { class: "outline" }, out);
+}
 
 function defCell(s, onPick, selId) {
   const [icon, label] = EXEC[s.exec] || ["·", ""];
@@ -65,7 +104,7 @@ function defDetail(s) {
       ["审批", a ? `${a.count} 人${a.when ? `，当 ${a.when}` : ""}${a.require_initiator ? "，含发起人" : ""}${a.changes ? `，可退回 ${a.changes}` : ""}` : null]]));
 }
 
-// ---- the flows sheet (dialog) ------------------------------------------------------------------
+// ---- the 流程定义 view (side bar) and the flow tabs -------------------------------------------------
 
 async function flLoadOverview() {
   FL.overview = await api("/api/flowdefs");
@@ -79,58 +118,110 @@ async function flLoadGraph() {
   FL.graph = await api(flQuery(FL.flow, FL.project, FL.inputs));
 }
 
+async function flEnsure() {
+  if (!FL.projects) FL.projects = (await api("/api/projects")).filter((p) => !p.error);
+  if (!FL.project) {
+    const want = localStorage.getItem("myorch.project");
+    FL.project = FL.projects.find((p) => p.name === want)?.name || FL.projects[0]?.name || null;
+  }
+  if (!FL.overview) await flLoadOverview();
+}
+
 function flLive() {
   const t = FL.at ? `${String(FL.at.getHours()).padStart(2, "0")}:${String(FL.at.getMinutes()).padStart(2, "0")}:${String(FL.at.getSeconds()).padStart(2, "0")}` : "";
   return el("span", { class: "livetag", title: "改了 flows/ 下的文件，这里几秒内会重画" }, el("span", { class: "dot" }), `LIVE · ${FL.version || ""} · ${t}`);
 }
 
+// What the active tab shows, when it is a flow tab.
+function flCur() { const t = activeTab(); return t?.kind === "flow" ? t.ref : null; }
+const refIs = (t, id) => { const c = flCur(); return !!c && c.t === t && (id === undefined || c.id === id); };
+function flOpenRef(ref, preview = true) { openTab({ kind: "flow", ref }, { preview }); }
+
+// The side bar is shown (app.js showView).
+async function flOpenView() {
+  try { await flEnsure(); } catch (e) { $("#flowList").replaceChildren(el("div", { class: "muted small pad", text: `读取流程失败：${e.message}` })); return; }
+  flRenderList();
+}
+
+// A flow tab is shown (app.js showPane): its ref decides what the main area draws.
+async function flShowTab(ref) {
+  const pane = $("#pane-flow");
+  if (!FL.overview) pane.replaceChildren(el("p", { class: "muted small pad", text: "读取中…" }));
+  try { await flEnsure(); } catch (e) { pane.replaceChildren(el("p", { class: "muted small pad", text: `读取流程失败：${e.message}` })); return; }
+  FL.frag = ref.t === "frag" ? ref.id : null;
+  FL.kb = ref.t === "kb" ? ref.id : ref.t === "kbform" ? "+form" : null;
+  FL.ev = ref.t === "ev" ? ref.id : null;
+  if (ref.t === "kbform" && !FL.kbForm) FL.kbForm = { edit: false, name: "", project: "", kind: "dir", fields: {} };
+  if (ref.t === "flow" && (FL.flow !== ref.id || !FL.graph)) {
+    FL.flow = ref.id; FL.sel = null;
+    const f = FL.overview.flows.find((x) => x.flow === ref.id);
+    FL.inputs = f?.presets_by ? { [f.presets_by]: f.defaults?.[f.presets_by] || f.presets[0] } : {};
+    try { await flLoadGraph(); } catch (e) { FL.graph = { error: e.message }; }
+  }
+  if (!refIs(ref.t, ref.id)) return;  // another tab was opened meanwhile
+  flRenderMain();
+  if (S.view === "flows") flRenderList();
+}
+
 function flRender() {
-  const dlg = $("#flowsDlg");
+  if (S.view === "flows" && !document.body.classList.contains("side-off")) flRenderList();
+  if (flCur()) flRenderMain();
+}
+
+function flRenderList() {
   const o = FL.overview;
   if (!o) return;
+  const box = $("#flowList");
   // One compact line per flow: name and role; the description is the tooltip and in the main pane.
-  const flowItem = (f) => el("div", { class: `item fl${FL.flow === f.flow && !FL.frag && !FL.kb && !FL.ev ? " active" : ""}`,
-    title: f.description || "", "data-q": `${f.flow} ${f.role || ""} ${f.label || ""}`.toLowerCase(), onclick: () => flSelect(f.flow) },
+  const flowItem = (f) => el("div", { class: `item fl${refIs("flow", f.flow) ? " active" : ""}`,
+    title: f.description || "", "data-q": `${f.flow} ${f.role || ""} ${f.label || ""}`.toLowerCase(), onclick: () => flOpenRef({ t: "flow", id: f.flow }), ondblclick: () => flOpenRef({ t: "flow", id: f.flow }, false) },
     el("div", { class: "line1" }, el("span", { class: "id", text: f.flow }), f.error ? el("span", { class: "tag cond", text: "错误" }) : null,
       el("span", { class: "role", text: f.label || f.role || "" })));
-  const fragItem = (g) => el("div", { class: `item fl${FL.frag === g.name ? " active" : ""}`, "data-q": g.name.toLowerCase(),
-    title: `${g.description || ""}${g.used_by.length ? `\n用在 ${g.used_by.join("、")}` : "\n没有流程用到"}`,
-    onclick: () => { FL.frag = g.name; FL.kb = null; FL.ev = null; FL.sel = null; flRender(); } },
+  const fragItem = (g) => el("div", { class: `item fl${refIs("frag", g.name) ? " active" : ""}`, "data-q": g.name.toLowerCase(),
+    title: `${g.description || ""}${g.used_by.length ? `\n用在 ${g.used_by.join("、")}` : "\n没有流程用到"}`, onclick: () => flOpenRef({ t: "frag", id: g.name }) },
     el("div", { class: "line1" }, el("span", { class: `ic k-${g.kind === "loop" ? "loop" : "script"}`, text: g.kind === "loop" ? "LOOP" : "STEP" }), el("span", { class: "id", text: g.name }),
       g.used_by.length ? null : el("span", { class: "role", text: "没人用" })));
   const STATUS = { pending: "待确认", confirmed: "已收入", rejected: "不要" };
-  const caseItem = (c) => el("div", { class: `item${FL.ev === c.id ? " active" : ""}`, onclick: () => { FL.ev = c.id; FL.kb = null; FL.frag = null; FL.sel = null; flRender(); } },
+  const caseItem = (c) => el("div", { class: `item${refIs("ev", c.id) ? " active" : ""}`, onclick: () => flOpenRef({ t: "ev", id: c.id }) },
     el("div", { class: "line1" }, el("span", { class: "id", text: c.id }), el("span", { class: `tag${c.status === "pending" ? " cond" : ""}`, text: STATUS[c.status] || c.status })),
     el("div", { class: "sub", text: `${c.project} · ${c.findings.length} 条发现${c.status === "confirmed" ? ` · 收入 ${c.keep.length} 条` : ""}` }));
-  const kbItem = (k) => el("div", { class: `item${FL.kb === kbKey(k) ? " active" : ""}`, onclick: () => { FL.kb = kbKey(k); FL.frag = null; FL.ev = null; FL.sel = null; flRender(); } },
+  const kbItem = (k) => el("div", { class: `item${refIs("kb", kbKey(k)) ? " active" : ""}`, onclick: () => flOpenRef({ t: "kb", id: kbKey(k) }) },
     el("div", { class: "line1" }, el("span", { class: "ic k-script", text: { dir: "DIR", git: "GIT", mcp: "MCP" }[k.kind] || k.kind }),
       el("span", { class: "id", text: k.name }), k.problems.length ? el("span", { class: "tag cond", text: "问题" }) : null),
     el("div", { class: "sub", text: `${k.project ? `${k.project} · ` : k.level === "template" ? "模板 · " : "全局 · "}${k.kind === "mcp" ? "实时查询" : k.latest ? `同步于 ${fmtTime(k.latest.synced_at)}` : "还没有快照（发起运行时同步）"}` }));
-  const kbNew = el("div", { class: `item${FL.kb === "+form" && !FL.kbForm?.edit ? " active" : ""}`, onclick: () => kbOpenForm(null) },
+  const kbNew = el("div", { class: `item${refIs("kbform") && !FL.kbForm?.edit ? " active" : ""}`, onclick: () => kbOpenForm(null) },
     el("div", { class: "line1" }, el("span", { class: "id", text: "＋ 登记知识源" })), el("div", { class: "sub", text: "文件夹、git 仓库或 MCP 服务" }));
   const filter = el("input", { type: "search", class: "fd-filter", placeholder: "筛选：名字或角色，例如 ck、review、学习", value: FL.filter,
-    oninput: (e) => { FL.filter = e.target.value; flFilter(list); } });
+    oninput: (e) => { FL.filter = e.target.value; flFilter(box); } });
   const groups = flGroups(o.flows);
-  const active = o.flows.find((f) => f.flow === FL.flow && !FL.frag && !FL.kb && !FL.ev);
-  const list = el("nav", { class: "fd-list" }, filter,
+  const active = o.flows.find((f) => refIs("flow", f.flow));
+  const keep = box.scrollTop, typing = document.activeElement?.classList.contains("fd-filter");
+  box.replaceChildren(el("div", { class: "row fd-live" }, flLive()), filter,
     el("h5", { text: `流程 · ${o.flows.length}` }),
-    groups.map((g) => flGroup(`p:${g.key}`, g.key || "通用", g.prefix, g.flows.map(flowItem),
+    ...groups.map((g) => flGroup(`p:${g.key}`, g.key || "通用", g.prefix, g.flows.map(flowItem),
       g.key === (FL.project || "") || (active && g.flows.includes(active)), g.title)),
-    flGroup("frag", "片段", "lib/*", o.fragments.map(fragItem), !!FL.frag, "flows/lib/*.yaml：流程用 use: 引用"),
+    flGroup("frag", "片段", "lib/*", o.fragments.map(fragItem), refIs("frag"), "flows/lib/*.yaml：流程用 use: 引用"),
     el("h5", { text: `评测集 · ${FL.cases.filter((c) => c.status === "confirmed").length}/${FL.cases.length}` }), el("div", { class: "list" },
       FL.cases.length ? FL.cases.map(caseItem) : el("div", { class: "muted small", text: "还没有候选案例。在终端运行 myorch eval collect。" })),
     el("h5", { text: `知识库 · ${FL.knowledge.length}` }), el("div", { class: "list" }, kbNew, ...FL.knowledge.map(kbItem)));
+  flFilter(box);
+  box.scrollTop = keep;
+  if (typing) { filter.focus(); filter.setSelectionRange(filter.value.length, filter.value.length); }
+}
 
+function flRenderMain() {
+  const o = FL.overview, pane = $("#pane-flow");
+  if (!o) return;
   let main, side;
   const kbRow = FL.kb && FL.knowledge.find((k) => kbKey(k) === FL.kb);
   const evCase = FL.ev && FL.cases.find((c) => c.id === FL.ev);
-  if (evCase) {
-    [main, side] = caseView(evCase);
+  if (FL.ev) {
+    [main, side] = evCase ? caseView(evCase) : [el("section", { class: "fd-main" }, el("p", { class: "muted", text: "这个案例已不存在。" })), el("aside", { class: "fd-side" })];
   } else if (FL.kb === "+form" && FL.kbForm) {
     [main, side] = kbFormView(FL.kbForm);
-  } else if (kbRow) {
+  } else if (FL.kb) {
     const k = kbRow;
-    main = el("section", { class: "fd-main" },
+    main = el("section", { class: "fd-main" }, k ? [
       el("div", { class: "fd-title" }, el("span", { class: "big", text: k.name }), el("span", { class: "file", text: `myorch-knowledge/${k.file}` })),
       k.problems.length ? el("div", { class: "warn", text: k.problems.join("；") }) : null,
       kv([["类型", { dir: "本机文件夹", git: "git 仓库", mcp: "MCP 服务" }[k.kind]], ["登记在", k.level], ["位置", k.where], ["展开后", k.expanded],
@@ -144,7 +235,7 @@ function flRender() {
       k.level === "template" ? el("p", { class: "muted small", text: "登记在模板里，控制台不改模板。要改，编辑上面的文件。" })
         : el("div", { class: "evbar" },
           el("button", { text: "编辑", onclick: () => kbOpenForm(k) }),
-          el("button", { class: "ghost danger", text: "删除登记", onclick: () => kbRemove(k) })));
+          el("button", { class: "ghost danger", text: "删除登记", onclick: () => kbRemove(k) }))] : el("p", { class: "muted", text: "这个知识源已不存在。" }));
     side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "知识库只读挂进 agent 步骤：/sandbox/workspace/knowledge/<名字>/。MCP 知识库经 OpenShell provider 访问，token 只读。" }));
   } else if (FL.frag) {
     const g = o.fragments.find((x) => x.name === FL.frag);
@@ -153,7 +244,7 @@ function flRender() {
       g.error ? el("div", { class: "warn", text: g.error }) : null,
       el("div", { class: "desc", text: g.description || "（没有说明）" }),
       el("h4", { text: "参数" }), el("div", { class: "chips2" }, (g.params || []).map((p) => el("span", { class: "tag", text: p }))),
-      el("h4", { text: "用到它的流程" }), el("div", { class: "chips2" }, g.used_by.length ? g.used_by.map((f) => el("button", { class: "ghost small", text: f, onclick: () => flSelect(f) })) : el("span", { class: "muted small", text: "没有" })),
+      el("h4", { text: "用到它的流程" }), el("div", { class: "chips2" }, g.used_by.length ? g.used_by.map((f) => el("button", { class: "ghost small", text: f, onclick: () => flOpenRef({ t: "flow", id: f }, false) })) : el("span", { class: "muted small", text: "没有" })),
       el("p", { class: "muted small", text: "片段要和参数一起才能展开。点上面的流程，看它在流程里的样子。" })] : el("p", { class: "muted", text: "片段已不存在。" }));
     side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "片段由流程通过 use: 引用。" }));
   } else {
@@ -165,29 +256,21 @@ function flRender() {
     const presetSel = f?.presets_by ? el("select", { class: "small", onchange: (e) => { FL.inputs = { ...FL.inputs, [f.presets_by]: e.target.value }; flRefreshGraph(); } },
       f.presets.map((p) => el("option", { value: p, text: p }))) : null;
     if (presetSel) presetSel.value = FL.inputs[f.presets_by] || f.defaults?.[f.presets_by] || f.presets[0];
-    main = el("section", { class: "fd-main", onclick: () => { FL.sel = null; flRender(); } }, f ? [
+    main = el("section", { class: "fd-main", onclick: () => { FL.sel = null; flRenderMain(); } }, f ? [
       el("div", { class: "fd-title" }, el("span", { class: "big", text: f.flow }), el("span", { class: "file", text: f.file }),
-        f.doc ? el("span", { class: "muted small", text: `· 说明 ${f.doc}` }) : null),
+        f.doc ? el("span", { class: "muted small", text: `· 说明 ${f.doc}` }) : null, el("span", { class: "spacer" }), flLive()),
       f.description ? el("div", { class: "desc", text: f.description }) : null,
       el("div", { class: "fd-controls" },
         el("label", {}, "项目", projSel),
         presetSel ? el("label", {}, f.presets_by, presetSel) : null,
         f.uses?.length ? el("span", { class: "uses" }, "片段 ", f.uses.map((u) => el("span", { class: "tag frag", text: u.replace(/^lib\//, "").replace(/\.yaml$/, "") }))) : null),
       gr?.error ? el("div", { class: "warn", text: gr.error }) : null,
-      gr?.tree ? defTree(gr.tree, (s) => { FL.sel = s; flRender(); }, FL.sel?.id) : null] : el("p", { class: "muted", text: "选一个流程。" }));
+      gr?.tree ? defTree(gr.tree, (s) => { FL.sel = s; flRenderMain(); }, FL.sel?.id) : null] : el("p", { class: "muted", text: `没有流程 ${FL.flow || ""}。` }));
     side = el("aside", { class: "fd-side" }, defDetail(FL.sel));
   }
-  const keepScroll = dlg.querySelector(".fd-main")?.scrollTop || 0;
-  const keepList = dlg.querySelector(".fd-list")?.scrollTop || 0;
-  const typing = document.activeElement?.classList.contains("fd-filter");
-  flFilter(list);
-  dlg.replaceChildren(el("div", { class: "fd" },
-    el("div", { class: "fd-bar" }, el("span", { class: "ttl", text: "流程定义" }), el("span", { class: "muted small", text: "来自 flows/*.yaml，和 myorch run 用同一套展开" }),
-      el("span", { class: "spacer" }), flLive(), el("button", { type: "button", class: "ghost small", text: "关闭", onclick: () => dlg.close() })),
-    el("div", { class: "fd-body" }, list, main, side)));
-  const m = dlg.querySelector(".fd-main"); if (m) m.scrollTop = keepScroll;
-  list.scrollTop = keepList;
-  if (typing) { filter.focus(); filter.setSelectionRange(filter.value.length, filter.value.length); }
+  const keep = pane.querySelector(".fd-main")?.scrollTop || 0;
+  pane.replaceChildren(main, side);
+  const m = pane.querySelector(".fd-main"); if (m) m.scrollTop = keep;
 }
 
 // Flows grouped by project (the flow's `projects`; none = 通用), each group in role order. The group of
@@ -216,7 +299,7 @@ function flGroup(key, name, prefix, items, openByDefault, title) {
 }
 
 // The filter box: hide what does not match, open the groups that have matches, hide the empty ones.
-// Done in place (no redraw) so typing keeps the focus; flRender calls it again after a redraw.
+// Done in place (no redraw) so typing keeps the focus; flRenderList calls it again after a redraw.
 function flFilter(list) {
   const q = (FL.filter || "").trim().toLowerCase();
   for (const box of list.querySelectorAll(".grpbox")) {
@@ -230,13 +313,6 @@ function flFilter(list) {
   }
 }
 
-async function flSelect(flow) {
-  FL.flow = flow; FL.frag = null; FL.kb = null; FL.ev = null; FL.sel = null;
-  const f = FL.overview?.flows.find((x) => x.flow === flow);
-  FL.inputs = f?.presets_by ? { [f.presets_by]: f.defaults?.[f.presets_by] || f.presets[0] } : {};
-  await flRefreshGraph();
-}
-
 async function flRefreshGraph() {
   try { await flLoadGraph(); } catch (e) { FL.graph = { error: e.message }; }
   if (FL.sel) {  // keep the selection when the step still exists
@@ -246,18 +322,11 @@ async function flRefreshGraph() {
   flRender();
 }
 
+// Open a flow's definition in a tab (from a run's header, the new-run preview, a #flow= link).
 async function openFlows(flow) {
-  const dlg = $("#flowsDlg");
-  try {
-    if (!FL.projects) FL.projects = (await api("/api/projects")).filter((p) => !p.error);
-    if (!FL.project) {
-      const want = localStorage.getItem("myorch.project");
-      FL.project = FL.projects.find((p) => p.name === want)?.name || FL.projects[0]?.name || null;
-    }
-    await flLoadOverview();
-    if (!dlg.open) dlg.showModal();
-    await flSelect(flow || FL.flow || FL.overview.flows[0]?.flow);
-  } catch (e) { alert(`读取流程失败：${e.message}`); }
+  try { await flEnsure(); } catch (e) { alert(`读取流程失败：${e.message}`); return; }
+  const id = flow || FL.flow || FL.overview.flows[0]?.flow;
+  if (id) flOpenRef({ t: "flow", id }, false);
 }
 
 // ---- an eval case: the person keeps the findings that are real problems ----------------------------
@@ -310,7 +379,7 @@ function schedulePreview(force = false) {
 }
 async function renderPreview(force) {
   const box = $("#sfPreview");
-  if (!box || $("#newPanel").hidden) return;
+  if (!box || !S.newMode) return;
   const flow = NR.flow;
   if (!flow) return;
   const project = NR.project || null, inputs = previewInputs();
@@ -321,20 +390,18 @@ async function renderPreview(force) {
   try { g = await api(flQuery(flow, project, inputs)); } catch (e) { g = { error: e.message }; }
   FL.version = g.version || FL.version;
   const count = (g.tree || []).reduce((n, t) => n + (t.kind === "loop" ? t.steps.length : 1), 0);
-  const body = el("div", { class: "pv-body" }, g.error ? el("div", { class: "warn", text: g.error }) : defTree(g.tree, () => openFlows(flow), null));
-  const open = box.querySelector("details")?.open ?? true;
-  const det = el("details", { open },
-    el("summary", {}, el("b", { text: "这次会跑的步骤" }), g.tree ? el("span", { class: "muted small", text: ` · ${count} 步` }) : null,
-      el("span", { class: "spacer" }), el("span", { class: "livetag small" }, el("span", { class: "dot" }), "LIVE"),
-      el("button", { type: "button", class: "ghost small", text: "看流程定义", onclick: (e) => { e.preventDefault(); openFlows(flow); } })),
-    body);
-  box.replaceChildren(det);
+  box.replaceChildren(
+    el("div", { class: "pv-head" }, el("b", { text: "这次会跑的步骤" }), g.tree ? el("span", { class: "muted small", text: `${count} 步` }) : null,
+      el("span", { class: "spacer" }), el("button", { type: "button", class: "ghost small", text: "看流程定义", onclick: () => openFlows(flow) })),
+    el("div", { class: "pv-live muted small" }, el("span", { class: "livetag" }, el("span", { class: "dot" }), `实时跟 ${flow} 的定义同步`)),
+    g.error ? el("div", { class: "warn", text: g.error }) : defOutline(g.tree, () => openFlows(flow)),
+    el("div", { class: "muted small pv-foot", text: "点一步看它的定义（条件、模型、提示词）。" }));
 }
 
 // ---- live: redraw when flows/ changes --------------------------------------------------------
 
 async function flPoll() {
-  const dlgOpen = $("#flowsDlg").open, pvOpen = !$("#newPanel").hidden;
+  const dlgOpen = !!flCur() || (S.view === "flows" && !document.body.classList.contains("side-off")), pvOpen = S.newMode;
   if (!dlgOpen && !pvOpen) return;
   let v;
   try { v = (await api("/api/flowdefs/version")).version; } catch { return; }
@@ -344,10 +411,8 @@ async function flPoll() {
   if (pvOpen) schedulePreview(true);
 }
 
-$("#flowsBtn").addEventListener("click", () => openFlows(S.newMode ? NR.flow : S.detail?.flow));
-$("#flowsDlg").addEventListener("click", (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });  // backdrop
 document.addEventListener("newrun:change", () => schedulePreview());  // newrun.js: project, task or a field changed
-new MutationObserver(() => { if (!$("#newPanel").hidden) schedulePreview(true); }).observe($("#newPanel"), { attributes: true, attributeFilter: ["hidden"] });
+document.addEventListener("newrun:open", () => schedulePreview(true));
 setInterval(flPoll, FL_POLL_MS);
 
 
@@ -358,15 +423,15 @@ function kbKey(k) { return `${k.project || ""}/${k.name}`; }
 function kbOpenForm(k) {
   FL.kbForm = k ? { edit: true, name: k.name, project: k.project || "", kind: k.kind, fields: { ...(k.fields || {}) } }
     : { edit: false, name: "", project: "", kind: "dir", fields: {} };
-  FL.kb = "+form"; FL.frag = null; FL.ev = null; FL.sel = null; FL.kbCheck = null;
-  flRender();
+  FL.kbCheck = null;
+  if (refIs("kbform")) flRender(); else flOpenRef({ t: "kbform" }, false);
 }
 
 async function kbRemove(k) {
   if (!confirm(`删除知识源 ${k.name} 的登记？已有的快照保留，之后启动的运行不能再挂它。`)) return;
   try {
     await api("/api/knowledge/remove", { method: "POST", body: { name: k.name, project: k.project || null } });
-    FL.kb = null; await flLoadOverview(); flRender();
+    closeTab(tabKey({ kind: "flow", ref: { t: "kb", id: kbKey(k) } })); await flLoadOverview(); flRender();
   } catch (e) { alert(e.message); }
 }
 
@@ -417,7 +482,12 @@ function kbFormView(f) {
     try {
       const r = await api(`/api/knowledge/${op}`, { method: "POST", body: { ...b, replace: f.edit } });
       FL.kbCheck = { ...r, op };
-      if (op === "register") { await flLoadOverview(); FL.kb = `${b.project || ""}/${b.name}`; FL.kbForm = null; }
+      if (op === "register") {
+        await flLoadOverview(); FL.kbForm = null;
+        closeTab(tabKey({ kind: "flow", ref: { t: "kbform" } }));
+        flOpenRef({ t: "kb", id: `${b.project || ""}/${b.name}` }, false);
+        return;
+      }
     } catch (e) { FL.kbCheck = { error: e.message }; }
     flRender();
   };
@@ -431,7 +501,7 @@ function kbFormView(f) {
     el("div", { class: "evbar" },
       el("button", { class: "ghost", text: "检查", onclick: () => act("check") }),
       el("button", { text: f.edit ? "保存修改" : "登记", onclick: () => act("register") }),
-      el("button", { class: "ghost", text: "取消", onclick: () => { FL.kb = null; FL.kbForm = null; flRender(); } })),
+      el("button", { class: "ghost", text: "取消", onclick: () => { FL.kbForm = null; closeTab(tabKey({ kind: "flow", ref: { t: "kbform" } })); } })),
     result?.error ? el("div", { class: "warn", text: result.error }) : null,
     result && !result.error ? el("div", {},
       result.problems?.length ? el("div", { class: "warn", text: `问题：${result.problems.join("；")}` }) : el("div", { class: "ok small", text: "没有问题。" }),

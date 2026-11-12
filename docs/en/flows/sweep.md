@@ -72,7 +72,7 @@ State across runs lives in the project's shared directory `shared/<project>/swee
 
 ## Where you step in
 
-You are not needed while it runs. To read the daily report: open the run in the console and find `docs/sweep/report.md` under the **Docs** (文档) tab in the right panel; or `uv run myorch ws <run> docs/sweep/report.md`. For issues worth fixing, start a separate development run.
+You are not needed while it runs. To read the daily report: open the run in the console and find `docs/sweep/report.md` under its **Docs** (文档) tab; or `uv run myorch ws <run> docs/sweep/report.md`. For issues worth fixing, start a separate development run.
 
 ## Scheduled runs
 

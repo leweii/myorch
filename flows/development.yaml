@@ -69,11 +69,13 @@ inputs:
     if: "project.jira.url"           # replays redo a merged ticket (the CLI can still pass -i at= for any project)
     type: string
     label: 重放：基准提交（评测用）
+    more: true
     hint: 平时留空。评测重放历史工单时填 PR 的 merge-base：从这个提交开始，删掉之后的历史，不审批、不交付
   ticket_as_of:
     if: "project.jira.url"
     type: string
     label: 重放：工单截止时间（评测用）
+    more: true
     hint: 平时留空。ISO 时间，例如 2026-10-01T08:00:00Z：工单按这个时刻的样子读（描述回滚，只留之前的评论）
   ticket_comments:
     if: "project.jira.url"

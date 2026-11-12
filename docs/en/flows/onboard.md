@@ -56,7 +56,7 @@ The project pack needs at least a `project.yaml`, and `uv run myorch project syn
 |---|---|---|
 | `choose`: pick which to adopt | Reply with numbers in the conversation, or click `all` or `none` | `uv run myorch reply <run> choose "1,3"` |
 
-- Read `docs/onboard/report.md` and `proposals.md` first: the **Docs** (文档) tab in the console's right panel, or `uv run myorch ws <run> docs/onboard`.
+- Read `docs/onboard/report.md` and `proposals.md` first: the run's **Docs** (文档) tab in the console, or `uv run myorch ws <run> docs/onboard`.
 - Reply with the numbers only: `1,3`, `1、3` and `1 3` all work. `all` or `全部` adopts all of them; `none`, `无` or `0` adopts none. When a number does not exist or the reply cannot be understood, it asks again.
 - Once the reply is accepted, it starts running and cannot be changed. Without a reply for 24 hours, this step times out and fails.
 

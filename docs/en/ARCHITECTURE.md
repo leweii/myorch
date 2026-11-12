@@ -898,7 +898,7 @@ Scenarios views must cover:
 Done in two stages:
 
 1. **CLI first** (`cli.py`: `myorch run / list / status / logs / out / ws / approve / reject / changes / reply / cancel / resume / review` and others): fastest during development, scriptable, and the entry point for tests.
-2. **Then a local web page**: done, as the local console `myorch ui` (`src/myorch/ui/`). It is an adapter of the channel layer: it reads the event log to assemble runs (`ui/runview.py`), reads the workspace's content, and sends commands through relay. It shows flows, conversations, artifacts and changes; approvals are buttons. There is no agent in the console. See "How the console works" in `docs/03-architecture.md` and `ui` in `docs/05-cli.md`. While a step runs, the right column shows live output (2026-11-03).
+2. **Then a local web page**: done, as the local console `myorch ui` (`src/myorch/ui/`). It is an adapter of the channel layer: it reads the event log to assemble runs (`ui/runview.py`), reads the workspace's content, and sends commands through relay. It shows flows, conversations, artifacts and changes; approvals are buttons. There is no agent in the console. See "How the console works" in `docs/03-architecture.md` and `ui` in `docs/05-cli.md`. While a step runs, it shows live output (2026-11-03); on 2026-11-12 the console became a workbench (side bar, tabs, bottom panel).
 
 Later, two more adapters were added, Slack and Claude Code (§14e). They read the same events and send the same commands as the console.
 

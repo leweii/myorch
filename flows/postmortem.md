@@ -95,7 +95,7 @@ uv run myorch run flows/postmortem.yaml --project mdm -i bad=<引入问题的提
 
 ## 产物
 
-都在工作区的 `docs/postmortem/` 下，控制台右栏「文档」能看，也可以 `uv run myorch ws <run> docs/postmortem`。
+都在工作区的 `docs/postmortem/` 下，控制台里运行的「文档」能看，也可以 `uv run myorch ws <run> docs/postmortem`。
 
 ```
 docs/postmortem/

@@ -237,7 +237,7 @@ channel 层在 myorch 和人用的平台之间转发，自己不保存运行状�
 图的文件：[diagrams/console.html](diagrams/console.html)。
 
 - 控制台是 channel 层的 web 适配器。它不直接调用 Temporal，也不直接读 volume，所有读写都经过 `channels/relay.py`。运行状态由 `ui/runview.py` 按事件拼出，浏览器通过 SSE（`/channel/events`）收到新事件。没有详细事件的旧运行，暂时回退到 Temporal query。
-- 控制台里没有 agent。中间的对话就是选中的运行。你写的第一条消息是请求，原文写进 `docs/external/request.md`。之后的消息原样发给正在提问的步骤。
+- 控制台里没有 agent。运行的标签页就是它的对话。你写的第一条消息是请求，原文写进 `docs/external/request.md`。之后的消息原样发给正在提问的步骤。
 - 审批是按钮。审批人是本机用户。在 compose 里，容器拿到宿主机的用户名（`USER`、`LOGNAME`），所以不是 `root`。
 - 控制台显示的内容来自 run，不可信。控制台有这些防护：
   - Host 必须是 `127.0.0.1:<端口>` 或 `localhost:<端口>`，防 DNS rebinding。

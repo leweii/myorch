@@ -237,7 +237,7 @@ The channel layer relays between myorch and the platforms people use; it keeps n
 Diagram file: [diagrams/en/console.html](../diagrams/en/console.html).
 
 - The console is the web adapter of the channel layer. It neither calls Temporal directly nor reads the volume directly; all reads and writes go through `channels/relay.py`. The run state is built from events by `ui/runview.py`, and the browser receives new events through SSE (`/channel/events`). Old runs without detailed events fall back to a Temporal query for now.
-- There is no agent in the console. The conversation in the middle is the selected run. The first message you write is the request, and its original text is written to `docs/external/request.md`. Later messages are sent unchanged to the step that is asking.
+- There is no agent in the console. A run's tab is its conversation. The first message you write is the request, and its original text is written to `docs/external/request.md`. Later messages are sent unchanged to the step that is asking.
 - Approvals are buttons. The approver is the local user. In compose, the container gets the host's user name (`USER`, `LOGNAME`), so it is not `root`.
 - What the console shows comes from the run and is not trusted. The console has these protections:
   - Host must be `127.0.0.1:<port>` or `localhost:<port>`, against DNS rebinding.

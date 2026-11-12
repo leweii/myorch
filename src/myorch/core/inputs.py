@@ -6,6 +6,7 @@ An input is "string" or a spec:
 
     type      string | text | select | ticket | run | message | hidden
     label     the form label;  hint: the placeholder
+    more      the console folds it under 更多选项 (rarely used inputs); a required one stays in sight
     required  the run does not start without it
     default   goes into the flow's `defaults`
     options   select: values, or {value, label}

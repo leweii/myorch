@@ -8,7 +8,7 @@
 2. **发起前先 `expand`。** 改过流程、片段或项目包以后，运行 `uv run myorch expand <flow> --project <p>` 看展开结果，在提交前发现错误。
 3. **项目包改了就 `sync`。** run 用的是 volume 里的快照，不是 `myorch-knowledge` 目录本身。mandate 会记下用的是哪个版本。
 4. **一个 run 一件事。** development 的需求写具体，范围小，大需求拆开跑。范围小，review 才准，审批才有意义。
-5. **每次回来先看「等你处理」。** 看控制台顶栏，或者运行 `uv run myorch list`。等太久会超时失败，提问默认 24 小时。
+5. **每次回来先看「等你处理」。** 看控制台左边活动栏的「等你处理」（带数字），或者运行 `uv run myorch list`。等太久会超时失败，提问默认 24 小时。
 6. **审批前看证据。** 看控制台的「改动」页，或 `myorch review <run>`：diff、review 结论、风险判定、实现记录。批准绑定提交。批准之后代码变了，交付步骤（`deliver`）会拒绝推送，必须重跑。
 7. **开 PR 和合并永远是人做。** myorch 只把批准的提交推到运行自己的分支，从不开 PR、不合并。当前分支是 base 分支时，交付步骤拒绝推送。博客推到 master 就会上线。
 8. **不满意就取消。** 在控制台或用 `myorch cancel <run>` 取消。myorch 会删除它的 sandbox，不让它空转。

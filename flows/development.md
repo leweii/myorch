@@ -61,14 +61,14 @@ uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=<PR
 | 采纳项目包修改 | 回复编号，例如 `1,3`、`all`、`none` | `myorch reply <run> pack-choose.r<N> "1,3"`（N 是轮次） |
 | review 跑满仍有阻塞问题（`on_exhausted: ask` 的项目） | 看反思建议，回复 1、2 或 3 | `myorch reply <run> review-fix 1`（1 再跑一轮，2 接受当前结果，3 终止） |
 | 某一步重试后仍失败 | 回复 1、2、3，或者写一句提示 | `myorch reply <run> <步骤> 1`（1 新会话重来，2 跳过，3 终止。写别的文字是提示，在原会话里接着做） |
-| 需要审批 | 右栏「改动」页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」 | `myorch review <run>` 打开汇总页；`myorch approve <run> human-review`、`myorch changes <run> human-review "意见"`、`myorch reject <run> human-review` |
+| 需要审批 | 运行的「改动」标签页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」 | `myorch review <run>` 打开汇总页；`myorch approve <run> human-review`、`myorch changes <run> human-review "意见"`、`myorch reject <run> human-review` |
 | 推送以后 | — | 在 GitHub 上用推送的分支开 PR（交付说明可以直接当 PR 描述），决定是否合并。myorch 项目合并以后还要发布，见「myorch：合并以后」 |
 
 takeaway 的四步失败时不问你（`on_failed: skip`），也不阻塞后面的步骤。宿主机动作失败时也不会问。
 
 ## 产物
 
-同一个运行的所有步骤共享一个工作区。控制台右栏的「文档」能看所有文档和截图。命令行用 `myorch ws <run>` 列出文件，`myorch ws <run> docs/risk.md` 读一个文件。
+同一个运行的所有步骤共享一个工作区。控制台里运行的「文档」能看所有文档和截图。命令行用 `myorch ws <run>` 列出文件，`myorch ws <run> docs/risk.md` 读一个文件。
 
 ```
 observed/<运行 ID>/           接着改时上一次的运行、有 incident 时出问题的运行（只读）

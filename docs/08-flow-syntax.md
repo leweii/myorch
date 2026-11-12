@@ -71,6 +71,7 @@ inputs:
   depth:
     type: select
     options: [{value: quick, label: "quick：1 个 reviewer"}, standard]   # 字符串，或 {value, label}
+    more: true                    # 控制台把它收进「更多选项」：不常用的输入。必填的照常显示
   task:
     type: message                 # 不画成字段：第一条消息填进来，原文另存 docs/external/request.md
     from_message: first_line      # first_line：只取第一行（最多 120 个字）。默认 text：取全文
@@ -303,7 +304,7 @@ item:                             # 一个步骤（有 id）或一个循环（�
 | `choose-proposals` | 单步（script，可以提问）：列出 `<dir>/proposals.json` 里的建议让你挑编号，写 `<dir>/accepted.json`，输出 `accepted` | `dir`（必填）、`what`（`修改建议`） | learn、postmortem、onboard |
 | `deliver` | 单步（script，dev-git）：审批通过后推送批准的那个提交，写交付说明 `docs/delivery.md`，输出 `delivery`。分支在审批后变了、或者当前分支是 base 分支时拒绝推送。不调用平台 API，不开 PR | `approved`（必填：批准的提交） | development |
 
-控制台「流程」页的「片段」组列出所有片段、参数和用到它的流程。
+控制台侧栏「流程定义」的「片段」组列出所有片段、参数和用到它的流程。
 
 ## 按项目裁剪：`if:`
 

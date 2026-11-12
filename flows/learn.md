@@ -95,7 +95,7 @@ takeaway 当作信号，和其他证据一样核实：只采纳能推广到以�
 |---|---|---|
 | `choose`：选采纳哪几条 | 在对话里回复编号，或点 `all`、`none` | `uv run myorch reply <run> choose "1,3"` |
 
-- 问题里每条建议一行，带类型和证据条数。详细内容在 `docs/learn/proposals.md`：控制台右栏「文档」，或 `uv run myorch ws <run> docs/learn/proposals.md`。
+- 问题里每条建议一行，带类型和证据条数。详细内容在 `docs/learn/proposals.md`：控制台里运行的「文档」，或 `uv run myorch ws <run> docs/learn/proposals.md`。
 - 回复写编号就行：`1,3`、`1、3`、`1 3` 都可以。`all` 或 `全部` 是全部采纳，`none`、`无`、`0` 是一条都不要。编号不存在或看不懂时会再问一次。
 - 回复一旦被接收就开始执行，不能再改。想补采纳的，另跑一次 learn，或者手改项目包。
 - 24 小时不回复，这一步超时失败。定时发起的 learn 也停在这里等你。
@@ -118,7 +118,7 @@ takeaway 当作信号，和其他证据一样核实：只采纳能推广到以�
 
 ## 产物
 
-都在工作区的 `docs/learn/` 下，控制台右栏「文档」能看，也可以 `uv run myorch ws <run> docs/learn`。
+都在工作区的 `docs/learn/` 下，控制台里运行的「文档」能看，也可以 `uv run myorch ws <run> docs/learn`。
 
 ```
 docs/learn/

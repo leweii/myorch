@@ -1,6 +1,6 @@
 # review
 
-PR review: one round of AI review on an existing PR (including PRs written by people). All projects share this one flow. It first runs the project's checks, then has reviewers read the code; when the project has end-to-end tests, it finally tests the running application with a browser. The conclusions appear only in the local console (the **Changes** (改动) tab in the right panel) and in the workspace's `docs/review/round-1/`. Nothing is posted to GitHub. It only looks for problems: it does not change code, does not approve the PR and does not request changes, because an agent's approval does not count. Its access to GitHub is read-only.
+PR review: one round of AI review on an existing PR (including PRs written by people). All projects share this one flow. It first runs the project's checks, then has reviewers read the code; when the project has end-to-end tests, it finally tests the running application with a browser. The conclusions appear only in the local console (the run's **Changes** (改动) tab) and in the workspace's `docs/review/round-1/`. Nothing is posted to GitHub. It only looks for problems: it does not change code, does not approve the PR and does not request changes, because an agent's approval does not count. Its access to GitHub is read-only.
 
 The review loop it uses is the same fragment as in [development](development.md), [`lib/review-loop.yaml`](../../../flows/lib/review-loop.yaml), but it runs only 1 round, does not fix, and ends normally even when there are blocking problems. The project's `prompts/review.md` and `verify.md` are spliced in the same way (for example the `*-interface` checks of core-ng projects, and the blog's writing rules and accidental-publication checks).
 
@@ -34,7 +34,7 @@ There are no questions for you and no approvals. When a step fails, the run fail
 
 | When | Console | Command line |
 |---|---|---|
-| After the run ends | The **Changes** (改动) tab in the right panel shows the diff and the verified findings; the **Docs** (文档) tab shows the checks report and the end-to-end test reports and screenshots | `myorch ws <run> docs/review/round-1/summary.md` |
+| After the run ends | The **Changes** (改动) tab shows the diff and the verified findings; the **Docs** (文档) tab shows the checks report and the end-to-end test reports and screenshots | `myorch ws <run> docs/review/round-1/summary.md` |
 | After reading | — | Decide yourself on GitHub what to do with the PR |
 
 ## Artifacts

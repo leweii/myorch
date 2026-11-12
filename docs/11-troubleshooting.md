@@ -7,8 +7,8 @@
 | 想知道 | 看 |
 |---|---|
 | 服务都在不在 | `dc ps -a`：`gateway-init`、`providers`、`init` 是 `exited (0)`，其他是 `running`。更多见 [4. 安装和启动 · 每天开工](04-setup.md#43-每天开工) |
-| 运行卡在哪一步、错误信息 | 控制台左栏和右栏的步骤详情，或 `uv run myorch status <run>` |
-| agent 或脚本输出了什么 | 控制台右栏的日志，或 `uv run myorch logs <run> <instance>` |
+| 运行卡在哪一步、错误信息 | 控制台侧栏里展开运行，看步骤的状态，点开看详情；或 `uv run myorch status <run>` |
+| agent 或脚本输出了什么 | 控制台步骤的「日志（最后一轮）」和底部面板的实时输出，或 `uv run myorch logs <run> <instance>` |
 | 产物、manifest | `uv run myorch out <run> <instance>`、`uv run myorch ws <run> [path]` |
 | workflow 层面的异常（回放失败、activity 堆栈） | Temporal 界面 http://localhost:8233 → 找到运行 → History |
 | sandbox 有没有残留 | `dc exec worker openshell sandbox list`。名字的规则见 [5. 命令参考 · 常用的其他命令](05-cli.md#常用的其他命令)，例如 `dev-deve-3f2a9` |

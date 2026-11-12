@@ -1,6 +1,6 @@
 # review
 
-PR 评审：对一个已有的 PR（包括人写的）做一轮 AI review。所有项目共用这一个流程。它先跑项目的检查，再让 reviewer 看代码；项目有端到端测试时，最后用浏览器测运行中的应用。结论只在本地控制台（右栏「改动」页）和工作区的 `docs/review/round-1/` 里，不往 GitHub 上发任何东西。它只找问题：不改代码，不批准 PR，也不要求修改，因为 agent 的批准不算数。对 GitHub 只读。
+PR 评审：对一个已有的 PR（包括人写的）做一轮 AI review。所有项目共用这一个流程。它先跑项目的检查，再让 reviewer 看代码；项目有端到端测试时，最后用浏览器测运行中的应用。结论只在本地控制台（运行的「改动」标签页）和工作区的 `docs/review/round-1/` 里，不往 GitHub 上发任何东西。它只找问题：不改代码，不批准 PR，也不要求修改，因为 agent 的批准不算数。对 GitHub 只读。
 
 它用的 review 循环和 [development](development.md) 是同一个片段 [`lib/review-loop.yaml`](lib/review-loop.yaml)，但只跑 1 轮、不修复、有阻塞问题也照常结束。项目的 `prompts/review.md`、`verify.md` 同样拼进去（例如 core-ng 项目的 `*-interface` 检查、博客的写作规范和误公开检查）。
 
@@ -34,7 +34,7 @@ uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
 
 | 时机 | 控制台 | 命令行 |
 |---|---|---|
-| 运行结束后 | 右栏「改动」页看 diff 和核实过的发现，「文档」页看检查报告和端到端测试的报告、截图 | `myorch ws <run> docs/review/round-1/summary.md` |
+| 运行结束后 | 「改动」标签页看 diff 和核实过的发现，「文档」页看检查报告和端到端测试的报告、截图 | `myorch ws <run> docs/review/round-1/summary.md` |
 | 看完以后 | — | 在 GitHub 上自己决定怎么处理这个 PR |
 
 ## 产物

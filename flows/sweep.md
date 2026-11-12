@@ -72,7 +72,7 @@ uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '
 
 ## 你介入的地方
 
-运行中不需要你。看日报：控制台打开运行，右栏「文档」里的 `docs/sweep/report.md`；或者 `uv run myorch ws <run> docs/sweep/report.md`。值得修的问题，另起 development。
+运行中不需要你。看日报：控制台打开运行，「文档」里的 `docs/sweep/report.md`；或者 `uv run myorch ws <run> docs/sweep/report.md`。值得修的问题，另起 development。
 
 ## 定时跑
 

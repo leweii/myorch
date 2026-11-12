@@ -61,14 +61,14 @@ The graph above is expanded for mdm, which has the most steps. blog and myorch h
 | Adopting project pack changes | Reply with numbers, for example `1,3`, `all`, `none` | `myorch reply <run> pack-choose.r<N> "1,3"` (N is the round) |
 | Review runs out of rounds with blocking findings left (projects with `on_exhausted: ask`) | Read the reflect proposal, reply 1, 2 or 3 | `myorch reply <run> review-fix 1` (1 runs one more round, 2 accepts the current result, 3 stops) |
 | A step still fails after retries | Reply 1, 2, 3, or write a hint | `myorch reply <run> <step> 1` (1 starts over in a new session, 2 skips, 3 stops. Any other text is a hint, and the step continues in the same session) |
-| Approval is needed | Read the diff, review verdict and risk verdict on the **Changes** (改动) tab in the right pane, click **Approve** (批准), **Request changes** (要求修改) or **Reject** (驳回) | `myorch review <run>` opens the summary page; `myorch approve <run> human-review`, `myorch changes <run> human-review "comments"`, `myorch reject <run> human-review` |
+| Approval is needed | Read the diff, review verdict and risk verdict on the run's **Changes** (改动) tab, click **Approve** (批准), **Request changes** (要求修改) or **Reject** (驳回) | `myorch review <run>` opens the summary page; `myorch approve <run> human-review`, `myorch changes <run> human-review "comments"`, `myorch reject <run> human-review` |
 | After the push | — | Open a PR on GitHub from the pushed branch (the delivery note can serve as the PR description) and decide whether to merge. For the myorch project, a release follows the merge; see "myorch: after merging" |
 
 When any of the four takeaway steps fails, you are not asked (`on_failed: skip`), and later steps are not blocked. Failed host actions do not ask either.
 
 ## Artifacts
 
-All steps of a run share one workspace. The **Docs** (文档) tab in the console's right pane shows all documents and screenshots. On the command line, `myorch ws <run>` lists the files and `myorch ws <run> docs/risk.md` reads one.
+All steps of a run share one workspace. The run's **Docs** (文档) tab in the console shows all documents and screenshots. On the command line, `myorch ws <run>` lists the files and `myorch ws <run> docs/risk.md` reads one.
 
 ```
 observed/<run ID>/            the previous run when continuing; the failing run with incident (read-only)

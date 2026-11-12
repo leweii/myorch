@@ -20,5 +20,5 @@
 - 项目之间的差异在项目包里，发起时不用选：`project.yaml` 的 `flows.development` 决定 review 强度、跑满时怎么办、要不要 takeaway 和 `incident` 输入；`prompts/<slot>.md` 是拼进 prompt 的项目条款；有没有 Jira、e2e 镜像决定工单输入、`fetch-ticket` 和端到端测试。流程里用 `if:` 按项目裁剪。见 [7. 项目包 · 共用流程的项目设置](07-projects.md#共用流程的项目设置flows)。
 - 2026-11-03 到 11-10 之间，软件开发的流程按项目复制过一套（`ck-`、`blog-`、`mo-`），之后合回一套。旧运行的 ID 还带着旧名字（如 `ck-development-1f29e33a`），按角色照样能找到和接着改。
 - 流程文件开头的 `role:` 决定它是什么角色，myorch 按角色认流程。`projects:` 可以限定只给某些项目用，现有的流程都不写。
-- 控制台顶栏的「流程」页列出所有流程定义和片段，按 `projects:` 分组（现在都在「通用」组），能选项目和输入预览展开后的步骤。
+- 控制台侧栏的「流程定义」列出所有流程定义和片段，按 `projects:` 分组（现在都在「通用」组）。点一个流程在标签页里打开，能选项目和输入预览展开后的步骤。
 - 写流程的语法见 [8. 流程语法](08-flow-syntax.md)。改完流程后重新生成流程手册：`uv run --with markdown python docs/workflows/build.py`。

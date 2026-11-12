@@ -2864,7 +2864,7 @@ channels.yaml            身份对应（谁在哪个平台是哪个账号）
 <p>图的文件：<a href="../diagrams/console.html">diagrams/console.html</a>。</p>
 <ul>
 <li>控制台是 channel 层的 web 适配器。它不直接调用 Temporal，也不直接读 volume，所有读写都经过 <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/channels/relay.py"><code>channels/relay.py</code></a>。运行状态由 <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/ui/runview.py"><code>ui/runview.py</code></a> 按事件拼出，浏览器通过 SSE（<code>/channel/events</code>）收到新事件。没有详细事件的旧运行，暂时回退到 Temporal query。</li>
-<li>控制台里没有 agent。中间的对话就是选中的运行。你写的第一条消息是请求，原文写进 <code>docs/external/request.md</code>。之后的消息原样发给正在提问的步骤。</li>
+<li>控制台里没有 agent。运行的标签页就是它的对话。你写的第一条消息是请求，原文写进 <code>docs/external/request.md</code>。之后的消息原样发给正在提问的步骤。</li>
 <li>审批是按钮。审批人是本机用户。在 compose 里，容器拿到宿主机的用户名（<code>USER</code>、<code>LOGNAME</code>），所以不是 <code>root</code>。</li>
 <li>控制台显示的内容来自 run，不可信。控制台有这些防护：</li>
 <li>Host 必须是 <code>127.0.0.1:&lt;端口&gt;</code> 或 <code>localhost:&lt;端口&gt;</code>，防 DNS rebinding。</li>
@@ -3419,7 +3419,7 @@ uv run lint-imports    # 检查分层依赖
 <li><code>--host</code> 默认是 <code>127.0.0.1</code>（或环境变量 <code>MYORCH_UI_HOST</code>）。只在容器里设成 <code>0.0.0.0</code>，compose 再把端口发布到宿主机的 <code>127.0.0.1</code>。</li>
 <li>控制台只接受 Host 为 <code>127.0.0.1:&lt;端口&gt;</code> 或 <code>localhost:&lt;端口&gt;</code> 的请求，其他的返回 403 <code>bad host</code>。所以容器内外要用同一个端口。</li>
 </ul>
-<p>控制台里没有 agent。人在这里发起、回复、审批。中间的对话就是选中的运行，你写的内容原样交给这个运行。</p>
+<p>控制台里没有 agent。人在这里发起、回复、审批。控制台是一个工作台：每样东西在编辑区开成一个标签页。运行的标签页就是它的对话，你写的内容原样交给这个运行。</p>
 <table>
 <thead>
 <tr>
@@ -3429,24 +3429,36 @@ uv run lint-imports    # 检查分层依赖
 </thead>
 <tbody>
 <tr>
-<td>顶栏</td>
-<td>运行下拉框：按项目筛选，或按<a href="#05-cli--标签按工单找运行">标签</a>或 run id 搜（搜全部运行，不只最近的）。每个运行后面是它的标签，点一下就按它搜。「流程」：所有流程定义。「＋ 新运行」。「等你处理」：提问、审批、跑满的循环、watchdog 的提醒。右上角的菜单里切换主题</td>
+<td>活动栏（最左边）</td>
+<td>切换侧栏：「运行」「等你处理」（带数字）「流程定义」。再点一次当前的图标收起侧栏。最下面是主题</td>
+</tr>
+<tr>
+<td>侧栏「运行」</td>
+<td>项目 › 运行 › 步骤的树。按项目筛选，或按<a href="#05-cli--标签按工单找运行">标签</a>或 run id 搜（搜全部运行，不只最近的）。点运行打开它的对话，点 ▸ 展开它的步骤：按 <code>needs</code> 的顺序，∥ 表示并行，循环下面是当前这一轮的步骤，有副本的步骤每个副本一行</td>
+</tr>
+<tr>
+<td>侧栏「等你处理」</td>
+<td>提问、审批、跑满的循环、watchdog 的提醒。点一条打开那个运行的对话，在那里回复或审批</td>
+</tr>
+<tr>
+<td>侧栏「流程定义」</td>
+<td>所有流程定义、片段、评测集和知识库。点一个在编辑区打开</td>
+</tr>
+<tr>
+<td>编辑区的标签页</td>
+<td>运行的对话：请求、每一步的进度和摘要、提问、回复、审批、结束，底下是输入框。标题行有「改动」「文档」「流程定义」。步骤：错误、提问、摘要、outputs、产物和最后一轮的日志、知识库读取记录，打开时直接读取。「改动」：相对 base 的 diff、review 结论、风险判定。「文档」：工作区的 <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>，图片（例如工单截图）直接显示。文件、新运行、流程定义也各开一个标签页。从树里单击打开的是预览标签（斜体），下一次单击会替换它；双击或在里面输入就固定下来。标签页刷新后还在，地址对应当前标签页（<code>#run=…&amp;step=…</code>），可以直接分享</td>
 </tr>
 <tr>
 <td>新运行</td>
-<td>先选项目，再选任务（这个项目的流程），然后填流程要求的字段和知识源。最后写第一条消息，点「启动」。第一条消息原文写进运行的 <code>docs/external/request.md</code>，<code>task</code> 取第一行</td>
+<td>一个标签页：先选项目，再选任务（这个项目的流程），然后填字段、第一条消息和知识源，右边是这次会跑的步骤。不常用的字段（spec 里 <code>more: true</code>）收在「更多选项」里。⌘+Enter 或「启动」。第一条消息原文写进运行的 <code>docs/external/request.md</code>，<code>task</code> 取第一行</td>
 </tr>
 <tr>
-<td>左栏</td>
-<td>运行的流程。按 <code>needs</code> 排出执行顺序，并行的步骤并排，循环可以切换轮次。正在执行和等你处理的步骤高亮</td>
+<td>底部面板</td>
+<td>实时输出。打开一个正在执行的步骤时自动出现，也可以点步骤的「实时输出」。每个步骤一个标签，可以拉高、最大化、收起。输出保留 7 天，结束的步骤也能回看；「完整日志」打开最后一轮的日志文件</td>
 </tr>
 <tr>
-<td>中间</td>
-<td>运行的对话：你的请求、每一步的进度和摘要、agent 的提问、你的回复、审批、推送的分支、结束</td>
-</tr>
-<tr>
-<td>右栏</td>
-<td>「步骤」：摘要、outputs、产物、日志。步骤执行中显示「实时输出」，边跑边显示。「文档」：工作区的 <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>，图片（例如工单截图）直接显示。「改动」：相对 base 的 diff、review 结论、风险判定</td>
+<td>状态栏</td>
+<td>事件流是否连上、运行中的个数、等你处理的个数、读不到数据卷的提醒、显示或收起底部面板</td>
 </tr>
 </tbody>
 </table>
@@ -3661,7 +3673,7 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;名字&gt;
 <li>输入里引用的另一个运行的标签，只看一层：<code>from_run</code>，或者值正好是一个运行 id 的输入（例如 <code>-i run=development-1f29e33a</code>）。逗号分隔的一批运行（learn 的 <code>runs</code>）不算。</li>
 </ol>
 <p>发起时，1、2 和能读到的 3 记在 mandate（<code>.myorch/mandate.json</code> 的 <code>labels</code>）和 <code>run_started</code> 事件里。列运行时按 2、3 的规则再算一遍，所以加标签之前的旧运行也能搜到。规则在 <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/inputs.py"><code>core/inputs.py</code></a>（标签）和 <code>runs.py</code>（列表时的推导）。</p>
-<p>搜索的地方：控制台运行下拉框的搜索框；<code>myorch list --label</code>；<code>GET /api/runs?label=</code>、<code>GET /channel/runs?label=</code>（也认 <code>q=</code>）；Claude Code channel <code>runs</code> 工具的 <code>label</code> 参数。控制台和接口连 Temporal 已经删掉的旧运行（结束超过 24 小时）也会列出来，状态取自它的 <code>run_finished</code> 事件。</p>
+<p>搜索的地方：控制台侧栏「运行」的搜索框；<code>myorch list --label</code>；<code>GET /api/runs?label=</code>、<code>GET /channel/runs?label=</code>（也认 <code>q=</code>）；Claude Code channel <code>runs</code> 工具的 <code>label</code> 参数。控制台和接口连 Temporal 已经删掉的旧运行（结束超过 24 小时）也会列出来，状态取自它的 <code>run_finished</code> 事件。</p>
 <h3 id="05-cli--status"><code>status</code></h3>
 <pre><code class="language-sh">uv run myorch status &lt;run_id&gt;
 </code></pre>
@@ -4045,7 +4057,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # 每种配�
 <li>项目之间的差异在项目包里，发起时不用选：<code>project.yaml</code> 的 <code>flows.development</code> 决定 review 强度、跑满时怎么办、要不要 takeaway 和 <code>incident</code> 输入；<code>prompts/&lt;slot&gt;.md</code> 是拼进 prompt 的项目条款；有没有 Jira、e2e 镜像决定工单输入、<code>fetch-ticket</code> 和端到端测试。流程里用 <code>if:</code> 按项目裁剪。见 <a href="#07-projects--共用流程的项目设置flows">7. 项目包 · 共用流程的项目设置</a>。</li>
 <li>2026-11-03 到 11-10 之间，软件开发的流程按项目复制过一套（<code>ck-</code>、<code>blog-</code>、<code>mo-</code>），之后合回一套。旧运行的 ID 还带着旧名字（如 <code>ck-development-1f29e33a</code>），按角色照样能找到和接着改。</li>
 <li>流程文件开头的 <code>role:</code> 决定它是什么角色，myorch 按角色认流程。<code>projects:</code> 可以限定只给某些项目用，现有的流程都不写。</li>
-<li>控制台顶栏的「流程」页列出所有流程定义和片段，按 <code>projects:</code> 分组（现在都在「通用」组），能选项目和输入预览展开后的步骤。</li>
+<li>控制台侧栏的「流程定义」列出所有流程定义和片段，按 <code>projects:</code> 分组（现在都在「通用」组）。点一个流程在标签页里打开，能选项目和输入预览展开后的步骤。</li>
 <li>写流程的语法见 <a href="#ch-08-flow-syntax">8. 流程语法</a>。改完流程后重新生成流程手册：<code>uv run --with markdown python docs/workflows/build.py</code>。</li>
 </ul><p class="src">本页源文件： <a href="https://github.com/leweii/myorch/blob/main/docs/06-flows.md"><code>docs/06-flows.md</code></a></p></section>
 <section class="chapter" id="ch-07-projects"><h1 id="07-projects--7-项目包">7. 项目包</h1>
@@ -4930,6 +4942,7 @@ steps: [...]                      # 步骤和循环
   depth:
     type: select
     options: [{value: quick, label: &quot;quick：1 个 reviewer&quot;}, standard]   # 字符串，或 {value, label}
+    more: true                    # 控制台把它收进「更多选项」：不常用的输入。必填的照常显示
   task:
     type: message                 # 不画成字段：第一条消息填进来，原文另存 docs/external/request.md
     from_message: first_line      # first_line：只取第一行（最多 120 个字）。默认 text：取全文
@@ -5406,7 +5419,7 @@ item:                             # 一个步骤（有 id）或一个循环（�
 </tr>
 </tbody>
 </table>
-<p>控制台「流程」页的「片段」组列出所有片段、参数和用到它的流程。</p>
+<p>控制台侧栏「流程定义」的「片段」组列出所有片段、参数和用到它的流程。</p>
 <h2 id="08-flow-syntax--按项目裁剪if">按项目裁剪：<code>if:</code></h2>
 <p>一套流程给所有项目。流程的形状按项目变化时，在 flow 里写 <code>if:</code>，表达式对 <code>project</code>（合并模板后的项目配置，<code>{{project.x}}</code> 的那份值）求值。它在提交时、展开片段之前求值（<a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/fragment.py"><code>core/fragment.py</code></a> 的 <code>apply_project_if</code>），运行时看不到。</p>
 <p>能写 <code>if:</code> 的地方：</p>
@@ -5836,7 +5849,7 @@ steps:
 <li>一次只问一个具体问题，给结构化的选项，不埋在长报告里。</li>
 <li>按影响停下，不按工作量停下。局部改动做到可以 review 为止。需要设计决策时，带着一个清楚的问题停下。</li>
 <li>只在有人必须行动、或结果能用上时才说话。一切正常时不发消息。</li>
-<li>控制台顶栏的「等你处理」只列需要你的事：提问、审批、跑满的循环、Watchdog 的告警。</li>
+<li>控制台的「等你处理」只列需要你的事：提问、审批、跑满的循环、Watchdog 的告警。</li>
 </ul>
 <h2 id="09-principles--12-对外动作幂等">12. 对外动作幂等</h2>
 <p>会推代码、写项目包、起运行的步骤，动作前先检查是否已经做过。Temporal 会重试失败的 activity，重试不能做第二次。</p>
@@ -5887,7 +5900,7 @@ steps:
 <li><strong>发起前先 <code>expand</code>。</strong> 改过流程、片段或项目包以后，运行 <code>uv run myorch expand &lt;flow&gt; --project &lt;p&gt;</code> 看展开结果，在提交前发现错误。</li>
 <li><strong>项目包改了就 <code>sync</code>。</strong> run 用的是 volume 里的快照，不是 <code>myorch-knowledge</code> 目录本身。mandate 会记下用的是哪个版本。</li>
 <li><strong>一个 run 一件事。</strong> development 的需求写具体，范围小，大需求拆开跑。范围小，review 才准，审批才有意义。</li>
-<li><strong>每次回来先看「等你处理」。</strong> 看控制台顶栏，或者运行 <code>uv run myorch list</code>。等太久会超时失败，提问默认 24 小时。</li>
+<li><strong>每次回来先看「等你处理」。</strong> 看控制台左边活动栏的「等你处理」（带数字），或者运行 <code>uv run myorch list</code>。等太久会超时失败，提问默认 24 小时。</li>
 <li><strong>审批前看证据。</strong> 看控制台的「改动」页，或 <code>myorch review &lt;run&gt;</code>：diff、review 结论、风险判定、实现记录。批准绑定提交。批准之后代码变了，交付步骤（<code>deliver</code>）会拒绝推送，必须重跑。</li>
 <li><strong>开 PR 和合并永远是人做。</strong> myorch 只把批准的提交推到运行自己的分支，从不开 PR、不合并。当前分支是 base 分支时，交付步骤拒绝推送。博客推到 master 就会上线。</li>
 <li><strong>不满意就取消。</strong> 在控制台或用 <code>myorch cancel &lt;run&gt;</code> 取消。myorch 会删除它的 sandbox，不让它空转。</li>
@@ -6018,11 +6031,11 @@ steps:
 </tr>
 <tr>
 <td>运行卡在哪一步、错误信息</td>
-<td>控制台左栏和右栏的步骤详情，或 <code>uv run myorch status &lt;run&gt;</code></td>
+<td>控制台侧栏里展开运行，看步骤的状态，点开看详情；或 <code>uv run myorch status &lt;run&gt;</code></td>
 </tr>
 <tr>
 <td>agent 或脚本输出了什么</td>
-<td>控制台右栏的日志，或 <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
+<td>控制台步骤的「日志（最后一轮）」和底部面板的实时输出，或 <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
 </tr>
 <tr>
 <td>产物、manifest</td>

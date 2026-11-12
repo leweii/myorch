@@ -1,8 +1,8 @@
 """The console's web server: the page and its JSON API.
 
-There is no agent in the console: the middle of the page is the selected run's conversation, and
-what the user writes goes verbatim to the run (the first message is the request; later ones are
-replies to the step that asked). Approvals are buttons.
+There is no agent in the console: it is a workbench where each run opens as a tab holding its
+conversation, and what the user writes goes verbatim to the run (the first message is the request;
+later ones are replies to the step that asked). Approvals are buttons.
 
 Local only (127.0.0.1). Defences, since run content is untrusted and the page can approve:
 - Host must be localhost/127.0.0.1 (DNS rebinding).

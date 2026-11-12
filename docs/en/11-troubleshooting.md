@@ -7,8 +7,8 @@
 | To find out | Look at |
 |---|---|
 | Whether all services are up | `dc ps -a`: `gateway-init`, `providers` and `init` are `exited (0)`, the others are `running`. More in [4. Setup · Starting the day](04-setup.md#43-starting-the-day) |
-| Which step a run is stuck on, the error message | The step details in the console's left and right columns, or `uv run myorch status <run>` |
-| What an agent or script printed | The log in the console's right column, or `uv run myorch logs <run> <instance>` |
+| Which step a run is stuck on, the error message | Expand the run in the console's side bar to see its steps' states, and open one for its details; or `uv run myorch status <run>` |
+| What an agent or script printed | A step's **Log (last turn)** (日志（最后一轮）) and the live output in the bottom panel, or `uv run myorch logs <run> <instance>` |
 | Artifacts, manifests | `uv run myorch out <run> <instance>`, `uv run myorch ws <run> [path]` |
 | Problems at the workflow level (replay failures, activity stack traces) | The Temporal UI at http://localhost:8233 → find the run → History |
 | Whether sandboxes were left behind | `dc exec worker openshell sandbox list`. The naming rule is in [5. CLI reference · Other common commands](05-cli.md#other-common-commands), e.g. `dev-deve-3f2a9` |

@@ -1,7 +1,8 @@
-// The new-run form. Nothing here knows a flow, a role or an input by name: the project decides the
-// tasks (/api/flows: the project's flows, with label, hint and order from core/inputs.py), the task
-// decides the fields (its input specs), and the specs decide how a field looks, what is required and
-// how "continue on this branch" works. Uses el/api/$/S from app.js.
+// The new-run form, a tab of its own. Nothing here knows a flow, a role or an input by name: the project
+// decides the tasks (/api/flows: the project's flows, with label, hint and order from core/inputs.py),
+// the task decides the fields (its input specs), and the specs decide how a field looks, what is
+// required, what folds under 更多选项 (`more`) and how "continue on this branch" works.
+// Uses el/api/$/S/openTab/closeTab from app.js.
 //
 // State is NR, not the DOM. Every change sends a "newrun:change" event (detail: NR) that the
 // knowledge picker (knowledge.js) and the step preview (flows.js) listen to.
@@ -50,7 +51,7 @@ const FIELD_TYPES = {
       ...runChoices(ctx.project, spec.role || ctx.flow.role).map((r) => el("option", { value: r.run_id,
         text: fillTemplate(spec.option || "{run_id} · {status}", runFields(r)) }))),
   },
-  message: null,  // the first message below the form
+  message: null,  // the first message: the form's own text box
   hidden: null,   // filled by the server (e.g. learn's runs)
 };
 
@@ -72,36 +73,34 @@ function changed() { document.dispatchEvent(new CustomEvent("newrun:change", { d
 
 // ---- the form -------------------------------------------------------------------------------------
 
-function setNewMode(on) {
-  S.newMode = on;
-  $("#newPanel").hidden = !on;
-  $("#newRunBtn").classList.toggle("on", on);
-  if (on) {
-    $("#messages").replaceChildren(el("div", { class: "msg note", text: NR.continued?.note || "选好项目和任务，在下面写第一条消息。第一条消息就是这次运行的请求，原文会完整交给流程。" }));
-    $("#approveBar").hidden = true; $("#cancelRunBtn").hidden = true; $("#resumeRunBtn").hidden = true; $("#continueRunBtn").hidden = true;
-    $("#target").textContent = "新运行的第一条消息"; $("#target").className = "target mode-new";
-    $("#input").disabled = false; $("#sendBtn").hidden = false; $("#sendBtn").textContent = "启动";
-    $("#composerHint").textContent = "⌘+Enter 启动，Enter 换行。";
-    renderStartInputs();
-    $("#input").focus();
-  } else {
-    $("#sendBtn").textContent = "发送";
-  }
-}
-
-// Open the form. preset: {project, flow, values, continued}; without one, the last project and its last task.
+// Open the form. preset: {project, flow, values, continued}; without one, the open form as it was, or
+// the last project and its last task.
 async function openNewRun(preset = {}) {
   await loadCatalog();
+  const fresh = preset.project || preset.flow || preset.continued || !TABS.list.some((t) => t.kind === "new");
+  if (fresh) {
+    const names = S.projects.filter((p) => !p.error).map((p) => p.name);
+    NR.project = [preset.project, localStorage.getItem("myorch.project"), S.detail?.project].find((n) => n && names.includes(n)) || names[0] || "";
+    NR.flow = preset.flow || "";
+    NR.values = { ...(preset.values || {}) };
+    NR.continued = preset.continued || null;
+    $("#nrMessage").value = "";
+    $("#nrError").textContent = "";
+  }
+  openTab({ kind: "new" });
+}
+
+// Drawn when the tab is shown (app.js showPane).
+function renderNewPane() {
+  if (!S.flows) { loadCatalog().then(renderNewPane).catch((e) => { $("#nrError").textContent = e.message; }); return; }
   const names = S.projects.filter((p) => !p.error).map((p) => p.name);
   $("#sfProject").replaceChildren(...names.map((n) => el("option", { value: n, text: `${n} · ${S.projects.find((x) => x.name === n).repo}` })));
-  NR.project = [preset.project, localStorage.getItem("myorch.project"), S.detail?.project].find((n) => n && names.includes(n)) || names[0] || "";
-  NR.flow = preset.flow || "";
-  NR.values = { ...(preset.values || {}) };
-  NR.continued = preset.continued || null;
+  if (!names.includes(NR.project)) NR.project = names[0] || "";
   $("#sfProject").value = NR.project;
-  $("#input").value = "";
-  $("#sendError").textContent = "";
-  setNewMode(true);
+  $("#nrNote").textContent = NR.continued?.note || "";
+  renderStartInputs();
+  document.dispatchEvent(new CustomEvent("newrun:open", { detail: NR }));
+  $("#nrMessage").focus();
 }
 
 function renderStartInputs() {
@@ -110,7 +109,7 @@ function renderStartInputs() {
   const f = flows.find((x) => x.flow === want) || flows.find((x) => x.default) || flows[0];
   if (!f) {
     $("#sfTasks").replaceChildren(el("div", { class: "warn small", text: `项目 ${project} 没有可以用的流程。` }));
-    $("#sfInputs").replaceChildren(); $("#sfFlowDesc").textContent = ""; NR.flow = ""; changed(); return;
+    $("#sfInputs").replaceChildren(); $("#sfMoreInputs").replaceChildren(); $("#sfMore").hidden = true; $("#sfFlowDesc").textContent = ""; NR.flow = ""; changed(); return;
   }
   NR.flow = f.flow;
   $("#sfTasks").replaceChildren(...flows.map((x) => el("button", { type: "button", role: "tab", "aria-selected": String(x.flow === f.flow), class: `task${x.flow === f.flow ? " on" : ""}`, title: x.flow,
@@ -119,7 +118,7 @@ function renderStartInputs() {
 
   const projectRequired = new Set(S.projects.find((p) => p.name === project)?.required_inputs || []);
   const ctx = { project, flow: f };
-  const fields = [];
+  const fields = [], more = [];
   for (const [name, spec] of specsOf(f)) {
     const type = FIELD_TYPES[spec.type] === undefined ? FIELD_TYPES.string : FIELD_TYPES[spec.type];
     if (!type) continue;
@@ -129,14 +128,17 @@ function renderStartInputs() {
     NR.values[name] = field.value;  // a select keeps only a value it has
     const must = !!spec.required || projectRequired.has(name);
     if (must) field.required = true;
-    fields.push(el("label", { class: `field f-${spec.type}` },
+    (spec.more && !must ? more : fields).push(el("label", { class: `field f-${spec.type}` },
       el("span", { class: "fl" }, el("span", { text: spec.label || name }), must ? el("span", { class: "req", text: "必填" }) : null),
       type.wrap ? type.wrap(field, spec) : field));
   }
   $("#sfInputs").replaceChildren(...fields);
+  $("#sfMoreInputs").replaceChildren(...more);
+  $("#sfMore").hidden = !more.length;
+  if (more.some((l) => l.querySelector("[name]")?.value)) $("#sfMore").open = true;  // a value set there stays in sight
   const msg = messageSpec(f);
-  $("#input").placeholder = NR.continued?.hint
-    || (msg ? `${msg.label || "补充说明"}${msg.required ? "（必填）" : "（可选）"}：${msg.hint || ""}` : "补充说明（可选）。");
+  $("#nrMsgLabel").textContent = `${msg?.label || "补充说明"}${msg?.required ? "（必填）" : "（可选）"}`;
+  $("#nrMessage").placeholder = NR.continued?.hint || msg?.hint || "要改什么，越具体越好。";
   changed();
 }
 
@@ -163,22 +165,25 @@ function formProblem(f, text) {
   return "";
 }
 
-async function startRun(text) {
-  const f = currentFlow();
+async function startRun() {
+  const f = currentFlow(), text = $("#nrMessage").value;
   if (!f) return;
+  $("#nrError").textContent = "";
   const problem = formProblem(f, text);
-  if (problem) { $("#sendError").textContent = problem; return; }
-  $("#sendBtn").disabled = true;
+  if (problem) { $("#nrError").textContent = problem; return; }
+  $("#nrStart").disabled = true;
   try {
     const knowledge = typeof knowledgeSelection === "function" ? knowledgeSelection() : null;  // knowledge.js
     const r = await api("/api/runs", { method: "POST", body: { flow: f.flow, project: NR.project, inputs: formValues(), message: text, ...(knowledge ? { knowledge } : {}) } });
     localStorage.setItem("myorch.flow", f.flow);
     if (NR.project) localStorage.setItem("myorch.project", NR.project);
     NR.continued = null;
-    $("#input").value = "";
-    selectRun(r.run_id);
-  } catch (e) { $("#sendError").textContent = `没有启动：${e.message}`; }
-  $("#sendBtn").disabled = false;
+    $("#nrMessage").value = "";
+    closeTab("new");
+    openTab({ kind: "run", run: r.run_id });
+    loadRuns();
+  } catch (e) { $("#nrError").textContent = `没有启动：${e.message}`; }
+  $("#nrStart").disabled = false;
 }
 
 // ---- continue: a new run that starts from a finished one (a run input with `continue`) ----------
@@ -213,9 +218,13 @@ async function continueRun() {
 // ---- wiring -----------------------------------------------------------------------------------------
 
 $("#newRunBtn").addEventListener("click", () => openNewRun().catch((e) => alert(e.message)));
-$("#sfProject").addEventListener("change", (e) => { NR.project = e.target.value; NR.flow = ""; NR.continued = null; renderStartInputs(); });
+$("#sfProject").addEventListener("change", (e) => { NR.project = e.target.value; NR.flow = ""; NR.continued = null; $("#nrNote").textContent = ""; renderStartInputs(); });
 const onField = (e) => { if (e.target.name) { NR.values[e.target.name] = e.target.value; changed(); } };
-$("#sfInputs").addEventListener("input", onField);
-$("#sfInputs").addEventListener("change", onField);
+for (const box of ["#sfInputs", "#sfMoreInputs"]) { $(box).addEventListener("input", onField); $(box).addEventListener("change", onField); }
+$("#nrStart").addEventListener("click", () => startRun());
+$("#nrCancel").addEventListener("click", () => closeTab("new"));
+$("#nrMessage").addEventListener("keydown", (e) => {
+  if (!e.isComposing && e.key === "Enter" && (e.metaKey || e.ctrlKey)) { e.preventDefault(); startRun(); }
+});
 // The continue button and the "continue" texts need the flows: load them once, then redraw the run.
-loadCatalog().then(() => { if (S.run && !S.newMode) { S.convKey = null; loadDetail(); } }).catch(() => {});
+loadCatalog().then(() => { if (S.run) { S.convKey = null; loadDetail(); } }).catch(() => {});

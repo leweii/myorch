@@ -95,7 +95,7 @@ The only difference is which files are read: the proposals are in `docs/postmort
 
 ## Artifacts
 
-All under `docs/postmortem/` in the workspace. The **Docs** (文档) tab in the console's right panel shows them, or use `uv run myorch ws <run> docs/postmortem`.
+All under `docs/postmortem/` in the workspace. The run's **Docs** (文档) tab in the console shows them, or use `uv run myorch ws <run> docs/postmortem`.
 
 ```
 docs/postmortem/

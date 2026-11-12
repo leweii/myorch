@@ -95,7 +95,7 @@ Each proposal's change is written as an exact replacement (`edits`: `old` copied
 |---|---|---|
 | `choose`: pick which to adopt | Reply with numbers in the conversation, or click `all` or `none` | `uv run myorch reply <run> choose "1,3"` |
 
-- The question has one line per proposal, with its type and the number of pieces of evidence. The details are in `docs/learn/proposals.md`: the **Docs** (文档) tab in the console's right panel, or `uv run myorch ws <run> docs/learn/proposals.md`.
+- The question has one line per proposal, with its type and the number of pieces of evidence. The details are in `docs/learn/proposals.md`: the run's **Docs** (文档) tab in the console, or `uv run myorch ws <run> docs/learn/proposals.md`.
 - Reply with the numbers only: `1,3`, `1、3` and `1 3` all work. `all` or `全部` adopts all of them; `none`, `无` or `0` adopts none. When a number does not exist or the reply cannot be understood, it asks again.
 - Once the reply is accepted, it starts running and cannot be changed. To adopt more, run learn again or edit the project pack by hand.
 - Without a reply for 24 hours, this step times out and fails. A scheduled learn also stops here and waits for you.
@@ -118,7 +118,7 @@ Each proposal's change is written as an exact replacement (`edits`: `old` copied
 
 ## Artifacts
 
-All under `docs/learn/` in the workspace. The **Docs** tab in the console's right panel shows them, or use `uv run myorch ws <run> docs/learn`.
+All under `docs/learn/` in the workspace. The run's **Docs** tab in the console shows them, or use `uv run myorch ws <run> docs/learn`.
 
 ```
 docs/learn/

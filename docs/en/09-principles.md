@@ -124,7 +124,7 @@ Every message, every question and every interface element costs people's attenti
 - Ask one concrete question at a time, give structured options, and do not bury it in a long report.
 - Stop by impact, not by amount of work. Carry a local change through until it can be reviewed. When a design decision is needed, stop with one clear question.
 - Speak only when someone must act or the result is useful. Send no message when all is well.
-- The **Waiting on you** list (等你处理) in the console's top bar lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.
+- The console's **Waiting on you** list (等你处理) lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.
 
 ## 12. External actions are idempotent
 

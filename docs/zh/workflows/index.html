@@ -619,7 +619,7 @@ uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=&lt
 </tr>
 <tr>
 <td>需要审批</td>
-<td>右栏「改动」页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」</td>
+<td>运行的「改动」标签页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」</td>
 <td><code>myorch review &lt;run&gt;</code> 打开汇总页；<code>myorch approve &lt;run&gt; human-review</code>、<code>myorch changes &lt;run&gt; human-review "意见"</code>、<code>myorch reject &lt;run&gt; human-review</code></td>
 </tr>
 <tr>
@@ -631,7 +631,7 @@ uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=&lt
 </table>
 <p>takeaway 的四步失败时不问你（<code>on_failed: skip</code>），也不阻塞后面的步骤。宿主机动作失败时也不会问。</p>
 <h2 id="development--产物">产物</h2>
-<p>同一个运行的所有步骤共享一个工作区。控制台右栏的「文档」能看所有文档和截图。命令行用 <code>myorch ws &lt;run&gt;</code> 列出文件，<code>myorch ws &lt;run&gt; docs/risk.md</code> 读一个文件。</p>
+<p>同一个运行的所有步骤共享一个工作区。控制台里运行的「文档」能看所有文档和截图。命令行用 <code>myorch ws &lt;run&gt;</code> 列出文件，<code>myorch ws &lt;run&gt; docs/risk.md</code> 读一个文件。</p>
 <pre><code>observed/&lt;运行 ID&gt;/           接着改时上一次的运行、有 incident 时出问题的运行（只读）
 docs/
 ├── external/
@@ -889,7 +889,7 @@ repo/myorch/&lt;日期&gt;-&lt;运行 ID&gt;/  task.md、takeaway.md（提交在
 <li>改了 <a class="code" href="https://github.com/leweii/myorch/tree/main/images/claude-code"><code>images/claude-code/</code></a> 时，<code>update.sh</code> 一起重建 sandbox 的基础镜像 <code>openshell-claude-code</code>。各项目的开发镜像都基于它，要用上新的基础镜像，还要重建项目的镜像（项目包的 <code>image/build.sh</code>）。改了 <a class="code" href="https://github.com/leweii/myorch/blob/main/pyproject.toml"><code>pyproject.toml</code></a> 或 <a class="code" href="https://github.com/leweii/myorch/blob/main/uv.lock"><code>uv.lock</code></a> 时，重建 myorch 项目的开发镜像（在 myorch-knowledge 目录下运行 <code>myorch/image/build.sh ../myorch</code>），以后 myorch 项目的 development 运行才用上新依赖。</li>
 <li>改了 <a class="code" href="https://github.com/leweii/myorch/tree/main/tools"><code>tools/</code></a>（sandbox 里的辅助命令 <code>myorch-checks</code>、<code>myorch-ask</code> 等）时，它们由 <code>myorch init</code> 装进 volume（compose 里是 <code>init</code> 服务）。要确认重新运行过 <code>myorch init</code>，否则 sandbox 里还是旧版本。</li>
 </ol><p class="src">本页源文件： <a href="https://github.com/leweii/myorch/blob/main/flows/development.md"><code>flows/development.md</code></a></p></section>
-<section class="chapter" id="ch-review"><h1>review <small>评审 PR</small></h1><table class="meta"><tbody><tr><td>文件</td><td><a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.yaml"><code>flows/review.yaml</code></a>，说明 <a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.md"><code>flows/review.md</code></a></td></tr><tr><td>角色</td><td><code>review</code>（控制台里的任务「评审 PR」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>评审一个已有的 PR。结论只在控制台显示。</td></tr><tr><td>片段</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>、<a href="#fragments--e2e"><code>lib/e2e.yaml</code></a></td></tr></tbody></table><p>PR 评审：对一个已有的 PR（包括人写的）做一轮 AI review。所有项目共用这一个流程。它先跑项目的检查，再让 reviewer 看代码；项目有端到端测试时，最后用浏览器测运行中的应用。结论只在本地控制台（右栏「改动」页）和工作区的 <code>docs/review/round-1/</code> 里，不往 GitHub 上发任何东西。它只找问题：不改代码，不批准 PR，也不要求修改，因为 agent 的批准不算数。对 GitHub 只读。</p>
+<section class="chapter" id="ch-review"><h1>review <small>评审 PR</small></h1><table class="meta"><tbody><tr><td>文件</td><td><a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.yaml"><code>flows/review.yaml</code></a>，说明 <a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.md"><code>flows/review.md</code></a></td></tr><tr><td>角色</td><td><code>review</code>（控制台里的任务「评审 PR」）</td></tr><tr><td>项目</td><td>所有项目共用</td></tr><tr><td>一句话</td><td>评审一个已有的 PR。结论只在控制台显示。</td></tr><tr><td>片段</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>、<a href="#fragments--e2e"><code>lib/e2e.yaml</code></a></td></tr></tbody></table><p>PR 评审：对一个已有的 PR（包括人写的）做一轮 AI review。所有项目共用这一个流程。它先跑项目的检查，再让 reviewer 看代码；项目有端到端测试时，最后用浏览器测运行中的应用。结论只在本地控制台（运行的「改动」标签页）和工作区的 <code>docs/review/round-1/</code> 里，不往 GitHub 上发任何东西。它只找问题：不改代码，不批准 PR，也不要求修改，因为 agent 的批准不算数。对 GitHub 只读。</p>
 <p>它用的 review 循环和 <a href="#ch-development">development</a> 是同一个片段 <a href="https://github.com/leweii/myorch/blob/main/flows/lib/review-loop.yaml"><code>lib/review-loop.yaml</code></a>，但只跑 1 轮、不修复、有阻塞问题也照常结束。项目的 <code>prompts/review.md</code>、<code>verify.md</code> 同样拼进去（例如 core-ng 项目的 <code>*-interface</code> 检查、博客的写作规范和误公开检查）。</p>
 <pre><code class="language-sh">uv run myorch run flows/review.yaml --project mdm -i pr=13                # 默认 standard
 uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
@@ -943,7 +943,7 @@ uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
 <tbody>
 <tr>
 <td>运行结束后</td>
-<td>右栏「改动」页看 diff 和核实过的发现，「文档」页看检查报告和端到端测试的报告、截图</td>
+<td>「改动」标签页看 diff 和核实过的发现，「文档」页看检查报告和端到端测试的报告、截图</td>
 <td><code>myorch ws &lt;run&gt; docs/review/round-1/summary.md</code></td>
 </tr>
 <tr>
@@ -1176,7 +1176,7 @@ uv run myorch run flows/postmortem.yaml --project mdm -i bad=&lt;引入问题的
 <p>和 learn 用同一个宿主机动作 <code>project-apply</code>，同样是 <code>scope: learn</code>，规则见 <a href="#learn--写回项目包">learn 的「写回项目包」</a>：全部校验通过才写、只提交自己写的文件、提交信息是 <code>learn(&lt;项目&gt;): …</code> 并带 <code>myorch-run: &lt;run_id&gt;</code>、写完重新同步快照、可以 <code>git revert</code>。</p>
 <p>区别只在读的文件：建议在 <code>docs/postmortem/proposals.json</code>，采纳的编号在 <code>docs/postmortem/accepted.json</code>。prompt 只让 analyze 改 <code>guide/</code>；动作本身按 learn 的范围校验，也接受 <code>checks.sh</code>、<code>checks.env</code>。</p>
 <h2 id="postmortem--产物">产物</h2>
-<p>都在工作区的 <code>docs/postmortem/</code> 下，控制台右栏「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/postmortem</code>。</p>
+<p>都在工作区的 <code>docs/postmortem/</code> 下，控制台里运行的「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/postmortem</code>。</p>
 <pre><code>docs/postmortem/
   target.json            引入问题的提交、基准、修复、PR、碰过它的运行、需求
   bad.diff, fix.diff     引入问题的改动；修复（有时）
@@ -1317,7 +1317,7 @@ uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '
 <li><code>known.json</code> 只增不减。想从头扫，删掉 <code>cursor.json</code>；想让某个问题再被报告，从 <code>known.json</code> 里删掉那一项。每个运行的工作区里也有一份当时的副本 <code>docs/sweep/known.json</code>。</li>
 </ul>
 <h2 id="sweep--你介入的地方">你介入的地方</h2>
-<p>运行中不需要你。看日报：控制台打开运行，右栏「文档」里的 <code>docs/sweep/report.md</code>；或者 <code>uv run myorch ws &lt;run&gt; docs/sweep/report.md</code>。值得修的问题，另起 development。</p>
+<p>运行中不需要你。看日报：控制台打开运行，「文档」里的 <code>docs/sweep/report.md</code>；或者 <code>uv run myorch ws &lt;run&gt; docs/sweep/report.md</code>。值得修的问题，另起 development。</p>
 <h2 id="sweep--定时跑">定时跑</h2>
 <ul>
 <li><code>--flow</code> 要写流程名 <code>sweep</code>。需要别的审查强度时加 <code>-i depth=quick</code> 或 <code>-i depth=deep</code>。</li>
@@ -1535,7 +1535,7 @@ uv run myorch schedule add weekly-learn-mdm --flow learn --project mdm --cron '0
 </tbody>
 </table>
 <ul>
-<li>问题里每条建议一行，带类型和证据条数。详细内容在 <code>docs/learn/proposals.md</code>：控制台右栏「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/learn/proposals.md</code>。</li>
+<li>问题里每条建议一行，带类型和证据条数。详细内容在 <code>docs/learn/proposals.md</code>：控制台里运行的「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/learn/proposals.md</code>。</li>
 <li>回复写编号就行：<code>1,3</code>、<code>1、3</code>、<code>1 3</code> 都可以。<code>all</code> 或 <code>全部</code> 是全部采纳，<code>none</code>、<code>无</code>、<code>0</code> 是一条都不要。编号不存在或看不懂时会再问一次。</li>
 <li>回复一旦被接收就开始执行，不能再改。想补采纳的，另跑一次 learn，或者手改项目包。</li>
 <li>24 小时不回复，这一步超时失败。定时发起的 learn 也停在这里等你。</li>
@@ -1569,7 +1569,7 @@ uv run myorch schedule add weekly-learn-mdm --flow learn --project mdm --cron '0
 <li>某条建议效果不好：在 <code>myorch-knowledge</code> 里 <code>git revert &lt;提交&gt;</code>，再 <code>uv run myorch project sync &lt;项目&gt;</code>。</li>
 </ul>
 <h2 id="learn--产物">产物</h2>
-<p>都在工作区的 <code>docs/learn/</code> 下，控制台右栏「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/learn</code>。</p>
+<p>都在工作区的 <code>docs/learn/</code> 下，控制台里运行的「文档」能看，也可以 <code>uv run myorch ws &lt;run&gt; docs/learn</code>。</p>
 <pre><code>docs/learn/
   trail.json                 发起时写入：事件日志里的问答、意见、驳回、失败、重新执行
   takeaways-learned.json     发起时写入：已经学过的 takeaway 的 run_id
@@ -1801,7 +1801,7 @@ uv run myorch run flows/onboard.yaml --project &lt;项目&gt; -i focus=&quot;数
 </tbody>
 </table>
 <ul>
-<li>先看 <code>docs/onboard/report.md</code> 和 <code>proposals.md</code>：控制台右栏「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/onboard</code>。</li>
+<li>先看 <code>docs/onboard/report.md</code> 和 <code>proposals.md</code>：控制台里运行的「文档」，或 <code>uv run myorch ws &lt;run&gt; docs/onboard</code>。</li>
 <li>回复写编号就行：<code>1,3</code>、<code>1、3</code>、<code>1 3</code> 都可以。<code>all</code> 或 <code>全部</code> 是全部采纳，<code>none</code>、<code>无</code>、<code>0</code> 是一条都不要。编号不存在或看不懂时会再问一次。</li>
 <li>回复一旦被接收就开始执行，不能再改。24 小时不回复，这一步超时失败。</li>
 </ul>

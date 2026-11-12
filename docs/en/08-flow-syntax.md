@@ -71,6 +71,7 @@ inputs:
   depth:
     type: select
     options: [{value: quick, label: "quick: 1 reviewer"}, standard]   # strings, or {value, label}
+    more: true                    # the console folds it under More options (更多选项): a rarely used input. A required one is shown as usual
   task:
     type: message                 # not drawn as a field: the first message fills it, and the original text is also saved to docs/external/request.md
     from_message: first_line      # first_line: only the first line (at most 120 characters). Default text: the whole text
@@ -303,7 +304,7 @@ The current fragments (`flows/lib/`), shared by all projects:
 | `choose-proposals` | A single step (script, can ask questions): lists the proposals in `<dir>/proposals.json` for you to pick by number, writes `<dir>/accepted.json`, outputs `accepted` | `dir` (required), `what` (`修改建议`, "proposed changes") | learn, postmortem, onboard |
 | `deliver` | A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note `docs/delivery.md`, outputs `delivery`. Refuses to push when the branch changed after approval or the current branch is the base branch. Does not call platform APIs and does not open a PR | `approved` (required: the approved commit) | development |
 
-The **Fragments** group (片段) on the console's **Flows** page (流程) lists all fragments, their parameters and the flows that use them.
+The **Fragments** group (片段) in the console's **Flow definitions** side bar (流程定义) lists all fragments, their parameters and the flows that use them.
 
 ## Per-project trimming: `if:`
 

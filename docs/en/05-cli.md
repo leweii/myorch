@@ -91,15 +91,18 @@ The same command as `serve`; see the next section. Starts the local console at h
 - `--host` defaults to `127.0.0.1` (or the env var `MYORCH_UI_HOST`). Set it to `0.0.0.0` only in the container; compose then publishes the port on the host's `127.0.0.1`.
 - The console accepts only requests whose Host is `127.0.0.1:<port>` or `localhost:<port>`. Others get 403 `bad host`. So the port must be the same inside and outside the container.
 
-There is no agent in the console. People start runs, reply and approve here. The conversation in the middle is the selected run; what you write goes to that run unchanged.
+There is no agent in the console. People start runs, reply and approve here. The console is a workbench: each thing opens as a tab in the editor area. A run's tab is its conversation; what you write goes to that run unchanged.
 
 | Area | Content |
 |---|---|
-| Top bar | The run dropdown: filter by project, or search by [tag](#tags-finding-runs-by-ticket) or run id (searches all runs, not only recent ones). Each run is followed by its tags; click one to search by it. **Flows** (流程): all flow definitions. **+ New run** (＋ 新运行). The **Waiting on you** list (等你处理): questions, approvals, loops that ran out of rounds, watchdog reminders. The menu in the top right corner switches the theme |
-| New run | First pick the project, then the task (this project's flows), then fill in the fields the flow asks for and the knowledge sources. Finally write the first message and click **Start** (启动). The first message is written verbatim to the run's `docs/external/request.md`; `task` takes its first line |
-| Left pane | The run's flow. Steps are laid out in execution order by `needs`, parallel steps side by side; loops can switch between rounds. The step that is running and the steps waiting on you are highlighted |
-| Middle | The run's conversation: your request, each step's progress and digest, the agent's questions, your replies, approvals, the pushed branch, the end |
-| Right pane | **Step** (步骤): digest, outputs, artifacts, logs. While a step runs, **Live output** (实时输出) shows output as it is produced. **Docs** (文档): the workspace's `docs/`; images (for example ticket screenshots) are shown directly. **Changes** (改动): the diff against base, the review conclusion, the risk verdict |
+| Activity bar (far left) | Switches the side bar: **Runs** (运行), **Waiting on you** (等你处理, with a count), **Flow definitions** (流程定义). Clicking the current icon again folds the side bar. The theme is at the bottom |
+| Side bar: Runs | A tree of project › run › steps. Filter by project, or search by [tag](#tags-finding-runs-by-ticket) or run id (searches all runs, not only recent ones). Click a run to open its conversation; click ▸ to show its steps: in `needs` order, ∥ marks parallel steps, a loop shows the steps of its current round, a step with replicas has one row per replica |
+| Side bar: Waiting on you | Questions, approvals, loops that ran out of rounds, watchdog reminders. Click one to open that run's conversation and reply or approve there |
+| Side bar: Flow definitions | All flow definitions, fragments, eval cases and knowledge sources. Click one to open it in the editor area |
+| Editor tabs | A run's conversation: the request, each step's progress and digest, questions, replies, approvals, the end, with the input box below. Its header has **Changes** (改动), **Docs** (文档) and **Flow definition** (流程定义). A step: error, question, digest, outputs, artifacts and the last turn's log, the knowledge record, read as soon as it opens. **Changes**: the diff against base, the review conclusion, the risk verdict. **Docs**: the workspace's `docs/`; images (for example ticket screenshots) are shown directly. Files, a new run and flow definitions get a tab each too. A single click in the tree opens a preview tab (italic) that the next single click replaces; a double click, or typing in it, keeps it. Tabs survive a reload, and the address names the active tab (`#run=…&step=…`), so it can be shared |
+| New run | A tab: first pick the project, then the task (this project's flows), then fill in the fields, the first message and the knowledge sources; the steps it will run are on the right. Rarely used fields (`more: true` in the spec) fold under **More options** (更多选项). ⌘+Enter or **Start** (启动). The first message is written verbatim to the run's `docs/external/request.md`; `task` takes its first line |
+| Bottom panel | Live output. It comes up when you open a step that is running, or click a step's **Live output** (实时输出). One tab per step; drag it taller, maximise or fold it. Output is kept 7 days, so finished steps can be read back; **Full log** (完整日志) opens the last turn's log file |
+| Status bar | Whether the event stream is connected, how many runs are running, how many things wait for you, a warning when the data volume cannot be read, show or fold the bottom panel |
 
 Where the input box sends its content depends on the run's state; the text above the input box says which:
 
@@ -253,7 +256,7 @@ Every run carries tags (`labels`), mainly the Jira tickets it belongs to. They a
 
 At start, 1, 2 and whatever of 3 can be read are recorded in the mandate (`labels` in `.myorch/mandate.json`) and in the `run_started` event. When listing runs, rules 2 and 3 are applied again, so old runs from before tags existed can also be found. The rules are in `core/inputs.py` (tags) and `runs.py` (derivation when listing).
 
-Where to search: the search box of the console's run dropdown; `myorch list --label`; `GET /api/runs?label=`, `GET /channel/runs?label=` (also accepts `q=`); the `label` parameter of the Claude Code channel's `runs` tool. The console and the endpoints also list old runs that Temporal has already deleted (finished more than 24 hours ago); their state comes from their `run_finished` event.
+Where to search: the search box of the console's **Runs** side bar; `myorch list --label`; `GET /api/runs?label=`, `GET /channel/runs?label=` (also accepts `q=`); the `label` parameter of the Claude Code channel's `runs` tool. The console and the endpoints also list old runs that Temporal has already deleted (finished more than 24 hours ago); their state comes from their `run_finished` event.
 
 ### `status`
 

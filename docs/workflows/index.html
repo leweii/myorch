@@ -619,7 +619,7 @@ uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=&lt
 </tr>
 <tr>
 <td>Approval is needed</td>
-<td>Read the diff, review verdict and risk verdict on the <strong>Changes</strong> (改动) tab in the right pane, click <strong>Approve</strong> (批准), <strong>Request changes</strong> (要求修改) or <strong>Reject</strong> (驳回)</td>
+<td>Read the diff, review verdict and risk verdict on the run's <strong>Changes</strong> (改动) tab, click <strong>Approve</strong> (批准), <strong>Request changes</strong> (要求修改) or <strong>Reject</strong> (驳回)</td>
 <td><code>myorch review &lt;run&gt;</code> opens the summary page; <code>myorch approve &lt;run&gt; human-review</code>, <code>myorch changes &lt;run&gt; human-review "comments"</code>, <code>myorch reject &lt;run&gt; human-review</code></td>
 </tr>
 <tr>
@@ -631,7 +631,7 @@ uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=&lt
 </table>
 <p>When any of the four takeaway steps fails, you are not asked (<code>on_failed: skip</code>), and later steps are not blocked. Failed host actions do not ask either.</p>
 <h2 id="development--artifacts">Artifacts</h2>
-<p>All steps of a run share one workspace. The <strong>Docs</strong> (文档) tab in the console's right pane shows all documents and screenshots. On the command line, <code>myorch ws &lt;run&gt;</code> lists the files and <code>myorch ws &lt;run&gt; docs/risk.md</code> reads one.</p>
+<p>All steps of a run share one workspace. The run's <strong>Docs</strong> (文档) tab in the console shows all documents and screenshots. On the command line, <code>myorch ws &lt;run&gt;</code> lists the files and <code>myorch ws &lt;run&gt; docs/risk.md</code> reads one.</p>
 <pre><code>observed/&lt;run ID&gt;/            the previous run when continuing; the failing run with incident (read-only)
 docs/
 ├── external/
@@ -889,7 +889,7 @@ repo/myorch/&lt;date&gt;-&lt;run ID&gt;/  task.md, takeaway.md (committed on the
 <li>When <a class="code" href="https://github.com/leweii/myorch/tree/main/images/claude-code"><code>images/claude-code/</code></a> changed, <code>update.sh</code> also rebuilds the sandbox base image <code>openshell-claude-code</code>. Each project's development image is based on it; to use the new base image, the project's image must also be rebuilt (the project pack's <code>image/build.sh</code>). When <a class="code" href="https://github.com/leweii/myorch/blob/main/pyproject.toml"><code>pyproject.toml</code></a> or <a class="code" href="https://github.com/leweii/myorch/blob/main/uv.lock"><code>uv.lock</code></a> changed, rebuild the myorch project's development image (in the myorch-knowledge directory, run <code>myorch/image/build.sh ../myorch</code>); only then do later development runs of the myorch project use the new dependencies.</li>
 <li>When <a class="code" href="https://github.com/leweii/myorch/tree/main/tools"><code>tools/</code></a> changed (the helper commands in the sandbox, such as <code>myorch-checks</code> and <code>myorch-ask</code>), they are installed into the volume by <code>myorch init</code> (the <code>init</code> service in compose). Make sure <code>myorch init</code> has been run again; otherwise the sandbox still has the old versions.</li>
 </ol><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/flows/development.md"><code>docs/en/flows/development.md</code></a></p></section>
-<section class="chapter" id="ch-review"><h1>review <small>Review PR</small></h1><table class="meta"><tbody><tr><td>File</td><td><a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.yaml"><code>flows/review.yaml</code></a>, prose <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/en/flows/review.md"><code>docs/en/flows/review.md</code></a></td></tr><tr><td>Role</td><td><code>review</code> (the console task “Review PR”)</td></tr><tr><td>Projects</td><td>shared by every project</td></tr><tr><td>In short</td><td>Review an existing PR. The verdict is shown only in the console.</td></tr><tr><td>Fragments</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>, <a href="#fragments--e2e"><code>lib/e2e.yaml</code></a></td></tr></tbody></table><p>PR review: one round of AI review on an existing PR (including PRs written by people). All projects share this one flow. It first runs the project's checks, then has reviewers read the code; when the project has end-to-end tests, it finally tests the running application with a browser. The conclusions appear only in the local console (the <strong>Changes</strong> (改动) tab in the right panel) and in the workspace's <code>docs/review/round-1/</code>. Nothing is posted to GitHub. It only looks for problems: it does not change code, does not approve the PR and does not request changes, because an agent's approval does not count. Its access to GitHub is read-only.</p>
+<section class="chapter" id="ch-review"><h1>review <small>Review PR</small></h1><table class="meta"><tbody><tr><td>File</td><td><a class="code" href="https://github.com/leweii/myorch/blob/main/flows/review.yaml"><code>flows/review.yaml</code></a>, prose <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/en/flows/review.md"><code>docs/en/flows/review.md</code></a></td></tr><tr><td>Role</td><td><code>review</code> (the console task “Review PR”)</td></tr><tr><td>Projects</td><td>shared by every project</td></tr><tr><td>In short</td><td>Review an existing PR. The verdict is shown only in the console.</td></tr><tr><td>Fragments</td><td><a href="#fragments--review-loop"><code>lib/review-loop.yaml</code></a>, <a href="#fragments--e2e"><code>lib/e2e.yaml</code></a></td></tr></tbody></table><p>PR review: one round of AI review on an existing PR (including PRs written by people). All projects share this one flow. It first runs the project's checks, then has reviewers read the code; when the project has end-to-end tests, it finally tests the running application with a browser. The conclusions appear only in the local console (the run's <strong>Changes</strong> (改动) tab) and in the workspace's <code>docs/review/round-1/</code>. Nothing is posted to GitHub. It only looks for problems: it does not change code, does not approve the PR and does not request changes, because an agent's approval does not count. Its access to GitHub is read-only.</p>
 <p>The review loop it uses is the same fragment as in <a href="#ch-development">development</a>, <a href="https://github.com/leweii/myorch/blob/main/flows/lib/review-loop.yaml"><code>lib/review-loop.yaml</code></a>, but it runs only 1 round, does not fix, and ends normally even when there are blocking problems. The project's <code>prompts/review.md</code> and <code>verify.md</code> are spliced in the same way (for example the <code>*-interface</code> checks of core-ng projects, and the blog's writing rules and accidental-publication checks).</p>
 <pre><code class="language-sh">uv run myorch run flows/review.yaml --project mdm -i pr=13                # default standard
 uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
@@ -943,7 +943,7 @@ uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=deep
 <tbody>
 <tr>
 <td>After the run ends</td>
-<td>The <strong>Changes</strong> (改动) tab in the right panel shows the diff and the verified findings; the <strong>Docs</strong> (文档) tab shows the checks report and the end-to-end test reports and screenshots</td>
+<td>The <strong>Changes</strong> (改动) tab shows the diff and the verified findings; the <strong>Docs</strong> (文档) tab shows the checks report and the end-to-end test reports and screenshots</td>
 <td><code>myorch ws &lt;run&gt; docs/review/round-1/summary.md</code></td>
 </tr>
 <tr>
@@ -1176,7 +1176,7 @@ uv run myorch run flows/postmortem.yaml --project mdm -i bad=&lt;commit that int
 <p>Uses the same host action <code>project-apply</code> as learn, also with <code>scope: learn</code>. For the rules see <a href="#learn--writing-back-to-the-project-pack">learn's "Writing back to the project pack"</a>: write only when everything validates, commit only the files it wrote, the commit message is <code>learn(&lt;project&gt;): …</code> with <code>myorch-run: &lt;run_id&gt;</code>, re-sync the snapshot after writing, <code>git revert</code> is possible.</p>
 <p>The only difference is which files are read: the proposals are in <code>docs/postmortem/proposals.json</code>, the adopted numbers in <code>docs/postmortem/accepted.json</code>. The prompt lets analyze change only <code>guide/</code>; the action itself validates against learn's scope and also accepts <code>checks.sh</code> and <code>checks.env</code>.</p>
 <h2 id="postmortem--artifacts">Artifacts</h2>
-<p>All under <code>docs/postmortem/</code> in the workspace. The <strong>Docs</strong> (文档) tab in the console's right panel shows them, or use <code>uv run myorch ws &lt;run&gt; docs/postmortem</code>.</p>
+<p>All under <code>docs/postmortem/</code> in the workspace. The run's <strong>Docs</strong> (文档) tab in the console shows them, or use <code>uv run myorch ws &lt;run&gt; docs/postmortem</code>.</p>
 <pre><code>docs/postmortem/
   target.json            the commit that introduced the problem, base, fix, PR, runs that touched it, requirement
   bad.diff, fix.diff     the change that introduced the problem; the fix (sometimes)
@@ -1317,7 +1317,7 @@ uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '
 <li><code>known.json</code> only grows. To scan from the beginning, delete <code>cursor.json</code>. To have an issue reported again, delete its entry from <code>known.json</code>. Each run's workspace also has a copy from that time in <code>docs/sweep/known.json</code>.</li>
 </ul>
 <h2 id="sweep--where-you-step-in">Where you step in</h2>
-<p>You are not needed while it runs. To read the daily report: open the run in the console and find <code>docs/sweep/report.md</code> under the <strong>Docs</strong> (文档) tab in the right panel; or <code>uv run myorch ws &lt;run&gt; docs/sweep/report.md</code>. For issues worth fixing, start a separate development run.</p>
+<p>You are not needed while it runs. To read the daily report: open the run in the console and find <code>docs/sweep/report.md</code> under its <strong>Docs</strong> (文档) tab; or <code>uv run myorch ws &lt;run&gt; docs/sweep/report.md</code>. For issues worth fixing, start a separate development run.</p>
 <h2 id="sweep--scheduled-runs">Scheduled runs</h2>
 <ul>
 <li><code>--flow</code> takes the flow name <code>sweep</code>. For a different audit depth, add <code>-i depth=quick</code> or <code>-i depth=deep</code>.</li>
@@ -1535,7 +1535,7 @@ uv run myorch schedule add weekly-learn-mdm --flow learn --project mdm --cron '0
 </tbody>
 </table>
 <ul>
-<li>The question has one line per proposal, with its type and the number of pieces of evidence. The details are in <code>docs/learn/proposals.md</code>: the <strong>Docs</strong> (文档) tab in the console's right panel, or <code>uv run myorch ws &lt;run&gt; docs/learn/proposals.md</code>.</li>
+<li>The question has one line per proposal, with its type and the number of pieces of evidence. The details are in <code>docs/learn/proposals.md</code>: the run's <strong>Docs</strong> (文档) tab in the console, or <code>uv run myorch ws &lt;run&gt; docs/learn/proposals.md</code>.</li>
 <li>Reply with the numbers only: <code>1,3</code>, <code>1、3</code> and <code>1 3</code> all work. <code>all</code> or <code>全部</code> adopts all of them; <code>none</code>, <code>无</code> or <code>0</code> adopts none. When a number does not exist or the reply cannot be understood, it asks again.</li>
 <li>Once the reply is accepted, it starts running and cannot be changed. To adopt more, run learn again or edit the project pack by hand.</li>
 <li>Without a reply for 24 hours, this step times out and fails. A scheduled learn also stops here and waits for you.</li>
@@ -1569,7 +1569,7 @@ uv run myorch schedule add weekly-learn-mdm --flow learn --project mdm --cron '0
 <li>If a proposal works out badly: <code>git revert &lt;commit&gt;</code> in <code>myorch-knowledge</code>, then <code>uv run myorch project sync &lt;project&gt;</code>.</li>
 </ul>
 <h2 id="learn--artifacts">Artifacts</h2>
-<p>All under <code>docs/learn/</code> in the workspace. The <strong>Docs</strong> tab in the console's right panel shows them, or use <code>uv run myorch ws &lt;run&gt; docs/learn</code>.</p>
+<p>All under <code>docs/learn/</code> in the workspace. The run's <strong>Docs</strong> tab in the console shows them, or use <code>uv run myorch ws &lt;run&gt; docs/learn</code>.</p>
 <pre><code>docs/learn/
   trail.json                 written at start: questions and answers, comments, rejections, failures, re-runs from the event log
   takeaways-learned.json     written at start: run_ids of takeaways already learned
@@ -1801,7 +1801,7 @@ uv run myorch run flows/onboard.yaml --project &lt;project&gt; -i focus=&quot;da
 </tbody>
 </table>
 <ul>
-<li>Read <code>docs/onboard/report.md</code> and <code>proposals.md</code> first: the <strong>Docs</strong> (文档) tab in the console's right panel, or <code>uv run myorch ws &lt;run&gt; docs/onboard</code>.</li>
+<li>Read <code>docs/onboard/report.md</code> and <code>proposals.md</code> first: the run's <strong>Docs</strong> (文档) tab in the console, or <code>uv run myorch ws &lt;run&gt; docs/onboard</code>.</li>
 <li>Reply with the numbers only: <code>1,3</code>, <code>1、3</code> and <code>1 3</code> all work. <code>all</code> or <code>全部</code> adopts all of them; <code>none</code>, <code>无</code> or <code>0</code> adopts none. When a number does not exist or the reply cannot be understood, it asks again.</li>
 <li>Once the reply is accepted, it starts running and cannot be changed. Without a reply for 24 hours, this step times out and fails.</li>
 </ul>

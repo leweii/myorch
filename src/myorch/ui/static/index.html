@@ -7,99 +7,125 @@
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/theme.js"></script>
 </head>
-<body>
-<header class="top">
-  <div class="tbc"><span class="brand">myorch</span></div>
-  <div class="tbc">
-    <div class="pick">
-      <button id="runPickBtn" class="runpick"><span id="runPickLabel">选择运行</span> ▾</button>
-      <div id="runPicker" class="dropdown" hidden>
-        <div class="row"><select id="projectFilter" class="small"><option value="">全部项目</option></select>
-          <input id="runSearch" class="small runsearch" type="search" placeholder="搜标签或 run id，例如 MD-18700" title="按标签（Jira 工单等，不分大小写，只写数字也行）或 run id 的一部分搜全部运行">
-          <span class="muted small" id="runCount"></span></div>
-        <div id="runs" class="list runs"></div>
-      </div>
-    </div>
-  </div>
-  <div class="tbc"><button id="flowsBtn" class="ghost" title="flows/*.yaml 的流程定义，实时更新">流程</button><button id="newRunBtn" class="newrun">＋ 新运行</button></div>
+<body class="wb">
+<!-- A workbench: activity bar | side bar (runs, waiting for you, flows) | tabs over the editor, the
+     live-output panel below | status bar. Ids and classes are the contract with the scripts. -->
+<nav class="activity" aria-label="视图">
+  <button type="button" data-view="runs" title="运行">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="4" rx="1.5"/><rect x="4" y="10" width="16" height="4" rx="1.5"/><rect x="4" y="16" width="16" height="4" rx="1.5"/></svg></button>
+  <button type="button" data-view="inbox" title="等你处理">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span class="count" id="inboxCount"></span></button>
+  <button type="button" data-view="flows" title="流程定义、评测集、知识库">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 12h4a4 4 0 004-4V8M14 12h2"/></svg></button>
   <span class="spacer"></span>
-  <div class="tbc">
-    <div class="pick">
-      <button id="inboxBtn" class="ghost inboxbtn">等你处理 <span class="count" id="inboxCount"></span></button>
-      <div id="inboxPanel" class="dropdown right" hidden><div id="inbox" class="list"></div></div>
+  <div class="pick">
+    <button type="button" id="userBtn" title="主题">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
+    <div id="userPanel" class="dropdown up" hidden>
+      <div class="dhead">主题</div>
+      <div class="themes" role="radiogroup" aria-label="主题">
+        <button type="button" data-theme-pick="light">浅色</button>
+        <button type="button" data-theme-pick="dark">深色</button>
+        <button type="button" data-theme-pick="auto">跟随系统</button>
+      </div>
     </div>
   </div>
-  <div class="tbc">
-    <div class="pick">
-      <button id="userBtn" class="userbtn" title="主题等设置"><span class="muted small" id="meta"></span><span class="caret">▾</span></button>
-      <div id="userPanel" class="dropdown right userpanel" hidden>
-        <div class="row"><span class="muted small">主题</span></div>
-        <div class="themes" role="radiogroup" aria-label="主题">
-          <button type="button" data-theme-pick="light">浅色</button>
-          <button type="button" data-theme-pick="dark">深色</button>
-          <button type="button" data-theme-pick="auto">跟随系统</button>
+</nav>
+
+<aside class="side" id="side">
+  <div class="side-head"><span id="sideTitle">运行</span><span class="spacer"></span>
+    <button type="button" id="newRunBtn" class="iconbtn" title="新运行">＋</button></div>
+  <div id="view-runs" class="view">
+    <div class="side-search">
+      <input id="runSearch" type="search" placeholder="搜标签或 run id，例如 MD-18700" title="按标签（Jira 工单等，不分大小写，只写数字也行）或 run id 的一部分搜全部运行">
+      <div class="row"><select id="projectFilter" class="small"><option value="">全部项目</option></select><span class="muted small" id="runCount"></span></div>
+    </div>
+    <div id="runs" class="tree" role="tree"></div>
+  </div>
+  <div id="view-inbox" class="view" hidden><div id="inbox" class="inbox"></div></div>
+  <div id="view-flows" class="view" hidden><div id="flowList" class="fd-list"></div></div>
+</aside>
+<div class="gutter" data-side="side" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整宽度，双击恢复默认"></div>
+
+<main class="work" id="work">
+  <div class="tabbar" id="tabbar" role="tablist"></div>
+  <div class="editor" id="editor">
+    <div id="pane-empty" class="pane-x scroll"></div>
+
+    <!-- a run: its conversation. What you write goes verbatim to the run -->
+    <div id="pane-run" class="pane-x runpane" hidden>
+      <div id="runHead" class="runhead"></div>
+      <div id="messages" class="messages"></div>
+      <form id="composer" class="composer">
+        <div class="target" id="target"></div>
+        <div id="approveBar" class="approvebar" hidden>
+          <button type="button" id="approveBtn">批准</button>
+          <button type="button" id="rejectBtn" class="danger">驳回</button>
+          <button type="button" id="changesBtn" class="ghost" hidden>提修改意见</button>
+          <button type="button" id="seeChanges" class="ghost">看改动和 review 结论</button>
         </div>
+        <textarea id="input" rows="3"></textarea>
+        <div class="row">
+          <span class="muted small" id="composerHint"></span>
+          <span class="spacer"></span>
+          <button type="button" id="continueRunBtn" class="ghost small" hidden>在这个分支上接着改</button>
+          <button type="button" id="resumeRunBtn" class="small" hidden>重新执行失败的步骤</button>
+          <button type="button" id="cancelRunBtn" class="ghost danger small" hidden>取消这个运行</button>
+          <button type="submit" id="sendBtn">发送</button>
+        </div>
+        <div id="sendError" class="warn small"></div>
+      </form>
+    </div>
+
+    <div id="pane-step" class="pane-x scroll" hidden></div>
+    <div id="pane-changes" class="pane-x scroll" hidden></div>
+    <div id="pane-docs" class="pane-x docspane" hidden></div>
+    <div id="pane-file" class="pane-x filepane" hidden></div>
+    <div id="pane-flow" class="pane-x flowpane" hidden></div>
+
+    <!-- a new run (newrun.js): the project, the task, its fields and the first message; the steps it will run on the right -->
+    <div id="pane-new" class="pane-x newpane" hidden>
+      <div class="np-form">
+        <div class="np-title">新运行</div>
+        <div id="nrNote" class="nr-note"></div>
+        <div class="nr-block">
+          <div class="nr-k">项目</div><div class="nr-v"><select id="sfProject"></select></div>
+          <div class="nr-k">任务</div><div class="nr-v"><div id="sfTasks" class="tasks" role="tablist"></div></div>
+        </div>
+        <div id="sfFlowDesc" class="nr-desc"></div>
+        <div id="sfInputs" class="nr-fields"></div>
+        <label class="nr-msg"><span class="fl"><span id="nrMsgLabel">补充说明</span><span class="muted" id="nrMsgNote">这就是第一条消息，原文交给流程</span></span>
+          <textarea id="nrMessage" rows="5"></textarea></label>
+        <details id="sfMore" class="nr-more" hidden><summary>更多选项</summary><div id="sfMoreInputs" class="nr-fields"></div></details>
+        <div id="sfKnowledge" class="kpick"></div>
+      </div>
+      <aside class="np-side"><div id="sfPreview" class="preview"></div></aside>
+      <div class="np-foot">
+        <span id="nrError" class="warn small"></span>
+        <span class="spacer"></span>
+        <span class="muted small">⌘+Enter 启动</span>
+        <button type="button" id="nrCancel" class="ghost">取消</button>
+        <button type="button" id="nrStart">启动</button>
       </div>
     </div>
   </div>
-</header>
+  <div class="pgutter" id="pgutter" role="separator" aria-orientation="horizontal" title="拖动调整高度"></div>
+  <section class="panel" id="panel" aria-label="实时输出">
+    <div class="pbar"><div class="ptabs" id="ptabs"></div><span class="spacer"></span><span id="pactions" class="pactions"></span></div>
+    <div class="pbody" id="pbody"></div>
+  </section>
+</main>
 
-<div class="layout">
-  <aside class="left">
-    <div id="volumeWarn" class="warn small"></div>
-    <div id="runHead" class="runhead"><p class="muted">在顶部选择一个运行，或者点「＋ 新运行」。</p></div>
-    <div id="flow" class="flow"></div>
-  </aside>
+<footer class="status" id="status">
+  <span id="meta"></span>
+  <span id="stRuns"></span>
+  <button type="button" id="stInbox" class="sbtn"></button>
+  <span id="volumeWarn" class="swarn"></span>
+  <span class="spacer"></span>
+  <button type="button" id="panelBtn" class="sbtn" title="显示或收起底部的实时输出">实时输出</button>
+</footer>
 
-  <div class="gutter" data-side="left" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整宽度，双击恢复默认"></div>
-  <main class="center">
-    <!-- a new run (newrun.js): the project, then the task, then its fields; the first message below is the request -->
-    <div id="newPanel" class="newpanel" hidden>
-      <div class="nr-block">
-        <div class="nr-k">项目</div><div class="nr-v"><select id="sfProject"></select></div>
-        <div class="nr-k">任务</div><div class="nr-v"><div id="sfTasks" class="tasks" role="tablist"></div></div>
-      </div>
-      <div id="sfFlowDesc" class="nr-desc"></div>
-      <div id="sfInputs" class="nr-fields"></div>
-      <div id="sfKnowledge" class="kpick"></div>
-      <div id="sfPreview" class="preview"></div>
-    </div>
-    <div id="messages" class="messages"></div>
-    <form id="composer" class="composer">
-      <div class="target" id="target"></div>
-      <div id="approveBar" class="approvebar" hidden>
-        <button type="button" id="approveBtn">批准</button>
-        <button type="button" id="rejectBtn" class="danger">驳回</button>
-        <button type="button" id="changesBtn" class="ghost" hidden>提修改意见</button>
-        <button type="button" id="seeChanges" class="ghost">看改动和 review 结论</button>
-      </div>
-      <textarea id="input" rows="3"></textarea>
-      <div class="row">
-        <span class="muted small" id="composerHint"></span>
-        <span class="spacer"></span>
-        <button type="button" id="continueRunBtn" class="ghost small" hidden>在这个分支上接着改</button>
-        <button type="button" id="resumeRunBtn" class="small" hidden>重新执行失败的步骤</button>
-        <button type="button" id="cancelRunBtn" class="ghost danger small" hidden>取消这个运行</button>
-        <button type="submit" id="sendBtn">发送</button>
-      </div>
-      <div id="sendError" class="warn small"></div>
-    </form>
-  </main>
-
-  <div class="gutter" data-side="right" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整宽度，双击恢复默认"></div>
-  <aside class="right">
-    <div class="tabs">
-      <button data-tab="step" class="tab active">步骤</button>
-      <button data-tab="docs" class="tab">文档</button>
-      <button data-tab="changes" class="tab">改动</button>
-    </div>
-    <div id="tab-step" class="pane"><p class="muted">在左侧选一个步骤。</p></div>
-    <div id="tab-docs" class="pane" hidden><p class="muted">先在顶部选择一个运行。</p></div>
-    <div id="tab-changes" class="pane" hidden><p class="muted">先在顶部选择一个运行。</p></div>
-  </aside>
-</div>
 <dialog id="viewerDlg" class="viewerdlg"></dialog>
-<dialog id="flowsDlg" class="flowsdlg"></dialog>
 <script src="/static/vendor/highlight.min.js"></script>
 <script src="/static/app.js"></script>
 <script src="/static/newrun.js"></script>
