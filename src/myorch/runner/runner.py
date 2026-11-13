@@ -231,7 +231,7 @@ class OutputSink(Protocol):
 
 OUTPUT_FLUSH = 0.5  # seconds: live output is written in batches at most this often
 OUTPUT_MAX = 2_000_000  # characters per turn; the rest is only in the log file
-OUTPUT_CUT = "\n…（输出太多，后面的内容不再实时显示。步骤结束后看完整日志。）\n"
+OUTPUT_CUT = "\n… (too much output: the rest is not shown live. Read the full log when the step has ended.)\n"
 
 
 def follower_name(sandbox: str) -> str:
@@ -358,7 +358,7 @@ class StepRunner:
             prompt = (build_retry_prompt(step, req.failure, req.reply or "") if req.failure is not None
                       else build_reply_prompt(step, req.reply or ""))
         elif resume:  # continues the session of an attempt the platform stopped
-            prompt = build_interrupted_prompt(step, req.interrupted or "原因不明")
+            prompt = build_interrupted_prompt(step, req.interrupted or "reason unknown")
         else:
             prompt = build_prompt(step, req.context, req.upstream, repo_writable, knowledge, interrupted=req.interrupted)
         task = HarnessTask(

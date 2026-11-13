@@ -1,151 +1,151 @@
-# channels：对接外部系统的一层（设计草案，2026-11-02）
+# channels: a layer for talking to external systems (design draft, 2026-11-02)
 
-状态：**已删除（2026-11-03）**。这份设计实现的 GitHub 适配器（`channels/service.py`、`github.py`、`triage.py` 等）已经删除，只作历史记录保留。现在的 channel 层见 [2026-11-02-channel-layer.md](2026-11-02-channel-layer.md)。原状态：第一阶段已实现，2026-11-02 起暂停。人和 myorch 只在本地控制台（`myorch ui`）交互。下文是 channels 的设计，重新启用时以它为起点。intake 已删除，下文提到 intake 的地方都是背景。
+Status: **Deleted (2026-11-03).** The GitHub adapter this design produced (`channels/service.py`, `github.py`, `triage.py` and others) has been deleted. This note is kept only as a historical record. For the current channel layer, see [2026-11-02-channel-layer.md](2026-11-02-channel-layer.md). Previous status: phase 1 implemented, paused from 2026-11-02. People interact with myorch only through the local console (`myorch ui`). The text below is the channels design, to be used as the starting point if it is revived. intake has been deleted; wherever the text mentions intake, it is background.
 
-## 为什么要这一层
+## Why this layer
 
-现在 myorch 和外部世界之间只有 intake：一个常驻的 Temporal workflow，每 60 秒在 sandbox 里轮询 GitHub，
-研判后启动 run，再轮询 run 的状态，在原 issue 里发通知。问题：
+Today the only thing between myorch and the outside world is intake: a long-running Temporal workflow that polls GitHub in a sandbox every 60 seconds,
+triages, starts runs, then polls the run status and posts notifications on the original issue. Problems:
 
-- **只认 GitHub**。Slack、邮件要再写一套；输入、输出、状态散在 intake、runner/jobs.py、CLI 三处。
-- **流程引擎在做通信**。轮询、去重、话题订阅、通知措辞都写在 Temporal workflow 里，和流程编排混在一起。
-- **没有流式输出**。runner 只在每轮结束后读日志；人只能等结果。
-- **反馈不完整**。研判判为 `none`、研判失败时用户收不到任何回复（见 G0 的讨论）。
+- **GitHub only.** Slack and email would each need their own implementation. Input, output and state are spread over three places: intake, runner/jobs.py and the CLI.
+- **The flow engine does communication.** Polling, de-duplication, thread subscriptions and notification wording all live in the Temporal workflow, mixed in with flow orchestration.
+- **No streaming output.** The runner reads the log only after each turn ends. People can only wait for the result.
+- **Incomplete feedback.** When triage decides `none`, or triage fails, the user gets no reply at all (see the G0 discussion).
 
-目标：把"和外部系统打交道"的事集中到本机一层，叫 **channels**。流程引擎只管流程：收到"有消息"，发出"有事件"。
+Goal: gather everything about "dealing with external systems" into one local layer called **channels**. The flow engine handles only flows: it receives "there is a message" and emits "there is an event".
 
-## 边界
+## Boundaries
 
 ```
- Slack ─┐                         ┌──────────────── channels（本机进程 myorch channels）────────────────┐
- GitHub ┼─ channel 适配器 ─► 收件 ─┤ triage（G0）→ conversation ↔ run 绑定 → 命令          事件 → 渲染 ─┼─ channel 适配器 ─► 发件
- Email ─┤                         └──────────────────────────┬──────────────────────────▲────────────┘
- CLI/Web┘                                                    │ start/reply/approve/…     │ run 事件、流式输出
+ Slack ─┐                         ┌──────────────── channels (local process myorch channels) ────────────────┐
+ GitHub ┼─ channel adapter ─► inbox ┤ triage (G0) → conversation ↔ run binding → commands     events → render ─┼─ channel adapter ─► outbox
+ Email ─┤                         └──────────────────────────┬──────────────────────────▲─────────────────┘
+ CLI/Web┘                                                    │ start/reply/approve/…     │ run events, streaming output
                                                              ▼                           │
-                                              引擎（Temporal：FlowWorkflow + worker）── 事件日志（events.db）
+                                              engine (Temporal: FlowWorkflow + worker) ── event log (events.db)
 ```
 
-| 归 channels | 不归 channels |
+| Belongs to channels | Does not belong to channels |
 |---|---|
-| 连接外部系统（轮询、websocket、IMAP）、发消息、改消息 | 流程编排、重试、审批规则（仍在 core / 引擎） |
-| 识别是谁、该不该理（Gate）、要不要接（研判） | sandbox、凭证注入（仍在 OpenShell） |
-| conversation 和 run 的对应关系 | run 的状态本身（仍在 Temporal） |
-| 把 run 的事件变成每个渠道合适的消息，包括流式 | 项目知识、检查（仍在项目包） |
+| Connecting to external systems (polling, websocket, IMAP), sending messages, editing messages | Flow orchestration, retries, approval rules (stay in core / the engine) |
+| Recognizing who someone is, whether to respond (Gate), whether to take the request (triage) | Sandboxes, credential injection (stay in OpenShell) |
+| The mapping between conversations and runs | The run state itself (stays in Temporal) |
+| Turning run events into the right message for each channel, including streaming | Project knowledge, checks (stay in the project pack) |
 
-## 概念
+## Concepts
 
-- **Channel**：一个外部系统的适配器（`slack`、`github`、`email`、`cli`，以后 `web`）。接口：
-  - `listen() -> 异步收件流`（轮询、Socket Mode、IMAP IDLE，按渠道选）
-  - `send(conversation, Outbound) -> MessageRef`、`edit(MessageRef, Outbound)`（流式和"进度消息"靠编辑）
-  - `capabilities`：有没有话题、能不能编辑、能不能按钮、消息长度上限、是否适合流式。
-- **Conversation**：渠道里的一个对话位置，统一成 URI：`github://leweii/myorch-java-lab/issues/4`、
-  `slack://T123/C456/1730530000.123`（频道 + 话题）、`email://<Message-ID 线程>`、`cli://jakobhe`。
-  一个 conversation 属于一个项目，可以订阅多个 run；一个 run 可以有多个 conversation（issue 和它开的 PR）。
-- **Inbound / Outbound**：统一的收件、发件。Outbound 的种类：`ack`（收到）、`question`（提问，带选项）、
-  `approval`（审批请求，带"改动在哪看"）、`progress`（进度/流式）、`result`（结果）、`declined`（没接，附理由）、`error`。
-- **Identity**：把各渠道的账号对到同一个人：`jakobhe` = GitHub `leweii` = Slack `U0…` = `lewei.me@gmail.com`。
-  允许名单、Mandate 的发起人和审批人都用这个人，而不是某个渠道的账号。渠道本身验证身份（Slack 用户 id、GitHub 登录），
-  比 CLI 的 `--as` 可信。
-- **Triage（G0）**：从 intake 搬过来，和渠道无关：Gate（自己的消息？名单内？召唤了？已绑定的 run 在等它？）
-  → 固定指令直接解析 → 其余交给 Haiku 研判（无凭证的 sandbox）。顺带落实 G0 讨论的改进：
-  - 把原始请求（标题、正文、召唤的那条、话题里最近几条）作为 `docs/external/request.md` 交给 run，Haiku 的一句话只当标题；
-  - 召唤后一定有回复：`none` 回"没接：理由，缺什么"；研判失败回"稍后再召唤"并在下一轮重试；
-  - 研判不能用工具；数据边界用随机分隔符。
+- **Channel**: an adapter for one external system (`slack`, `github`, `email`, `cli`, later `web`). Interface:
+  - `listen() -> async inbound stream` (polling, Socket Mode, IMAP IDLE, chosen per channel)
+  - `send(conversation, Outbound) -> MessageRef`, `edit(MessageRef, Outbound)` (streaming and "progress messages" rely on editing)
+  - `capabilities`: whether it has threads, can edit, can show buttons, its message length limit, whether it suits streaming.
+- **Conversation**: a place for a conversation in a channel, written as a URI: `github://leweii/myorch-java-lab/issues/4`,
+  `slack://T123/C456/1730530000.123` (channel + thread), `email://<Message-ID thread>`, `cli://jakobhe`.
+  A conversation belongs to one project and can follow several runs. A run can have several conversations (an issue and the PR it opened).
+- **Inbound / Outbound**: unified incoming and outgoing messages. Outbound kinds: `ack` (received), `question` (a question, with options),
+  `approval` (an approval request, with "where to see the change"), `progress` (progress / streaming), `result` (the result), `declined` (not taken, with a reason), `error`.
+- **Identity**: maps each channel's accounts to the same person: `jakobhe` = GitHub `leweii` = Slack `U0…` = `lewei.me@gmail.com`.
+  The allow list and the Mandate's initiator and approvers all use this person, not an account on one channel. The channel itself verifies identity (Slack user id, GitHub login),
+  which is more trustworthy than the CLI's `--as`.
+- **Triage (G0)**: moved over from intake and channel-independent: Gate (our own message? on the list? summoned? is a bound run waiting for it?)
+  → fixed commands are parsed directly → everything else goes to Haiku for triage (in a sandbox with no credentials). Along the way, apply the improvements from the G0 discussion:
+  - Hand the original request (title, body, the summoning message, the last few messages in the thread) to the run as `docs/external/request.md`. Haiku's one-line summary is only the title.
+  - A summon always gets a reply: `none` replies "Not taken: reason, what is missing". A triage failure replies "Summon again later" and retries in the next round.
+  - Triage cannot use tools. Data boundaries use random delimiters.
 
-## 和引擎之间的接口
+## Interface with the engine
 
-**命令（channels → 引擎）**，用现有的 Temporal client：`start_run(flow, project, inputs, initiator, source=conversation, request)`、
-`reply`、`approve`、`reject`（审批人来自 Identity）、`cancel`。run id 仍由"渠道 + 消息 id"决定，重复的消息不会启动两次。
+**Commands (channels → engine)**, using the existing Temporal client: `start_run(flow, project, inputs, initiator, source=conversation, request)`,
+`reply`, `approve`, `reject` (the approver comes from Identity), `cancel`. The run id is still determined by "channel + message id", so a duplicate message does not start two runs.
 
-**事件（引擎 → channels）**：现在 intake 每 60 秒查询一次 run 状态再比对出该说什么。改为引擎写事件、channels 读：
+**Events (engine → channels)**: today intake queries the run status every 60 seconds and diffs it to work out what to say. Instead, the engine writes events and channels reads them:
 
-- **事件日志** `myorch-data/events.db`（SQLite，单机足够）：`(seq, run_id, time, kind, step, payload)`。
-- 写入方：
-  - FlowWorkflow 在状态变化时经一个本地 activity 写：`run_started`、`step_started`、`step_finished`、
-    `waiting_input`（问题和选项）、`waiting_approval`（人数、规则、草稿 PR 或 `myorch review`）、
-    `step_failed_ask`（另一个会话正在加的 `on_failed: ask`）、`pr_opened`、`run_finished`（结果）。
-  - runner 在步骤运行中写 `stream`（agent 的输出片段）。
-- 读取方：channels 按 seq 增量读（每秒一次，本机 SQLite 很便宜），每个 conversation 记住读到哪；
-  `myorch watch <run>`、以后的网页也读同一份日志。
-- 好处：引擎不需要知道有哪些渠道；渠道断开重连后从 seq 接着读，不丢不重。
+- **Event log** `myorch-data/events.db` (SQLite, enough for a single machine): `(seq, run_id, time, kind, step, payload)`.
+- Writers:
+  - FlowWorkflow writes through a local activity when state changes: `run_started`, `step_started`, `step_finished`,
+    `waiting_input` (the question and options), `waiting_approval` (number of people, rule, draft PR or `myorch review`),
+    `step_failed_ask` (`on_failed: ask`, which another session is adding), `pr_opened`, `run_finished` (the result).
+  - The runner writes `stream` (fragments of agent output) while a step runs.
+- Readers: channels reads incrementally by seq (once a second; local SQLite is cheap) and remembers per conversation how far it has read.
+  `myorch watch <run>` and the future web page read the same log.
+- Benefits: the engine does not need to know which channels exist. After a channel disconnects and reconnects, it continues from its seq, with nothing lost and nothing duplicated.
 
-## 流式输出
+## Streaming output
 
-1. **来源**：runner 在步骤运行时就开始读输出，不再等一轮结束。
-   - claude-code 改用 `--output-format stream-json`：得到结构化事件（agent 的文字、调用了什么工具、工具结果），
-     比原始日志好读，也能只转发"正在做什么"（例如"运行 checks.sh"、"改 OrderService.java"）。manifest 仍按文件取，不受影响。
-   - 脚本步骤：增量读日志文件。
-   - 读法：一个只读挂载 volume 的辅助容器 `tail -F` 这个步骤的日志（每个运行中的步骤一个，结束即停），或者读
-     viewer 方案 B 同步到 Mac 的目录（如果那边先做）。
-2. **按渠道决定怎么呈现**（注意力原则：只在人在看的地方流式）：
+1. **Source**: the runner starts reading output while the step runs, instead of waiting for a turn to end.
+   - claude-code switches to `--output-format stream-json`: this gives structured events (the agent's text, which tools it called, tool results).
+     They are easier to read than the raw log, and allow relaying only "what it is doing" (for example "running checks.sh", "editing OrderService.java"). The manifest is still read from a file and is unaffected.
+   - Script steps: read the log file incrementally.
+   - How to read: a helper container that mounts the volume read-only runs `tail -F` on the step's log (one per running step, stopped when the step ends), or reads
+     the directory that viewer option B syncs to the Mac (if that is done first).
+2. **Each channel decides how to present it** (attention principle: stream only where a person is watching):
 
-| 渠道 | 呈现 |
+| Channel | Presentation |
 |---|---|
-| CLI（`myorch watch <run>`）、以后的网页 | 完整流式 |
-| Slack | 话题里一条"进度"消息，每几秒编辑一次（只放当前步骤和最近几行动作）；提问、审批、结果另发新消息 |
-| GitHub | 不流式。只在节点发评论（收到、提问、审批、结果），和现在一样 |
-| Email | 不流式。只在需要人做事和有结果时发信 |
+| CLI (`myorch watch <run>`), the future web page | Full streaming |
+| Slack | One "progress" message in the thread, edited every few seconds (only the current step and the last few actions). Questions, approvals and results are sent as new messages |
+| GitHub | No streaming. Comments only at milestones (received, question, approval, result), as today |
+| Email | No streaming. Mail only when a person needs to act and when there is a result |
 
-## 每个渠道怎么接（都在本机，不需要公网地址）
+## How each channel connects (all local, no public address needed)
 
-| 渠道 | 收 | 发 | 备注 |
+| Channel | Receive | Send | Notes |
 |---|---|---|---|
-| GitHub | 轮询 REST（带 ETag，省配额），或通知 API 只取提到 myorch 的 | issue / PR 评论 | 本机收不到 webhook，所以仍是轮询；延迟约 60 秒 |
-| Slack | Socket Mode（websocket，无需公网） | 消息、话题、按钮、编辑 | 审批和选项用按钮，点的人就是审批人 |
-| Email | IMAP IDLE | SMTP | 用 Message-ID / In-Reply-To 归到线程 |
-| CLI | 本机 socket | 终端 | `myorch watch`、以后 `myorch chat` |
+| GitHub | Poll REST (with ETag, to save quota), or use the notifications API to fetch only mentions of myorch | issue / PR comments | Webhooks cannot reach the local machine, so it is still polling. Latency about 60 seconds |
+| Slack | Socket Mode (websocket, no public address needed) | Messages, threads, buttons, edits | Approvals and options use buttons. Whoever clicks is the approver |
+| Email | IMAP IDLE | SMTP | Threads are matched by Message-ID / In-Reply-To |
+| CLI | Local socket | Terminal | `myorch watch`, later `myorch chat` |
 
-## 配置
+## Configuration
 
-`channels.yaml` 取代 `intake.yaml`：
+`channels.yaml` replaces `intake.yaml`:
 
 ```yaml
-identities:                      # 谁是谁
+identities:                      # who is who
   jakobhe: {github: leweii, slack: U0XXXX, email: lewei.me@gmail.com}
 channels:
-  github: {poll_interval: 60}    # 看哪些仓库、召唤词、身份仍来自各项目包
+  github: {poll_interval: 60}    # which repositories to watch, the summon word and identities still come from each project pack
   slack:
-    conversations:               # 哪个频道属于哪个项目
+    conversations:               # which channel belongs to which project
       "#myorch-blog": blog
       "#mdm-dev": mdm
-  email: {address: …, projects: {mdm: "subject 前缀 [mdm]"}}
-mode: observe                    # 没召唤的新内容只记录（和现在一样）
+  email: {address: …, projects: {mdm: "subject prefix [mdm]"}}
+mode: observe                    # new content without a summon is only recorded (as today)
 assess_model: claude-haiku-5-5
 ```
 
-## 凭证：要先定的事
+## Credentials: to be decided first
 
-现在 GitHub 的轮询和发评论都在一次性 sandbox 里跑，凭证从不离开 OpenShell。channels 是本机常驻进程，要连 Slack
-的 websocket、IMAP，每次起 sandbox 不现实。两个选择：
+Today GitHub polling and comment posting both run in one-off sandboxes, and credentials never leave OpenShell. channels is a long-running local process that must hold the Slack
+websocket and IMAP connections. Starting a sandbox each time is not practical. Two options:
 
-- **A（推荐）**：channels 在本机进程里运行，各渠道的 token 放 macOS Keychain，每个 token 只给最小权限
-  （GitHub 只读 issue + 发评论、Slack bot 只在指定频道）。channels 不执行任何外部内容；研判仍在无凭证的 sandbox 里。
-  代价：凭证不再全部在 OpenShell 里，"凭证不离开 OpenShell"这条原则要改成"agent 碰不到凭证"。
-- **B**：channels 本身跑在一个常驻的 OpenShell sandbox 里，凭证用 provider 注入、出站用 policy 限制。
-  代价：要让 sandbox 连本机的 Temporal 和事件库，常驻 sandbox 的生命周期要自己管；复杂得多。
+- **A (recommended)**: channels runs in a local process. Each channel's token is stored in the macOS Keychain, each with the least privilege
+  (GitHub: read issues + post comments only; Slack bot: only in the specified channels). channels never executes any external content. Triage still runs in a sandbox with no credentials.
+  Cost: credentials are no longer all in OpenShell. The principle "credentials never leave OpenShell" changes to "agents cannot reach credentials".
+- **B**: channels itself runs in a long-running OpenShell sandbox. Credentials are injected by a provider and outbound traffic is restricted by policy.
+  Cost: the sandbox must reach the local Temporal and event store, and the long-running sandbox's lifecycle must be managed by us. Much more complex.
 
-## intake 怎么去掉
+## How to remove intake
 
-1. `core/intake.py` 的 Gate、指令解析、研判决策、通知措辞搬到 `channels/triage.py` 和 `channels/render.py`，测试一起搬。
-2. `engines/temporal/intake.py`（IntakeWorkflow）、`runner/jobs.py` 的 POLL / NOTIFY、`intake.yaml`、`myorch intake` 命令删除；
-   研判 job（ASSESS）保留，由 channels 调用。
-3. intake 的状态（游标、已处理事件、话题订阅）一次性导入 SQLite，或直接从头开始（现在没有在跑的 run）。
-4. Mandate 的 `source` 改为 conversation URI；"PR 订阅"改为收到 `pr_opened` 事件时绑定。
+1. Move the Gate, command parsing, triage decisions and notification wording from `core/intake.py` to `channels/triage.py` and `channels/render.py`, together with their tests.
+2. Delete `engines/temporal/intake.py` (IntakeWorkflow), POLL / NOTIFY in `runner/jobs.py`, `intake.yaml` and the `myorch intake` command.
+   Keep the triage job (ASSESS); channels calls it.
+3. Import intake's state (cursors, processed events, thread subscriptions) into SQLite once, or simply start fresh (no runs are in progress now).
+4. The Mandate's `source` becomes the conversation URI. "PR subscription" becomes binding on receipt of the `pr_opened` event.
 
-## 分阶段
+## Phases
 
-| 阶段 | 内容 | 验收 |
+| Phase | What | Acceptance |
 |---|---|---|
-| 1 | 事件日志（引擎写 lifecycle 事件）+ channels 骨架 + GitHub 渠道（和现在的 intake 等价，加上 G0 的改进）；删掉 intake | java-lab：issue 召唤 → 草稿 PR → 审批 → 结果，全程只靠 channels；`none` 有回复 |
-| 2 | 流式：runner 运行中读输出（stream-json）、`stream` 事件、`myorch watch <run>` | 终端里实时看到一次 development 的每一步 |
-| 3 | Slack 渠道：Socket Mode、话题、按钮审批、进度消息 | 在 Slack 发需求 → 选项和审批用按钮 → 结果 |
-| 4 | Email 渠道 | 发邮件下需求、回邮件审批 |
-| 5 | 网页（viewer）作为一个渠道，读同一份事件日志 | 和 ARCHITECTURE §12 合并 |
+| 1 | Event log (engine writes lifecycle events) + channels skeleton + GitHub channel (equivalent to today's intake, plus the G0 improvements). Delete intake | java-lab: issue summon → draft PR → approval → result, end to end through channels only. `none` gets a reply |
+| 2 | Streaming: the runner reads output during the run (stream-json), `stream` events, `myorch watch <run>` | Every step of a development run visible live in the terminal |
+| 3 | Slack channel: Socket Mode, threads, button approvals, progress messages | Post a request in Slack → options and approval via buttons → result |
+| 4 | Email channel | Send a request by email, approve by replying |
+| 5 | The web page (viewer) as a channel, reading the same event log | Merged with ARCHITECTURE §12 |
 
-## 待你决定
+## For you to decide
 
-1. 凭证放哪：A（本机 Keychain，推荐）还是 B（常驻 sandbox）。
-2. Slack 用哪个 workspace（公司的还是个人的）；能不能装一个自己的 Slack app（Socket Mode 需要）。
-3. Email 用哪个邮箱，是否值得做（排在 Slack 之后）。
-4. 事件日志用本机 SQLite（`myorch-data/events.db`）可以吗。
-5. 第 1 阶段 GitHub 仍是 60 秒轮询，可以接受吗（本机没有公网地址，收不到 webhook）。
+1. Where credentials go: A (local Keychain, recommended) or B (long-running sandbox).
+2. Which Slack workspace to use (company or personal), and whether we can install our own Slack app (Socket Mode needs one).
+3. Which mailbox to use for email, and whether it is worth doing (after Slack).
+4. Is a local SQLite (`myorch-data/events.db`) acceptable for the event log?
+5. In phase 1, GitHub is still polled every 60 seconds. Is that acceptable? (The local machine has no public address, so it cannot receive webhooks.)

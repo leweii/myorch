@@ -36,7 +36,7 @@ def root(tmp_path: Path) -> Path:
     pack = root / "blog"
     (pack / "guide").mkdir(parents=True)
     (pack / "project.yaml").write_text(PROJECT_YAML)
-    (pack / "guide" / "review-guide.md").write_text("# Review\n\n## 标签\n- Important\n")
+    (pack / "guide" / "review-guide.md").write_text("# Review\n\n## Labels\n- Important\n")
     (pack / "checks.sh").write_text("echo ok\n")
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=root, check=True)
     subprocess.run(["git", "add", "-A"], cwd=root, check=True)
@@ -58,9 +58,9 @@ def run(root, proposals, accepted, scope="learn"):
 
 
 GOOD = [
-    {"id": 1, "title": "补充语言回退", "changes": [{"file": "project/guide/review-guide.md",
-     "edits": [{"old": "- Important\n", "new": "- Important（含站点语言回退成英文的问题）\n"}]}]},
-    {"id": 2, "title": "新增一节", "changes": [{"file": "project/guide/review-guide.md", "append": "## 新规则\n- 内容"}]},
+    {"id": 1, "title": "Add language fallback", "changes": [{"file": "project/guide/review-guide.md",
+     "edits": [{"old": "- Important\n", "new": "- Important (including the site language falling back to English)\n"}]}]},
+    {"id": 2, "title": "Add a section", "changes": [{"file": "project/guide/review-guide.md", "append": "## New rule\n- content"}]},
 ]
 
 
@@ -68,12 +68,12 @@ def test_applies_accepted_commits_and_syncs(root):
     store, out = run(root, GOOD, {"accepted": [1, 2]})
     assert out.result.ok, out.result.error
     text = (root / "blog" / "guide" / "review-guide.md").read_text()
-    assert "站点语言回退" in text and text.rstrip().endswith("- 内容")
+    assert "site language falling back" in text and text.rstrip().endswith("- content")
     log = subprocess.run(["git", "log", "-1", "--format=%B"], cwd=root, capture_output=True, text=True).stdout
-    assert "myorch-run: learn-1 step: apply" in log and log.startswith("learn(blog): #1 补充语言回退")
+    assert "myorch-run: learn-1 step: apply" in log and log.startswith("learn(blog): #1 Add language fallback")
     assert store.synced == ["blog"] and out.manifest.outputs["applied"] == [1, 2]
     store2, again = run(root, GOOD, {"accepted": [1, 2]})  # a retry must not apply twice
-    assert again.result.ok and "已经写回过" in again.manifest.summary and store2.synced == []
+    assert again.result.ok and "already written back" in again.manifest.summary and store2.synced == []
     assert out.manifest.outputs["version"].startswith("sha256:")
     assert (root / "blog" / "guide" / "review-guide.md").read_text() == text
 
@@ -100,7 +100,7 @@ def test_nothing_accepted_changes_nothing(root):
     ({"file": "project/risk-rules.yaml", "append": "rules: []"}, "learn may not change 'risk-rules.yaml'"),
     ({"file": "project/project.yaml", "append": "x"}, "may not change"),
     ({"file": "project/guide/../../evil.md", "append": "x"}, "not a file in the project pack"),
-    ({"file": "project/guide/review-guide.md", "edits": [{"old": "不存在的原文", "new": "x"}]}, "出现了 0 次"),
+    ({"file": "project/guide/review-guide.md", "edits": [{"old": "text that is not there", "new": "x"}]}, "occurs 0 times"),
 ])
 def test_rejects_unsafe_or_unclean_changes_without_partial_writes(root, bad, msg):
     before = (root / "blog" / "guide" / "review-guide.md").read_text()
@@ -112,7 +112,7 @@ def test_rejects_unsafe_or_unclean_changes_without_partial_writes(root, bad, msg
 
 
 def test_onboard_scope_may_change_checks(root):
-    proposals = [{"id": 1, "title": "检查", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo ok\n", "new": "./gradlew check\n"}]}]}]
+    proposals = [{"id": 1, "title": "Checks", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo ok\n", "new": "./gradlew check\n"}]}]}]
     _, out = run(root, proposals, {"accepted": [1]}, scope="onboard")
     assert out.result.ok and (root / "blog" / "checks.sh").read_text() == "./gradlew check\n"
 
@@ -165,8 +165,8 @@ def apply_in_round(root, rnd, proposals, accepted, scope="fix"):
 
 
 def test_fix_scope_applies_once_per_round_and_returns_the_new_version(root):
-    one = [{"id": 1, "title": "检查改成 cp", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo ok", "new": "echo cp"}]}]}]
-    two = [{"id": 1, "title": "再改一次", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo cp", "new": "echo two"}]}]}]
+    one = [{"id": 1, "title": "Change checks to cp", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo ok", "new": "echo cp"}]}]}]
+    two = [{"id": 1, "title": "Change it once more", "changes": [{"file": "project/checks.sh", "edits": [{"old": "echo cp", "new": "echo two"}]}]}]
     s1, r1 = apply_in_round(root, 1, one, {"accepted": [1]})
     s2, r2 = apply_in_round(root, 2, two, {"accepted": [1]})  # same run, a later round: applies again
     assert r1.result.ok and r2.result.ok, (r1.result.error, r2.result.error)
@@ -175,12 +175,12 @@ def test_fix_scope_applies_once_per_round_and_returns_the_new_version(root):
     log = subprocess.run(["git", "log", "-2", "--format=%B"], cwd=root, capture_output=True, text=True).stdout
     assert "myorch-run: dev-1 step: pack-apply.r1" in log and "myorch-run: dev-1 step: pack-apply.r2" in log
     s3, again = apply_in_round(root, 2, two, {"accepted": [1]})  # a retry of round 2 does not apply twice
-    assert "已经写回过" in again.manifest.summary and s3.synced == []
+    assert "already written back" in again.manifest.summary and s3.synced == []
 
 
 def test_fix_scope_may_not_change_how_the_change_is_approved(root):
     (root / "blog" / "risk-rules.yaml").write_text("rules: []\n")
-    bad = [{"id": 1, "title": "少一个审批人", "changes": [{"file": "project/risk-rules.yaml", "content": "default: 0"}]}]
+    bad = [{"id": 1, "title": "One approver fewer", "changes": [{"file": "project/risk-rules.yaml", "content": "default: 0"}]}]
     _, out = apply_in_round(root, 1, bad, {"accepted": [1]})
     assert not out.result.ok and "may not change" in out.result.error
     assert (root / "blog" / "risk-rules.yaml").read_text() == "rules: []\n"

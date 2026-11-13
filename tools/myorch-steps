@@ -30,7 +30,7 @@ def steps_dir(run: str | None) -> str:
     base = os.path.join(WS, "observed", run) if run else WS
     d = os.path.join(base, ".myorch", "steps")
     if not os.path.isdir(d):
-        sys.exit(f"myorch-steps: 没有 {d}" + ("（这个运行没有挂进来：observed/ 下只有步骤 observe_runs 指定的运行）" if run else ""))
+        sys.exit(f"myorch-steps: no {d}" + (" (this run is not mounted: observed/ holds only the runs named in the step's observe_runs)" if run else ""))
     return d
 
 
@@ -68,7 +68,7 @@ def step_path(d: str, step: str) -> str:
     p = os.path.join(d, step)
     if os.path.sep in step or step.startswith(".") or not os.path.isdir(p):
         known = ", ".join(sorted(os.listdir(d)))
-        sys.exit(f"myorch-steps: 没有步骤 {step!r}。有：{known}")
+        sys.exit(f"myorch-steps: no step {step!r}. There are: {known}")
     return p
 
 
@@ -82,17 +82,17 @@ def cmd_list(d: str) -> None:
         m = manifest(p)
         mtime = max([os.path.getmtime(x[2]) for x in logs] or [os.path.getmtime(p)])
         rows.append((mtime, name, m.get("status") or "-", logs, m.get("summary")))
-    print("步骤（按最后活动时间）  状态  尝试-轮次:行数  摘要")
+    print("step (by last activity)  status  attempt-turn:lines  summary")
     for _, name, status, logs, summary in sorted(rows):
-        runs = " ".join(f"{a}-{t}:{count_lines(path)}" for a, t, path in logs) or "无日志"
+        runs = " ".join(f"{a}-{t}:{count_lines(path)}" for a, t, path in logs) or "no log"
         print(f"{name}  {status}  {runs}  {one_line(summary)}")
-    print("\n看一步的结论：myorch-steps show <步骤>；看过程：myorch-steps log <步骤> [--from 行号]")
+    print("\nA step's conclusion: myorch-steps show <step>; how it got there: myorch-steps log <step> [--from LINE]")
 
 
 def cmd_show(d: str, step: str) -> None:
     m = manifest(step_path(d, step))
     if not m:
-        sys.exit(f"myorch-steps: {step} 没有 manifest（还没结束，或者失败时没有写）")
+        sys.exit(f"myorch-steps: {step} has no manifest (it has not finished, or it failed without writing one)")
     print(json.dumps({k: m.get(k) for k in ("status", "summary", "outputs", "files", "notes", "question") if m.get(k)},
                      ensure_ascii=False, indent=1))
 
@@ -100,41 +100,41 @@ def cmd_show(d: str, step: str) -> None:
 def cmd_log(d: str, step: str, attempt: int | None, turn: int | None, start: int, lines: int, grep: str | None) -> None:
     logs = turn_logs(step_path(d, step))
     if not logs:
-        sys.exit(f"myorch-steps: {step} 没有日志（脚本步骤可能没有输出，或者还没开始）")
+        sys.exit(f"myorch-steps: {step} has no log (a script step may have no output, or it has not started)")
     if attempt is None:
         attempt = logs[-1][0]
     picked = [x for x in logs if x[0] == attempt and (turn is None or x[1] == turn)]
     if not picked:
         have = " ".join(f"--attempt {a} --turn {t}" for a, t, _ in logs)
-        sys.exit(f"myorch-steps: {step} 没有这个尝试或轮次。有：{have}")
+        sys.exit(f"myorch-steps: {step} has no such attempt or turn. There are: {have}")
     if turn is None:
         picked = picked[-1:]  # the attempt's last turn
     a, t, path = picked[0]
     with open(path, encoding="utf-8", errors="replace") as f:
         text = f.read().splitlines()
     others = [f"{x}-{y}" for x, y, _ in logs if (x, y) != (a, t)]
-    print(f"# {step} 尝试 {a} 轮次 {t}，共 {len(text)} 行" + (f"（其他：{' '.join(others)}）" if others else ""))
+    print(f"# {step} attempt {a} turn {t}, {len(text)} lines" + (f" (others: {' '.join(others)})" if others else ""))
     if grep:
         try:
             rx = re.compile(grep)
         except re.error as e:
-            sys.exit(f"myorch-steps: --grep 不是合法的正则：{e}")
+            sys.exit(f"myorch-steps: --grep is not a valid regex: {e}")
         hits = [i for i, line in enumerate(text, 1) if rx.search(line)]
         for i in hits[:100]:
             print(f"{i:>6}  {text[i - 1]}")
-        print(f"\n共 {len(hits)} 处" + ("，只列了前 100 处" if len(hits) > 100 else "") + "。看上下文：--from <行号>")
+        print(f"\n{len(hits)} matches" + (", only the first 100 listed" if len(hits) > 100 else "") + ". For the context: --from <line>")
         return
     start = max(1, start)
     end = min(len(text), start + max(1, lines) - 1)
     for i in range(start, end + 1):
         print(f"{i:>6}  {text[i - 1]}")
     if end < len(text):
-        print(f"\n下一段：myorch-steps log {step} --attempt {a} --turn {t} --from {end + 1}")
+        print(f"\nNext slice: myorch-steps log {step} --attempt {a} --turn {t} --from {end + 1}")
 
 
 def main() -> None:
     p = argparse.ArgumentParser(prog="myorch-steps", description=__doc__.split("\n\n")[0])
-    p.add_argument("--run", help="observed/<run>/ 里的运行，而不是这次运行")
+    p.add_argument("--run", help="a run in observed/<run>/ instead of this run")
     run = argparse.ArgumentParser(add_help=False)  # --run also after the command
     run.add_argument("--run", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
     sub = p.add_subparsers(dest="cmd")

@@ -7,7 +7,7 @@
 #
 # Docs: https://leweii.github.io/myorch/workflows/#fragments--sync-base
 fragment: sync-base
-description: 克隆或更新项目仓库，切到最新的 base 分支，初始化子模块
+description: Clones or updates the project's repository, checks out the latest base branch, initialises submodules
 
 params: {}
 
@@ -51,5 +51,5 @@ item:
       fi
       sha=$(git rev-parse --short HEAD)
       echo "- sync-master: $MYORCH_PROJECT_BASE @ $sha" >> "$MYORCH_WORKSPACE/memory/MEMORY.md"
-      printf '{"status":"ok","summary":"%s 同步到 %s","outputs":{"base_sha":"%s"}}' \
+      printf '{"status":"ok","summary":"%s synced to %s","outputs":{"base_sha":"%s"}}' \
         "$MYORCH_PROJECT_BASE" "$sha" "$sha" > /sandbox/out/manifest.json

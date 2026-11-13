@@ -67,7 +67,7 @@ def at_gate() -> RunState:
 def test_changes_reopen_the_loop_and_reset_everything_after_it():
     s = at_gate()
     assert s.change_round("human") == 2
-    assert s.request_changes("human", "ann", "金额为 0 也要拒绝", "2026-11-02T10:00:00") == 2
+    assert s.request_changes("human", "ann", "reject an amount of 0 too", "2026-11-02T10:00:00") == 2
 
     lr = s.loops["review-fix"]
     assert lr.status == "running" and lr.round == 2 and lr.max_rounds == 3  # round 1 + 2 more
@@ -95,7 +95,7 @@ def test_changes_reopen_the_loop_and_reset_everything_after_it():
 def test_changes_only_while_waiting_and_only_where_configured():
     s = at_gate()
     s.instances["human"].status = "running"
-    with pytest.raises(ValueError, match="没有在等审批"):
+    with pytest.raises(ValueError, match="is not waiting for approval"):
         s.request_changes("human", "ann", "x", "t")
     with pytest.raises(ValueError, match="approval.changes"):
         s.request_changes("risk", "ann", "x", "t")
@@ -136,6 +136,6 @@ def test_flow_checks_the_changes_loop_and_durations():
 
 def test_failed_gate_reason_reaches_the_failure_summary():
     s = at_gate()
-    s.instances["human"].status, s.instances["human"].error = "failed", "审批超时（7d内没有人处理）"
+    s.instances["human"].status, s.instances["human"].error = "failed", "approval timed out: nobody handled it within 7d"
     s.plan()
-    assert s.status == "failed" and "审批超时" in s.failure_summary()
+    assert s.status == "failed" and "approval timed out" in s.failure_summary()

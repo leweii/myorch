@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 FLOWS = ROOT / "flows"
 STEPS = ("takeaway-trail", "takeaway", "takeaway-redact", "takeaway-commit")
 PUB = {"name": "mdm", "repo": "o/r", "base": "main", "image": "img", "branch": "b/{{run.id}}", "submodules": [],
-       "submodules_list": "", "repo_docs": [], "repo_docs_list": "（无）", "conventions": "", "pr_template": "",
+       "submodules_list": "", "repo_docs": [], "repo_docs_list": "(none)", "conventions": "", "pr_template": "",
        "e2e": {"image": "", "profile": "dev-read", "acceptance": True}, "approvers": [],
        "jira": {"url": "", "key": "", "auth": "basic", "email": ""}, "identity": {"account": "a", "trigger": "/myorch"},
        "required_inputs": [], "sweep": {"paths": [], "include": [], "exclude": [], "chunk": 20}, "providers": {},
@@ -142,7 +142,7 @@ def run_commit(tmp_path: Path, ws: Path) -> dict:
 
 
 def test_takeaway_commit_commits_once(tmp_path: Path):
-    ws = commit_ws(tmp_path, {"task.md": "# 任务：MD-1\n", "takeaway.md": "# Takeaway\n"})
+    ws = commit_ws(tmp_path, {"task.md": "# Task: MD-1\n", "takeaway.md": "# Takeaway\n"})
     repo = ws / "repo"
     (repo / "a.txt").write_text("someone's work\n")
     git(repo, "add", "a.txt")  # staged, not part of the takeaway commit
@@ -153,7 +153,7 @@ def test_takeaway_commit_commits_once(tmp_path: Path):
     assert sorted(git(repo, "show", "--format=", "--name-only", "HEAD").split()) == [f"{d}/takeaway.md", f"{d}/task.md"]
     head = git(repo, "rev-parse", "HEAD")
     again = run_commit(tmp_path, ws)  # a retry
-    assert "已经提交过" in again["summary"] and git(repo, "rev-parse", "HEAD") == head
+    assert "is already committed" in again["summary"] and git(repo, "rev-parse", "HEAD") == head
 
 
 def test_takeaway_commit_without_files_commits_nothing(tmp_path: Path):
@@ -254,13 +254,13 @@ def test_run_trail_tells_how_the_run_went_so_far():
     advance(state, "ci.r2", passed=True, failed=[])
     advance(state, "verify.r2", blocking=0)
     state.plan()
-    t = run_trail(state, [{"step": "develop", "question": "红还是蓝？", "text": "红", "at": "2026-11-09T10:00:00"}])
+    t = run_trail(state, [{"step": "develop", "question": "Red or blue?", "text": "Red", "at": "2026-11-09T10:00:00"}])
     assert [s["id"] for s in t["steps"]] == ["develop", "trail", "ci.r1", "verify.r1", "ci.r2", "verify.r2"]
     assert t["steps"][1]["status"] == "running"  # the trail step itself; later steps are not reached yet
     rounds = t["loops"][0]["per_round"]
     assert rounds[0] == {"round": 1, "steps": {"ci.r1": "succeeded", "verify.r1": "succeeded"}, "blocking": 2,
                          "ci": {"passed": False, "failed": ["unit"]}}
-    assert t["qa"] == [{"step": "develop", "question": "红还是蓝？", "answer": "红", "at": "2026-11-09T10:00:00"}]
+    assert t["qa"] == [{"step": "develop", "question": "Red or blue?", "answer": "Red", "at": "2026-11-09T10:00:00"}]
 
 
 def test_run_trail_survives_odd_manifests():
@@ -298,7 +298,7 @@ def test_run_trail_action_adds_what_the_host_knows(tmp_path: Path, monkeypatch):
                         step=Step(id="takeaway-trail", action="run-trail", args={"path": "docs/takeaway/trail.json"}),
                         context={}, trail={"run": RUN, "steps": [{"id": "ci", "status": "failed"}], "failed_so_far": ["ci"], "qa": []})
     out = ActionRunner(store, tmp_path).run(req)
-    assert out.result.ok and "失败过：ci" in out.manifest.summary
+    assert out.result.ok and "failed so far: ci" in out.manifest.summary
     t = json.loads(store.files[f"runs/{RUN}/docs/takeaway/trail.json"])
     assert (t["myorch_commit"], t["pack_version"]) == ("0123456789ab", "sha256:abc")
     assert not ActionRunner(store, tmp_path).run(req.model_copy(update={"trail": None})).result.ok
@@ -320,9 +320,9 @@ def learn_ws(tmp_path: Path, entries: dict[str, int], learned: list[str], extra:
     (repo / "README").write_text("r\n")
     for name, size in entries.items():
         (repo / "myorch" / name).mkdir(parents=True)
-        (repo / "myorch" / name / "task.md").write_text(f"# 任务 {name}\n")
+        (repo / "myorch" / name / "task.md").write_text(f"# Task {name}\n")
         (repo / "myorch" / name / "takeaway.md").write_text(
-            f"# Takeaway\n## 遇到的问题\n- [环境] {name} 的问题\n## 缺了什么知识\n- [项目知识] {'x' * size}\n")
+            f"# Takeaway\n## Problems encountered\n- [environment] problem in {name}\n## Missing knowledge\n- [project knowledge] {'x' * size}\n")
     (repo / "myorch" / "README.md").write_text("not an entry\n")
     for rel, text in (extra or {}).items():
         (repo / rel).parent.mkdir(parents=True, exist_ok=True)
@@ -357,7 +357,7 @@ def test_collect_takes_unlearned_takeaways_oldest_first(tmp_path: Path):
     picked = json.loads((ws / "docs" / "learn" / "takeaways.json").read_text())["picked"]
     assert [p["run"] for p in picked] == ["ck-development-bbbb", "ck-development-cccc"]
     assert (ws / "docs" / "learn" / "takeaways" / "2026-11-02-ck-development-bbbb" / "task.md").is_file()
-    assert "2026-11-02-ck-development-bbbb 的问题" in (ws / "docs" / "learn" / "signals.md").read_text()
+    assert "problem in 2026-11-02-ck-development-bbbb" in (ws / "docs" / "learn" / "signals.md").read_text()
 
 
 def test_collect_keeps_to_its_budget_and_leaves_the_rest(tmp_path: Path):
@@ -419,7 +419,7 @@ def test_the_ledger_merges_concurrent_learns(tmp_path: Path):
 
 def test_collect_skips_unreadable_and_badly_named_entries(tmp_path: Path):
     ws = learn_ws(tmp_path, {"2026-11-01-ck-development-good": 10}, learned=[], extra={
-        "myorch/2026-11-02-ck-development-notakeaway/task.md": "# 任务\n",          # no takeaway.md
+        "myorch/2026-11-02-ck-development-notakeaway/task.md": "# Task\n",          # no takeaway.md
         "myorch/2026-11-03-ck-development-empty/takeaway.md": "\n",                  # empty
         "myorch/2026-11-04-CK-Upper_Case/takeaway.md": "# Takeaway\n",              # not a run id
     })
@@ -427,7 +427,7 @@ def test_collect_skips_unreadable_and_badly_named_entries(tmp_path: Path):
     data = json.loads((ws / "docs" / "learn" / "takeaways.json").read_text())
     assert [p["run"] for p in data["picked"]] == ["ck-development-good"]  # only this one gets recorded as learned
     assert data["unreadable"] == ["ck-development-notakeaway", "ck-development-empty"]
-    assert "2 条读不到" in m["summary"] and m["outputs"]["takeaways"] == 1
+    assert "2 takeaway.md files could not be read" in m["summary"] and m["outputs"]["takeaways"] == 1
 
 
 def test_collect_notes_never_carry_the_token(tmp_path: Path):
@@ -436,7 +436,7 @@ def test_collect_notes_never_carry_the_token(tmp_path: Path):
     token = "ghs_" + "s" * 36
     m = run_collect(tmp_path, ws, token=token)
     note = json.loads((ws / "docs" / "learn" / "takeaways.json").read_text())["note"]
-    assert note.startswith("读不到仓库的 myorch/（git 退出码")
+    assert note.startswith("cannot read the repository's myorch/ (git exit code")
     import base64
     for leak in (token, base64.b64encode(f"x-access-token:{token}".encode()).decode(), "Authorization", "extraHeader"):
         assert leak not in note and leak not in m["summary"]
@@ -444,8 +444,8 @@ def test_collect_notes_never_carry_the_token(tmp_path: Path):
 
 def test_takeaway_redact_uses_the_shared_rules(tmp_path: Path):
     pat = "abcdefghijklmnopqrstuvwxyz234567abcdefghijklmnopqrst"  # an Azure DevOps PAT (old format)
-    store = Store({f"runs/{RUN}/docs/takeaway/task.md": "# 任务\nclone https://bob:hunter22@dev.azure.com/x\n",
-                   f"runs/{RUN}/docs/takeaway/takeaway.md": f"- [环境] Authorization: Bearer abcdefghijklmnop1234\n- pat {pat}\n"
+    store = Store({f"runs/{RUN}/docs/takeaway/task.md": "# Task\nclone https://bob:hunter22@dev.azure.com/x\n",
+                   f"runs/{RUN}/docs/takeaway/takeaway.md": f"- [environment] Authorization: Bearer abcdefghijklmnop1234\n- pat {pat}\n"
                                                              f"- commit {'0123456789abcdef' * 2}\n"})
     step = Step(id="takeaway-redact", action="takeaway-redact", args={"files": "docs/takeaway/task.md docs/takeaway/takeaway.md"})
     out = ActionRunner(store, tmp_path).run(ActionRequest(key=StepKey(run_id=RUN, step_id="takeaway-redact", attempt=1),

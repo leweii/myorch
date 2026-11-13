@@ -3,7 +3,7 @@
 A case is a change a past run reviewed (its round-1 diff) plus the findings a person confirmed as
 real. Cases come from the history (collect): every development / review run whose round-1
 verified.json has Important or Nit findings becomes a candidate; the person keeps the findings
-that are real problems (console, 流程 → 评测集), and only then the case counts.
+that are real problems (console, Flows → Eval set), and only then the case counts.
 
 The change is replayed from the source run's own workspace (the project's eval flow, flows/eval.yaml, mounts it read-only
 with observe_runs), so commits that never reached GitHub work too. The reviewers run through
@@ -160,7 +160,7 @@ def decide(data_root: Path, case_id: str, keep: list[int], by: str) -> dict[str,
     """The person's verdict: the findings that are real (keep), or none (the case is rejected)."""
     case = load_case(data_root, case_id)
     if not case or case.get("status") == "draft":
-        raise ValueError(f"没有这个案例：{case_id}")
+        raise ValueError(f"No such case: {case_id}")
     keep = sorted({int(i) for i in keep if 0 <= int(i) < len(case["findings"])})
     case.update(status="confirmed" if keep else "rejected", keep=keep, decided_by=by, decided_at=time.time())
     save_case(data_root, case)

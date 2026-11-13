@@ -30,7 +30,7 @@ details>summary{cursor:pointer;color:#0969da} .cmd{font:13px ui-monospace,Menlo,
 
 
 def _md(text: str) -> str:
-    return md.markdown(text or "（无）", extensions=["tables", "fenced_code"])
+    return md.markdown(text or "(none)", extensions=["tables", "fenced_code"])
 
 
 def _diff_html(diff: str) -> str:
@@ -70,24 +70,24 @@ def build(run_id: str, files: dict[str, str], waiting: str = "", approve_hint: s
                   if (t := (steps.get(sid, {}).get("outputs") or {}).get("title"))), "") or req.get("task", run_id)[:80]
     project = (mandate.get("project") or {}).get("name", "-")
     source = mandate.get("source") or ""
-    src = f' · 来源 <a href="{html.escape(source)}">{html.escape(source)}</a>' if source.startswith("http") else ""
+    src = f' · source <a href="{html.escape(source)}">{html.escape(source)}</a>' if source.startswith("http") else ""
 
     parts = [f"<h1>{html.escape(title)}</h1>",
-             f'<div class="meta">run <code>{run_id}</code> · 项目 {html.escape(project)} · 流程 {html.escape((mandate.get("flow") or {}).get("name", "-"))}'
-             f' · 发起人 {html.escape(mandate.get("initiator", "-"))}{src}</div>']
+             f'<div class="meta">run <code>{run_id}</code> · project {html.escape(project)} · flow {html.escape((mandate.get("flow") or {}).get("name", "-"))}'
+             f' · initiator {html.escape(mandate.get("initiator", "-"))}{src}</div>']
     if waiting:
-        parts.append(f'<div class="box"><p class="warn"><b>等你审批：</b>{html.escape(waiting)}</p>{approve_hint}</div>')
+        parts.append(f'<div class="box"><p class="warn"><b>Waiting for your approval:</b> {html.escape(waiting)}</p>{approve_hint}</div>')
 
     # 1. what was asked
-    parts += ["<h2>1. 需求（agent 理解的）</h2>",
+    parts += ["<h2>1. Requirements (as the agent understood them)</h2>",
               f'<div class="box">{_md(files.get("docs/requirements.md", ""))}</div>',
-              f"<details><summary>原始请求</summary><pre>{html.escape(json.dumps(req, ensure_ascii=False, indent=1))}</pre></details>"]
+              f"<details><summary>Original request</summary><pre>{html.escape(json.dumps(req, ensure_ascii=False, indent=1))}</pre></details>"]
 
     # 2. what changed
     diff = files.get("git/diff", "")
     stat, _, body = diff.partition("\n\n")
-    parts += ["<h2>2. 改动</h2>",
-              f'<p class="meta">提交：{html.escape(files.get("git/log", "").strip()) or "（无）"}</p>',
+    parts += ["<h2>2. Changes</h2>",
+              f'<p class="meta">Commits: {html.escape(files.get("git/log", "").strip()) or "(none)"}</p>',
               f'<pre class="diff">{html.escape(stat)}</pre>', _diff_html(body)]
 
     # 3. checks
@@ -95,34 +95,34 @@ def build(run_id: str, files: dict[str, str], waiting: str = "", approve_hint: s
     if ci:
         n, path = ci[-1]
         r = _json(files[path], {})
-        verdict = ('<span class="ok">通过</span>' if r.get("passed") else
-                   f'<span class="bad">未通过：{html.escape("、".join(map(str, r.get("failed", []))))}</span>')
+        verdict = ('<span class="ok">passed</span>' if r.get("passed") else
+                   f'<span class="bad">failed: {html.escape(", ".join(map(str, r.get("failed", []))))}</span>')
         env = r.get("environment") or []
-        extra = f'；环境失败（不计入）：{html.escape("、".join(env))}' if env else ""
-        parts += ["<h2>3. 检查</h2>", f"<p>第 {n} 轮：{verdict}{extra}</p>",
-                  f"<details><summary>检查报告</summary>{_md(files.get(f'docs/ci/round-{n}/report.md', ''))}</details>"]
+        extra = f'; environment failures (not counted): {html.escape(", ".join(env))}' if env else ""
+        parts += ["<h2>3. Checks</h2>", f"<p>Round {n}: {verdict}{extra}</p>",
+                  f"<details><summary>Checks report</summary>{_md(files.get(f'docs/ci/round-{n}/report.md', ''))}</details>"]
     # end-to-end block (only projects with e2e.image): the last round's smoke and acceptance results
     e2e = sorted({int(m.group(1)) for p in files if (m := re.match(r"docs/e2e/round-(\d+)/", p))})
     if e2e:
         n = e2e[-1]
-        parts.append(f"<h2>3b. 端到端测试（{len(e2e)} 轮）</h2>")
-        for part, label in (("smoke", "冒烟用例"), ("acceptance", "验收用例")):
+        parts.append(f"<h2>3b. End-to-end tests ({len(e2e)} rounds)</h2>")
+        for part, label in (("smoke", "Smoke cases"), ("acceptance", "Acceptance cases")):
             r = _json(files.get(f"docs/e2e/round-{n}/{part}/result.json"), None)
             if r is None:
-                parts.append(f"<p>{label}：没有结果</p>")
+                parts.append(f"<p>{label}: no result</p>")
                 continue
-            verdict = ('<span class="ok">通过</span>' if r.get("passed") else
-                       f'<span class="bad">未通过：{html.escape("、".join(map(str, r.get("failed", []))))}</span>')
-            parts += [f"<p>{label}，第 {n} 轮：{verdict}</p>",
-                      f"<details><summary>{label}报告</summary>{_md(files.get(f'docs/e2e/round-{n}/{part}/report.md', ''))}</details>"]
+            verdict = ('<span class="ok">passed</span>' if r.get("passed") else
+                       f'<span class="bad">failed: {html.escape(", ".join(map(str, r.get("failed", []))))}</span>')
+            parts += [f"<p>{label}, round {n}: {verdict}</p>",
+                      f"<details><summary>{label} report</summary>{_md(files.get(f'docs/e2e/round-{n}/{part}/report.md', ''))}</details>"]
         if f"docs/e2e/round-{n}/acceptance.md" in files:
-            parts.append(f"<details><summary>验收标准对照</summary>{_md(files[f'docs/e2e/round-{n}/acceptance.md'])}</details>")
-        parts.append(f'<p class="meta">截图在工作区 docs/e2e/round-{n}/*/screenshots/</p>')
+            parts.append(f"<details><summary>Acceptance criteria check</summary>{_md(files[f'docs/e2e/round-{n}/acceptance.md'])}</details>")
+        parts.append(f'<p class="meta">Screenshots are in the workspace at docs/e2e/round-{n}/*/screenshots/</p>')
 
     # 4. review
     summaries = _rounds(files, r"docs/review/round-(\d+)/summary\.md")
     verified = _rounds(files, r"docs/review/round-(\d+)/verified\.json")
-    parts.append(f"<h2>4. Review（{len(summaries)} 轮）</h2>")
+    parts.append(f"<h2>4. Review ({len(summaries)} rounds)</h2>")
     if verified:
         findings = _json(files[verified[-1][1]], [])
         if findings:
@@ -131,20 +131,20 @@ def build(run_id: str, files: dict[str, str], waiting: str = "", approve_hint: s
                 f'<td><code>{html.escape(str(f.get("file", "")))}:{html.escape(str(f.get("line", "")))}</code></td>'
                 f'<td><b>{html.escape(str(f.get("title", "")))}</b><br>{html.escape(str(f.get("evidence", "")))}</td>'
                 f'<td>{html.escape(str(f.get("status", "")))}</td></tr>' for f in findings)
-            parts.append(f"<p>最后一轮核实过的发现（不阻塞的也列出来）：</p><table><tr><th>严重度</th><th>位置</th><th>内容</th><th>状态</th></tr>{rows}</table>")
+            parts.append(f"<p>Verified findings of the last round (non-blocking ones included):</p><table><tr><th>Severity</th><th>Location</th><th>Finding</th><th>Status</th></tr>{rows}</table>")
         else:
-            parts.append("<p>最后一轮没有发现。</p>")
+            parts.append("<p>No findings in the last round.</p>")
     if summaries:
-        parts.append(f"<details><summary>最后一轮总结</summary>{_md(files[summaries[-1][1]])}</details>")
+        parts.append(f"<details><summary>Last round summary</summary>{_md(files[summaries[-1][1]])}</details>")
 
     # 5. risk
     rr, cr = steps.get("risk-rules", {}), steps.get("classify-risk", {})
-    parts += ["<h2>5. 风险</h2>",
-              f"<p><b>规则：</b>{html.escape(rr.get('summary', '（无）'))}</p>",
-              f"<p><b>分类器：</b>{html.escape(cr.get('summary', '（无）'))}</p>",
-              f"<details><summary>风险分析</summary>{_md(files.get('docs/risk.md', ''))}</details>"]
+    parts += ["<h2>5. Risk</h2>",
+              f"<p><b>Rules:</b> {html.escape(rr.get('summary', '(none)'))}</p>",
+              f"<p><b>Classifier:</b> {html.escape(cr.get('summary', '(none)'))}</p>",
+              f"<details><summary>Risk analysis</summary>{_md(files.get('docs/risk.md', ''))}</details>"]
 
     # 6. how it was built
-    parts += ["<h2>6. 实现记录</h2>", f"<details><summary>implementation.md</summary>{_md(files.get('docs/implementation.md', ''))}</details>"]
-    return (f'<!doctype html><html lang="zh"><head><meta charset="utf-8"><title>{html.escape(title)} · {run_id}</title>'
+    parts += ["<h2>6. Implementation notes</h2>", f"<details><summary>implementation.md</summary>{_md(files.get('docs/implementation.md', ''))}</details>"]
+    return (f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>{html.escape(title)} · {run_id}</title>'
             f"<style>{CSS}</style></head><body>{''.join(parts)}</body></html>")

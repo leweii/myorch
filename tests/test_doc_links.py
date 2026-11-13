@@ -11,9 +11,8 @@ import pytest
 
 REPO = Path(__file__).resolve().parent.parent
 SITE = "https://leweii.github.io/myorch/"
-PAGES = {"": "docs/index.html", "zh/": "docs/zh/index.html",
-         "workflows/": "docs/workflows/index.html", "zh/workflows/": "docs/zh/workflows/index.html"}
-LINK = re.compile(re.escape(SITE) + r"((?:zh/)?(?:workflows/)?)(?:index\.html)?(?:#([^\s)\"'`>]+))?")
+PAGES = {"": "docs/index.html", "workflows/": "docs/workflows/index.html"}
+LINK = re.compile(re.escape(SITE) + r"((?:workflows/)?)(?:index\.html)?(?:#([^\s)\"'`>]+))?")
 
 
 def ids(page: str) -> set[str]:

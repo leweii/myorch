@@ -1,27 +1,27 @@
-# 交付的接口：workflow 交给渠道什么（2026-11-02）
+# The delivery interface: what the workflow hands to a channel (2026-11-02)
 
-状态：**workflow 一侧已实现**：审批门（提修改意见、提醒、超时）和 `deliver`（`flows/lib/deliver.yaml`）。workflow 一侧由 workflow review 的会话实现。渠道一侧（在 GitHub 上开 PR）由做 channels 的会话实现。
+Status: **The workflow side is implemented**: the approval gate (request changes, reminder, timeout) and `deliver` (`flows/lib/deliver.yaml`). The workflow side is implemented by the workflow review session. The channel side (opening a PR on GitHub) is implemented by the session working on channels.
 
-## 分工
+## Division of work
 
-- **workflow**（`development.yaml` 的最后一步 `deliver`，片段 `flows/lib/deliver.yaml`）：
-  1. 检查当前分支不是 base 分支。
-  2. 检查 HEAD 就是审批通过的那个提交。不一致时停止，不推送。
-  3. 把这个 run 的分支推送到项目的 git 远端（`git push`，凭证来自项目的 `github` provider 角色）。
-  4. 写 `docs/delivery.md`：这次改动的说明，格式见下面。
-  5. 不调用任何平台 API：不开 PR、不发评论、不加标记。
-- **渠道**：收到 `run_finished` 事件后，按目标系统交付。GitHub 上就是开 PR：
-  - PR 标题：`delivery.title`。
-  - PR 正文：`delivery.description`，后面接 `delivery.pr_template`（仓库自带的 PR 模板，有时）。
-    请求来自本仓库的 issue 时，正文加 `Closes #<issue>`。渠道自己知道请求来自哪里（Mandate 的 `source`）。
-  - head = `delivery.branch`，base = `delivery.base`。
-  - 幂等：这个分支已经有 PR 时，不再开新的，只把已有 PR 的链接发回对话。
-  - 隐藏标记（例如 `<!-- myorch-pr run=… -->`）由渠道自己加，用来认出自己的 PR。
-  - 交付失败（推送成功但开 PR 失败）由渠道重试或在对话里说明。run 本身已经结束，不会重跑。
+- **workflow** (the last step of `development.yaml`, `deliver`, fragment `flows/lib/deliver.yaml`):
+  1. Check that the current branch is not the base branch.
+  2. Check that HEAD is the commit that was approved. If not, stop and do not push.
+  3. Push this run's branch to the project's git remote (`git push`; credentials come from the project's `github` provider role).
+  4. Write `docs/delivery.md`: the description of this change, in the format below.
+  5. Call no platform API: do not open a PR, post comments or add labels.
+- **channel**: after receiving the `run_finished` event, deliver according to the target system. On GitHub that means opening a PR:
+  - PR title: `delivery.title`.
+  - PR body: `delivery.description`, followed by `delivery.pr_template` (the repository's own PR template, if there is one).
+    When the request came from an issue in the same repository, add `Closes #<issue>` to the body. The channel itself knows where the request came from (the Mandate's `source`).
+  - head = `delivery.branch`, base = `delivery.base`.
+  - Idempotent: if this branch already has a PR, do not open a new one. Only post the existing PR's link back to the conversation.
+  - The channel adds its own hidden marker (for example `<!-- myorch-pr run=… -->`) to recognize its own PRs.
+  - Delivery failures (push succeeded but opening the PR failed) are retried by the channel or explained in the conversation. The run itself has already finished and is not rerun.
 
-## 事件 `run_finished` 的 `data`
+## The `data` of the `run_finished` event
 
-在现有字段（`status`、`failure` 等）之外，run 成功并且执行了 `deliver` 时，多一个 `delivery`：
+In addition to the existing fields (`status`, `failure` and so on), when the run succeeds and `deliver` ran, there is a `delivery`:
 
 ```json
 {
@@ -29,65 +29,69 @@
   "delivery": {
     "branch": "LAB-5-myorch-development-javalab8-issue8",
     "base": "main",
-    "commit": "<审批通过并推送的提交，40 位>",
+    "commit": "<the approved and pushed commit, 40 characters>",
     "title": "Reject null or blank id in OrderService.pay and cancel",
     "ticket": "5",
     "repo": "leweii/myorch-java-lab",
-    "description": "<docs/delivery.md 的全文>",
-    "pr_template": "<仓库里 PR 模板的全文，没有时为空字符串>"
+    "description": "<full text of docs/delivery.md>",
+    "pr_template": "<full text of the repository's PR template, empty string if none>"
   }
 }
 ```
 
-- 需求分析认定不需要改动（`proceed=false`）时，没有 `delivery`，`stopped` 写原因（和现在一样）。
-- run 失败、取消、审批被驳回或超时，都没有 `delivery`。
-- 旧字段 `pr_url` 不再由 workflow 产生。渠道开了 PR 以后，自己在对话里报告链接。
+- When requirements analysis decides no change is needed (`proceed=false`), there is no `delivery`, and `stopped` holds the reason (as today).
+- When the run fails, is cancelled, or the approval is rejected or times out, there is no `delivery`.
+- The workflow no longer produces the old field `pr_url`. After the channel opens a PR, it reports the link in the conversation itself.
 
-## `docs/delivery.md` 的格式
+## Format of `docs/delivery.md`
 
 ```
 # {title}
-工单：{ticket}（没有工单号时不写这一行）
+Ticket: {ticket} (omit this line when there is no ticket number)
 
-## 改了什么
-{implementation.md 的「改动」部分}
+## What changed
+{the "Changes" section of implementation.md}
 
-## 怎么验证的
-- 检查：{最后一轮 CI 的结论}
-- 验收标准：{最后一轮 summary.md 的验收标准表}
+## How it was verified
+- Checks: {conclusion of the last CI round}
+- Acceptance criteria: {the acceptance criteria table from the last round's summary.md}
 
 ## review
-{轮数}，阻塞问题 {n} 条，没解决的 {m} 条（列出），Nit {k} 条
+{rounds} rounds, {n} blocking issues, {m} unresolved (listed), {k} nits
 
-## 风险
-{risk.md 的「结论」和「请审批人重点检查」}
+## Risk
+{the "Conclusion" and "For the approver to check" sections of risk.md}
 
-## 怎么撤回
-合并前：放弃分支 {branch}。合并后：revert 这次合并带进来的提交（{base}..{commit}）。
+## How to roll back
+Before merging: abandon branch {branch}. After merging: revert the commits this merge brought in ({base}..{commit}).
 ```
 
-完整的需求文档、实现记录、review 记录和风险说明留在 run 里（`myorch review <run>`、控制台）。
+The full requirements document, implementation notes, review notes and risk assessment stay in the run (`myorch review <run>`, the console).
 
-## 审批门的新事件（同一批改动，给渠道和控制台）
+## New approval gate events (same batch of changes, for channels and the console)
 
-- `approval` 事件多一个字段 `actions: ["approve", "reject", "changes"]`。`changes` 是「提修改意见」：
-  渠道把审批人的文字作为修改意见送回 run（CLI：`myorch changes <run> <step> "<意见>"`）。run 会回到 review 循环再修，然后重新判定风险、重新审批。
-- `approval_reminder`：审批等待超过 `remind_after`（development 设 24 小时）时发一次。渠道转给审批人。
-- 审批超过 `timeout`（development 设 7 天）还没处理时，这一步结束为 `failed`，`error` 是「审批超时：7d 内没有人处理」。run 结束，`run_finished.data.status` 是 `failed`，`failure` 里有这句话。没有新的状态值。
-- 提修改意见后，同一个审批门会再开一次。第二次的 `approval` 事件 key 是 `approve:<step>:1`，第三次是 `approve:<step>:2`，以此类推。`approval_reminder` 的 key 同样带这个序号（`remind:<step>:1`）。第一次不带序号，和以前一样。
-- `approval_reminder` 的 `data`：`needed`（需要几人批准）、`approved_by`（已经批准的人）、`waited`（`remind_after` 的值）。
+- The `approval` event gains a field `actions: ["approve", "reject", "changes"]`. `changes` means "request changes":
+  the channel sends the approver's text back to the run as change requests (CLI: `myorch changes <run> <step> "<comments>"`). The run goes back to the review loop to fix them, then the risk is assessed again and approval is requested again.
+- `approval_reminder`: sent once when an approval has waited longer than `remind_after` (development sets 24 hours). The channel forwards it to the approvers.
+- When an approval is still not handled after `timeout` (development sets 7 days), the step ends as `failed`, and `error` is "Approval timed out: nobody handled it within 7d". The run ends, `run_finished.data.status` is `failed`, and `failure` contains that sentence. There is no new status value.
+- After changes are requested, the same approval gate opens again. The second `approval` event has key `approve:<step>:1`, the third `approve:<step>:2`, and so on. The `approval_reminder` key carries the same sequence number (`remind:<step>:1`). The first one has no sequence number, as before.
+- The `data` of `approval_reminder`: `needed` (how many approvals are needed), `approved_by` (people who already approved), `waited` (the value of `remind_after`).
 
-## 渠道一侧（2026-11-02 实现，2026-11-06 删除）
+## Update 2026-11-13: `deliver` can open the PR itself
 
-**2026-11-06 起没有渠道一侧了**：开 PR 不是 myorch 要解决的问题，`channels/delivery.py`、`deliveries.json`、控制台的交付记录和「重试开 PR」都已删除。workflow 一侧不变，`run_finished.delivery` 只用来告诉人推送了哪个分支。下面是删除前的做法。
+With the project setting `flows.development.open_pr` (turned on for mdm), `deliver` opens the pull request in the same step, right after the push, with the project's GitHub provider (`gh api`, so the token stays in OpenShell). It reuses the branch's open PR if there is one. The body is `delivery.description`, then `delivery.pr_template`, then `<!-- myorch-pr run=<run_id> -->`. The link is the step's `pr_url` output, which the existing paths already show: the console's "PR opened" item, the `pr_opened` event, and `run_finished.data.pr_url`. No channel side comes back. Projects without the setting behave as described above.
 
-交付在 channel 层里做。代码在 `src/myorch/channels/delivery.py`，由 `myorch serve`（或 `myorch ui`，两者相同）运行。每个进程只有一个交付循环，所以同时只能开一个 `myorch serve`。状态文件仍在 `myorch-data/ui/deliveries.json`。控制台只显示交付记录，「重试开 PR」也调用同一个交付循环。
+## The channel side (implemented 2026-11-02, deleted 2026-11-06)
 
-- 交付循环读 `myorch-data/events.db`。遇到带 `delivery` 的 `run_finished`，就开 PR。没有 `delivery` 的运行不处理，包括还在用 `push-and-pr` 自己开 PR 的运行。所以 `deliver` 上线前后都不会重复开 PR。
-- 开 PR 在一次性 sandbox 任务里做（`runner/jobs.py`），用项目的 `github` provider。token 留在 OpenShell 里，channel 和控制台都拿不到。
-- 幂等：分支已经有 PR（任何状态）时，只记下链接。已有 PR 的 head 不是 `delivery.commit` 时，不处理，报错。所以 `delivery.commit` 必须是 40 位的完整哈希。
-- PR 正文：`delivery.description`，后面接 `delivery.pr_template`，最后是隐藏标记 `<!-- myorch-pr run=<run_id> -->`。`Closes #<issue>` 由控制台以外的渠道按 `source` 加，控制台发起的运行没有 issue。
-- 状态记在 `myorch-data/ui/deliveries.json`：读到的 `seq` 和每个运行的交付结果。控制台停着的时候不会丢：下次启动从上次的 `seq` 接着读。失败时自动重试 3 次，每次间隔 60 秒，之后在运行的对话里显示「重试开 PR」按钮。控制台重启打断的交付，下次启动会重做。
-- 控制台需要 `delivery` 里有 `branch`、`base`、`commit`、`title`、`description`。`repo` 和 `project` 可选：没有时，从运行的 mandate 找项目，再从项目包取仓库。
-- 「提修改意见」：控制台已经留好按钮。它调用 `engines.temporal.client.request_changes(client, run_id, step_id, approver, text)`。这个函数出现之前，按钮不显示。实现时请用这个签名，或者告诉控制台改。
-- `approval_reminder` 和 `expired`：控制台目前不读这两个事件。审批在「等你处理」里一直显示。`expired` 之后，运行状态是 failed，对话里显示失败原因。
+**Since 2026-11-06 there is no channel side**: opening PRs is not a problem myorch needs to solve. `channels/delivery.py`, `deliveries.json`, the console's delivery records and "Retry opening PR" have all been deleted. The workflow side is unchanged. `run_finished.delivery` only tells people which branch was pushed. Below is how it worked before deletion.
+
+Delivery happened in the channel layer. The code was in `src/myorch/channels/delivery.py`, run by `myorch serve` (or `myorch ui`, which is the same). Each process had only one delivery loop, so only one `myorch serve` could run at a time. The state file stayed at `myorch-data/ui/deliveries.json`. The console only showed delivery records. "Retry opening PR" also called the same delivery loop.
+
+- The delivery loop read `myorch-data/events.db`. When it found a `run_finished` with `delivery`, it opened a PR. Runs without `delivery` were ignored, including runs that still opened their own PR with `push-and-pr`. So PRs were never opened twice, before or after `deliver` went live.
+- The PR was opened in a one-off sandbox job (`runner/jobs.py`) using the project's `github` provider. The token stayed in OpenShell. Neither the channel nor the console could get it.
+- Idempotent: if the branch already had a PR (in any state), only the link was recorded. If the existing PR's head was not `delivery.commit`, it did nothing and reported an error. So `delivery.commit` had to be the full 40-character hash.
+- PR body: `delivery.description`, followed by `delivery.pr_template`, and finally the hidden marker `<!-- myorch-pr run=<run_id> -->`. `Closes #<issue>` was added by channels other than the console, based on `source`. Runs started from the console have no issue.
+- State was kept in `myorch-data/ui/deliveries.json`: the `seq` read so far and each run's delivery result. Nothing was lost while the console was stopped: on the next start it continued from the last `seq`. On failure it retried automatically 3 times, 60 seconds apart, and then showed a "Retry opening PR" button in the run's conversation. A delivery interrupted by a console restart was redone on the next start.
+- The console needed `branch`, `base`, `commit`, `title` and `description` in `delivery`. `repo` and `project` were optional: when missing, it found the project from the run's mandate, then took the repository from the project pack.
+- "Request changes": the console already had the button in place. It calls `engines.temporal.client.request_changes(client, run_id, step_id, approver, text)`. Until that function existed, the button was hidden. Implement it with this signature, or tell the console to change.
+- `approval_reminder` and `expired`: the console did not read these two events. The approval stayed in "Waiting for you". After `expired`, the run status was failed and the conversation showed the failure reason.

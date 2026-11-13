@@ -14,16 +14,16 @@ role: eval
 inputs:
   case:
     type: string
-    label: 案例
-    hint: 案例 ID（流程 → 评测集）
+    label: Case
+    hint: Case ID (Flows → Eval set)
     required: true
   depth:
     type: select
-    label: 测哪种强度
+    label: Depth to test
     options:
-      - {value: quick, label: "quick：1 个 reviewer，Haiku"}
-      - {value: standard, label: "standard：2 个 reviewer，Sonnet，含安全审查"}
-      - {value: deep, label: "deep：3 个 reviewer，Opus，含安全审查"}
+      - {value: quick, label: "quick: 1 reviewer, Haiku"}
+      - {value: standard, label: "standard: 2 reviewers, Sonnet, with security review"}
+      - {value: deep, label: "deep: 3 reviewers, Opus, with security review"}
 defaults:
   depth: standard
 image: "{{project.image}}"
@@ -74,9 +74,9 @@ steps:
       git("config", "user.name", os.environ.get("MYORCH_GIT_NAME") or "myorch")
       git("config", "user.email", os.environ.get("MYORCH_GIT_EMAIL") or "myorch@localhost")
       after = git("rev-list", "--count", "--all").strip()
-      open(f"{ws}/docs/eval/requirement.md", "w").write(case.get("requirement") or "（这次改动没有需求文档。按改动本身判断。）")
+      open(f"{ws}/docs/eval/requirement.md", "w").write(case.get("requirement") or "(This change has no requirements document. Judge the change by itself.)")
       json.dump({"status": "ok",
-                 "summary": ("重放提交 " if case.get("origin") == "git" else f"重放 {case.get('source_run')} 第 1 轮的改动：") + f"{case['base_sha'][:8]}..{case['head_sha'][:8]}，仓库里只剩 {after} 个提交",
+                 "summary": ("replaying commits " if case.get("origin") == "git" else f"replaying the round-1 change of {case.get('source_run')}: ") + f"{case['base_sha'][:8]}..{case['head_sha'][:8]}, {after} commits left in the repository",
                  "outputs": {"head": case["head_sha"], "base": case["base_sha"], "commits": int(after)}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
       PY

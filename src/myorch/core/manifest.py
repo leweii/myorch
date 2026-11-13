@@ -34,9 +34,9 @@ MANIFEST_SCHEMA_HINT = json.dumps(
     {
         "step_id": "<this step id>",
         "status": "ok | failed",
-        "summary": "一两句话说明这一步做了什么",
-        "files": [{"path": "相对 /sandbox/out 的路径", "description": "文件说明"}],
-        "notes": "给下游步骤的注意事项",
+        "summary": "one or two sentences on what this step did",
+        "files": [{"path": "path relative to /sandbox/out", "description": "what the file is"}],
+        "notes": "things later steps should watch for",
         "outputs": {},
     },
     ensure_ascii=False,
@@ -91,7 +91,7 @@ def escalate(manifest: Manifest, when: str | None) -> Manifest:
     if not evaluate(when, {"outputs": manifest.outputs}):
         return manifest
     out = manifest.outputs
-    text = out.get("question") or out.get("design_question") or manifest.summary or "需要你做一个决定才能继续。"
+    text = out.get("question") or out.get("design_question") or manifest.summary or "A decision from you is needed to continue."
     options = out.get("options") or out.get("design_options") or []
     question = Question(question=str(text), options=[str(o) for o in options] if isinstance(options, list) else [])
     return manifest.model_copy(update={"status": "needs_input", "question": question})
@@ -102,6 +102,6 @@ def fallback_manifest(step_id: str, files: list[str]) -> Manifest:
     return Manifest(
         step_id=step_id,
         status="manifest_missing",
-        summary="agent 没有写出有效的 manifest.json，以下是自动列出的产物文件",
+        summary="The agent did not write a valid manifest.json. The output files below were listed automatically",
         files=[ManifestFile(path=f) for f in sorted(files) if f != MANIFEST_FILE and not f.startswith(".myorch/")],
     )

@@ -54,40 +54,40 @@ def test_myorch_checks_fails_when_the_checks_fail(tmp_path: Path):
 
 def test_myorch_ask_only_where_the_step_may_ask(tmp_path: Path):
     env = {**os.environ, "MYORCH_OUT_DIR": str(tmp_path)}
-    res = subprocess.run([str(TOOLS / "myorch-ask"), "要兼容吗？"], env={**env, "MYORCH_INTERACTION": "never"},
+    res = subprocess.run([str(TOOLS / "myorch-ask"), "Keep it compatible?"], env={**env, "MYORCH_INTERACTION": "never"},
                          capture_output=True, text=True)
-    assert res.returncode != 0 and "不能向用户提问" in res.stderr and not (tmp_path / ".myorch").exists()
-    res = subprocess.run([str(TOOLS / "myorch-ask"), "要兼容吗？", "--option", "是"],
+    assert res.returncode != 0 and "may not ask the user" in res.stderr and not (tmp_path / ".myorch").exists()
+    res = subprocess.run([str(TOOLS / "myorch-ask"), "Keep it compatible?", "--option", "Yes"],
                          env={**env, "MYORCH_INTERACTION": "allowed"}, capture_output=True, text=True)
     assert res.returncode == 0
-    assert json.loads((tmp_path / ".myorch" / "question.json").read_text())["options"] == ["是"]
+    assert json.loads((tmp_path / ".myorch" / "question.json").read_text())["options"] == ["Yes"]
 
 
 def test_myorch_stream_renders_claude_events(tmp_path: Path):
     events = [
         {"type": "system", "subtype": "hook_started"},
         {"type": "system", "subtype": "init", "model": "claude-haiku-5-5"},
-        {"type": "assistant", "message": {"content": [{"type": "text", "text": "先看看文件。"},
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Look at the files first."},
                                                       {"type": "tool_use", "name": "Bash", "input": {"command": "ls -la"}}]}},
         {"type": "user", "message": {"content": [{"type": "tool_result", "content": "a\nb\nc\nd\ne"}]}},
         {"type": "user", "message": {"content": [{"type": "tool_result", "is_error": True,
                                                   "content": [{"type": "text", "text": "no such file"}]}]}},
-        {"type": "assistant", "message": {"content": [{"type": "text", "text": "完成。"}]}},
-        {"type": "result", "subtype": "success", "result": "完成。", "num_turns": 3, "duration_ms": 4200,
+        {"type": "assistant", "message": {"content": [{"type": "text", "text": "Done."}]}},
+        {"type": "result", "subtype": "success", "result": "Done.", "num_turns": 3, "duration_ms": 4200,
          "total_cost_usd": 0.0123},
     ]
     stdin = "\n".join(json.dumps(e, ensure_ascii=False) for e in events) + "\nnot json\n"
     raw = tmp_path / "raw.jsonl"
     r = subprocess.run([str(TOOLS / "myorch-stream"), str(raw)], input=stdin, capture_output=True, text=True, check=True)
     assert r.stdout.splitlines() == [
-        "· 会话开始（claude-haiku-5-5）",
-        "先看看文件。",
+        "· session start (claude-haiku-5-5)",
+        "Look at the files first.",
         "→ Bash: ls -la",
-        "  ← a", "  ← b", "  ← c", "  ← …（共 5 行）",
+        "  ← a", "  ← b", "  ← c", "  ← … (5 lines)",
         "  ✗ no such file",
-        "完成。",
-        "═══ 结果 ═══",  # the final answer was the last text shown: not repeated
-        "· success，3 轮，4 秒，$0.01",
+        "Done.",
+        "═══ result ═══",  # the final answer was the last text shown: not repeated
+        "· success, 3 turns, 4s, $0.01",
         "not json",
     ]
     assert raw.read_text() == stdin

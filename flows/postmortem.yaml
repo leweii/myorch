@@ -19,12 +19,12 @@ require_one_of: [[commit, bad]]   # the console and the CLI refuse to start with
 inputs:
   commit:
     type: string
-    label: 修复或 revert 提交
-    hint: 提交 SHA。和下一项二选一
+    label: Fix or revert commit
+    hint: A commit SHA. Give this or the next one
   bad:
     type: string
-    label: 引入问题的提交
-    hint: 知道时直接填 SHA
+    label: Commit that introduced the problem
+    hint: Its SHA, if you know it
   runs:
     type: hidden          # the project's recent runs, filled in by the CLI / console
 defaults:
@@ -40,11 +40,11 @@ steps:
     profile: dev-git
     observe_runs: "{{inputs.runs}}"
     outputs:
-      bad: "引入问题的提交"
-      fix: "修复提交（没有时为空）"
-      kind: "revert / fix / bad：从哪种提交找到的"
-      matched: "碰过这次改动的 myorch 运行数"
-      matched_runs: "这些运行的 ID，逗号分隔"
+      bad: "The commit that introduced the problem"
+      fix: "The fix commit (empty when there is none)"
+      kind: "revert / fix / bad: the kind of commit it was found from"
+      matched: "Number of myorch runs that touched this change"
+      matched_runs: "Those runs' IDs, comma-separated"
     limits: { timeout: 15m, retries: 1 }
     prompt: |
       set -euo pipefail
@@ -70,7 +70,7 @@ steps:
               subprocess.run(["git", "-c", auth, "-C", full, "fetch", "--quiet", "origin", ref], capture_output=True)
               s = git("rev-parse", "--verify", "--quiet", ref + "^" + "{commit}", check=False)
           if not s:
-              raise SystemExit(f"提交 {ref} 不在 {repo_name} 里")
+              raise SystemExit(f"commit {ref} is not in {repo_name}")
           return s
       def fail(msg):
           json.dump({"status": "failed", "summary": msg}, open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
@@ -78,7 +78,7 @@ steps:
 
       given, bad = resolve(os.environ.get("MYORCH_INPUT_COMMIT", "").strip()), resolve(os.environ.get("MYORCH_INPUT_BAD", "").strip())
       if not given and not bad:
-          fail("要给 commit（修复或 revert 提交）或 bad（引入问题的提交）中的一个")
+          fail("give one of commit (the fix or revert commit) or bad (the commit that introduced the problem)")
       blamed = collections.Counter()
       if bad:
           kind, fix = "bad", (given if given != bad else "")
@@ -100,11 +100,11 @@ steps:
                       for b in re.findall(r"^([0-9a-f]{40}) \d+ \d+", blame, re.M):
                           blamed[b] += 1
               if not blamed:
-                  fail(f"{given[:8]} 改动的行找不到来源。用 -i bad=<提交> 直接指定引入问题的提交")
+                  fail(f"cannot find where the lines {given[:8]} changes came from. Name the commit that introduced the problem with -i bad=<commit>")
               bad = blamed.most_common(1)[0][0]
       parents = git("rev-list", "--parents", "-n", "1", bad).split()[1:]
       if not parents:
-          fail(f"{bad[:8]} 是第一个提交，没有可以对比的基准")
+          fail(f"{bad[:8]} is the first commit: there is no base to compare with")
       base_sha = parents[0]  # a merge commit: the whole PR against its base
 
       def gh(path):
@@ -139,7 +139,7 @@ steps:
               matched.append(run)
       requirement = next((text(f"{ws}/observed/{r}/docs/requirements.md") or text(f"{ws}/observed/{r}/docs/pr.md") for r in matched), "")
       if not requirement:
-          requirement = git("log", "-1", "--format=%B", bad) + (f"\n\nPR #{pr['number']}：{pr.get('title', '')}\n\n{pr.get('body') or ''}" if pr else "")
+          requirement = git("log", "-1", "--format=%B", bad) + (f"\n\nPR #{pr['number']}: {pr.get('title', '')}\n\n{pr.get('body') or ''}" if pr else "")
 
       subject = git("log", "-1", "--format=%s", bad)
       target = {"repo": repo_name, "base_ref": base, "kind": kind, "given": given, "bad_sha": bad, "bad_subject": subject,
@@ -150,10 +150,10 @@ steps:
       open(f"{out}/bad.diff", "w").write(git("show", "--stat", "--patch", "--format=commit %H%nAuthor: %an%nDate: %ad%n%n%B", f"{base_sha}..{bad}" if len(parents) > 1 else bad)[:300000])
       if fix:
           open(f"{out}/fix.diff", "w").write(git("show", "--stat", "--patch", fix)[:300000])
-      how = {"revert": f"revert 提交 {given[:8]} 撤销了它", "fix": f"修复提交 {given[:8]} 改的行大多来自它", "bad": "直接指定"}[kind]
+      how = {"revert": f"revert commit {given[:8]} undid it", "fix": f"most lines fix commit {given[:8]} changes came from it", "bad": "given directly"}[kind]
       json.dump({"status": "ok",
-                 "summary": f"引入问题的提交：{bad[:8]} {subject}（{how}）" + (f"，PR #{pr['number']}" if pr else "")
-                            + (f"，{len(matched)} 个 myorch 运行碰过它" if matched else "，不是 myorch 运行做的改动"),
+                 "summary": f"commit that introduced the problem: {bad[:8]} {subject} ({how})" + (f", PR #{pr['number']}" if pr else "")
+                            + (f", {len(matched)} myorch runs touched it" if matched else ", not a change made by a myorch run"),
                  "outputs": {"bad": bad, "fix": fix, "kind": kind, "matched": len(matched), "matched_runs": ",".join(matched)}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
       PY
@@ -225,20 +225,20 @@ steps:
                        "risk": text(f"{d}/docs/risk.md")[:1500], "review": rounds, "ci": ci,
                        "delivery": text(f"{d}/docs/delivery.md")[:1500]})
       json.dump({"touched": touched, "runs": runs}, open(f"{ws}/docs/postmortem/trace.json", "w"), ensure_ascii=False, indent=1)
-      md = [f"# 当时每一层看到了什么\n\n改动：{t['bad_sha'][:8]} {t['bad_subject']}，涉及 {len(touched)} 个文件。\n"]
+      md = [f"# What each layer saw at the time\n\nChange: {t['bad_sha'][:8]} {t['bad_subject']}, {len(touched)} files.\n"]
       if not runs:
-          md.append("没有 myorch 运行碰过这次改动：当时没有经过 myorch 的需求、review、风险判定和审批。只能看知识库和 CI 有没有覆盖。\n")
+          md.append("No myorch run touched this change: it did not go through myorch's requirements, review, risk verdict or approval. Only the knowledge and CI coverage can be checked.\n")
       for r in runs:
-          md.append(f"## {r['run']}（{r['flow']}，{r['initiator']}，知识库 {r['knowledge_version'] or '?'}）\n")
-          md.append(f"- 需求文档提到的相关文件：{', '.join(r['requirement_mentions']) or '无'}")
+          md.append(f"## {r['run']} ({r['flow']}, {r['initiator']}, knowledge {r['knowledge_version'] or '?'})\n")
+          md.append(f"- Related files the requirements document mentions: {', '.join(r['requirement_mentions']) or 'none'}")
           for rd in r["review"]:
-              near_f = "；".join(f"{f['severity']}/{f.get('status') or '-'} {f['file']}:{f.get('line')} {f['title']}" for f in rd["verified_near"]) or "无"
-              md.append(f"- review 第 {rd['round']} 轮：核实 {rd['verified']} 条；改动附近 reviewer 原始发现 {rd['raw_near']} 条，核实后 {len(rd['verified_near'])} 条：{near_f}" + ("；有反驳" if rd["rebuttal"] else ""))
-          md.append(f"- CI：{'；'.join(json.dumps(c, ensure_ascii=False) for c in r['ci']) or '没有记录'}")
-          md.append(f"- 风险判定：见 observed/{r['run']}/docs/risk.md\n")
+              near_f = "; ".join(f"{f['severity']}/{f.get('status') or '-'} {f['file']}:{f.get('line')} {f['title']}" for f in rd["verified_near"]) or "none"
+              md.append(f"- review round {rd['round']}: {rd['verified']} verified; near the change {rd['raw_near']} raw reviewer findings, {len(rd['verified_near'])} after verification: {near_f}" + ("; rebutted" if rd["rebuttal"] else ""))
+          md.append(f"- CI: {'; '.join(json.dumps(c, ensure_ascii=False) for c in r['ci']) or 'no record'}")
+          md.append(f"- Risk verdict: see observed/{r['run']}/docs/risk.md\n")
       open(f"{ws}/docs/postmortem/trace.md", "w", encoding="utf-8").write("\n".join(md) + "\n")
       flagged = sum(len(rd["verified_near"]) for r in runs for rd in r["review"])
-      json.dump({"status": "ok", "summary": f"{len(runs)} 个运行；改动附近有 {flagged} 条核实过的发现" if runs else "不是 myorch 运行做的改动，没有当时的记录",
+      json.dump({"status": "ok", "summary": f"{len(runs)} runs; {flagged} verified findings near the change" if runs else "not a change made by a myorch run, no record from the time",
                  "outputs": {"runs": len(runs), "flagged": flagged}}, open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
       PY
 
@@ -249,55 +249,56 @@ steps:
     needs: [trace]
     observe_runs: "{{steps.locate.outputs.matched_runs}}"
     outputs:
-      layer: "最早该拦住它的一层：requirement / implementation / review / security / risk / ci / approval / none"
+      layer: "The earliest layer that should have stopped it: requirement / implementation / review / security / risk / ci / approval / none"
       category: "no-rule / rule-not-applied / flagged-not-handled / human-let-through / not-detectable"
-      proposals: "知识库修改建议条数（0 到 5）"
-      expected: "评测案例里期望的发现条数"
+      proposals: "Number of proposed knowledge changes (0 to 5)"
+      expected: "Number of expected findings in the eval case"
     limits: { timeout: 30m }
     prompt: |
-      你负责一次复盘：一个问题已经进了代码，找出它为什么没被拦住。只读，不改任何东西，只写 docs/postmortem/ 下的文件。
+      You run a postmortem: a problem already got into the code. Find out why it was not stopped. Read only. Do not change anything; only write files under docs/postmortem/.
+      Write everything in English.
 
-      ## 输入
-      - docs/external/request.md：发起人对问题的描述（可能没有）。
-      - docs/postmortem/target.json：引入问题的提交、修复提交、PR、碰过它的 myorch 运行。
-      - docs/postmortem/bad.diff：引入问题的改动。docs/postmortem/fix.diff：修复（可能没有）。
-      - docs/postmortem/trace.md 和 trace.json：当时每一层看到了什么。
-      - observed/<run_id>/docs/：碰过这次改动的运行的需求、实现记录、各轮 review、风险判定、CI 结果。
-      - project/guide/、project/security.md、project/risk-rules.yaml、project/checks.sh：这个项目现在的知识和检查。
+      ## Input
+      - docs/external/request.md: the initiator's description of the problem (may be missing).
+      - docs/postmortem/target.json: the commit that introduced the problem, the fix commit, the PR, the myorch runs that touched it.
+      - docs/postmortem/bad.diff: the change that introduced the problem. docs/postmortem/fix.diff: the fix (may be missing).
+      - docs/postmortem/trace.md and trace.json: what each layer saw at the time.
+      - observed/<run_id>/docs/: the requirements, implementation record, review rounds, risk verdict and CI results of the runs that touched the change.
+      - project/guide/, project/security.md, project/risk-rules.yaml, project/checks.sh: this project's current knowledge and checks.
 
-      ## 判断
-      1. 问题是什么：用一两句话说清，引用 bad.diff 里的具体文件和行。
-      2. 最早该在哪一层拦住（outputs.layer）：
-         requirement（需求分析该问到）、implementation（实现指南该避开）、review、security、risk（该判成高风险要人看）、ci（确定性检查）、approval（审批人该看到），或 none。
-      3. 为什么没拦住（outputs.category）：
-         - no-rule：知识库和检查里都没有覆盖这类问题。
-         - rule-not-applied：有相关规则，但这次没用上。说明是哪条规则，为什么没用上。
-         - flagged-not-handled：reviewer 或 CI 指出过，但被反驳、降级或忽略了。引用 trace 里的那条发现。
-         - human-let-through：人看到了风险，仍然放行。
-         - not-detectable：事先确实发现不了（例如依赖外部状态）。不要轻易用这一类。
-         不是 myorch 运行做的改动时，判断的是：如果当时经过 myorch，哪一层该拦住。
+      ## Decide
+      1. What the problem is: say it in one or two sentences, citing the exact files and lines in bad.diff.
+      2. The earliest layer that should have stopped it (outputs.layer):
+         requirement (requirement analysis should have asked), implementation (the implementation guide should have avoided it), review, security, risk (should have been judged high risk so a person looks), ci (a deterministic check), approval (the approver should have seen it), or none.
+      3. Why it was not stopped (outputs.category):
+         - no-rule: neither the knowledge nor the checks cover this kind of problem.
+         - rule-not-applied: a relevant rule exists but was not applied this time. Say which rule and why it was not applied.
+         - flagged-not-handled: a reviewer or CI pointed it out, but it was rebutted, downgraded or ignored. Cite that finding from trace.
+         - human-let-through: a person saw the risk and let it through anyway.
+         - not-detectable: it really could not be found in advance (for example it depends on external state). Do not use this category lightly.
+         When the change was not made by a myorch run, decide which layer should have stopped it had it gone through myorch.
 
-      ## 写这些文件
-      - docs/postmortem/postmortem.md：问题、该拦住的层和原因、证据、建议。简短，给人看。
-      - docs/postmortem/proposals.json：知识库修改建议，最多 5 条，格式和 learn 一样：
-        [{"id": 1, "title": "一句话", "kind": "add-rule|relax-rule|fill-gap", "evidence": ["<出处>"],
-          "changes": [{"file": "project/guide/<文件>", "edits": [{"old": "<文件里恰好出现一次的原文>", "new": "<替换后>"}]}
-                      或 {"file": "project/guide/<文件>", "append": "<追加的 markdown>"}]}]
-        old 从当前文件逐字复制；不确定就用 append。只能改 project/guide/ 下的文件。规则要写成能用到同类问题上的样子，不要只写这一个 bug。
-        不要重复知识库里已经有的内容。没有值得改的，写 []。
-      - docs/postmortem/proposals.md：给人看的版本。
-      - docs/postmortem/follow-ups.md：适合做成确定性检查（lint、CI、测试）的建议，要另起 development 去做。可以为空。
-      - docs/postmortem/case.json：评测案例里期望 reviewer 报出的发现，JSON 数组：
-        [{"severity": "Important", "title": "一句话", "file": "<bad.diff 里的文件>", "line": <改动后文件里的行号>, "evidence": "为什么是问题"}]
-        只写 review 看改动本身就应该发现的问题。category 是 not-detectable，或者只有 CI 才能发现时，写 []。
+      ## Write these files
+      - docs/postmortem/postmortem.md: the problem, the layer that should have stopped it and why, the evidence, the proposals. Short, for people.
+      - docs/postmortem/proposals.json: proposed knowledge changes, at most 5, in the same format as learn:
+        [{"id": 1, "title": "one sentence", "kind": "add-rule|relax-rule|fill-gap", "evidence": ["<source>"],
+          "changes": [{"file": "project/guide/<file>", "edits": [{"old": "<text that occurs exactly once in the file>", "new": "<replacement>"}]}
+                      or {"file": "project/guide/<file>", "append": "<markdown to append>"}]}]
+        Copy old verbatim from the current file; when unsure, use append. Only files under project/guide/ can be changed. Write rules so they apply to problems of the same kind, not only to this one bug.
+        Do not repeat what the knowledge already says. When nothing is worth changing, write [].
+      - docs/postmortem/proposals.md: the version for people.
+      - docs/postmortem/follow-ups.md: proposals that suit a deterministic check (lint, CI, tests); they need a separate development run. May be empty.
+      - docs/postmortem/case.json: the findings the eval case expects reviewers to report, a JSON array:
+        [{"severity": "Important", "title": "one sentence", "file": "<a file in bad.diff>", "line": <line number in the file after the change>, "evidence": "why it is a problem"}]
+        Only list problems a review should find by looking at the change itself. When category is not-detectable, or only CI could find it, write [].
 
-      outputs.proposals 是 proposals.json 的条数，outputs.expected 是 case.json 的条数。
+      outputs.proposals is the number of items in proposals.json; outputs.expected is the number of items in case.json.
 
   - use: lib/choose-proposals.yaml
     id: choose
     needs: [analyze]
     when: "steps.analyze.outputs.proposals > 0"
-    with: {dir: docs/postmortem, what: 知识库修改建议}
+    with: {dir: docs/postmortem, what: knowledge change proposals}
 
   - id: apply
     action: project-apply
@@ -306,7 +307,7 @@ steps:
     args: {scope: learn, proposals: docs/postmortem/proposals.json, accepted: docs/postmortem/accepted.json}
     limits: { timeout: 5m }
 
-  # The expected findings go into the case (the person confirms it in 流程 → 评测集); with adopted
+  # The expected findings go into the case (the person confirms it in Flows → Eval set); with adopted
   # proposals, the change is replayed again on the new knowledge.
   - id: replay-after
     action: postmortem-replay

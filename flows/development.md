@@ -1,283 +1,284 @@
 # development
 
-开发流程：从一个需求做到推送分支。所有项目共用这一个流程。它在一个会话里写需求、技术设计、改代码，再经过 review、风险判定和人工审批，最后把批准的那个提交推到这次运行的分支。myorch 不开 PR，也不合并：PR 由人在 GitHub 上开，合并也由人决定。审批之前改动不离开沙箱，什么都不推送。
+The development flow: from one requirement to a pushed branch. All projects share this one flow. In one session it writes the requirements, the technical design and the code changes. The change then goes through review, a risk verdict and human approval. Finally the approved commit is pushed to this run's branch. With the project setting `open_pr` (mdm), `deliver` then opens the pull request and the console shows its link; otherwise a person opens it. myorch never merges: a person decides on merging. Before approval the change does not leave the sandbox and nothing is pushed.
 
-项目之间的差别都在项目包里，发起时不用选（见[按项目的不同](#按项目的不同)）：
+The differences between projects are all in the project pack; you do not pick them when you start a run (see [Differences by project](#differences-by-project)):
 
-- review 有多重：几个 reviewer、最多几轮、要不要单独的 security、跑满以后怎么办（`project.yaml` 的 `flows.development`）。
-- 有没有 Jira：有时先由 `fetch-ticket` 读工单，工单就是需求；没有时第一条消息就是需求。
-- 要不要把任务信息和经验（takeaway）提交到仓库的 `myorch/` 目录（`flows.development.takeaway`）。
-- 有没有 `incident` 输入：平台出了问题时，把出问题的运行挂给 `develop` 看（`flows.development.incident`）。
-- 项目自己的 prompt 条款（`prompts/develop.md`、`review.md`、`verify.md`、`fix.md`、`risk.md`），展开流程时原文拼进对应步骤的 prompt。
+- How heavy review is: how many reviewers, at most how many rounds, whether there is a separate security review, what happens when the loop runs out of rounds (`flows.development` in `project.yaml`).
+- Whether there is Jira: if so, `fetch-ticket` reads the ticket first and the ticket is the requirement. If not, the first message is the requirement.
+- Whether to commit the task info and lessons (takeaway) to the repository's `myorch/` directory (`flows.development.takeaway`).
+- Whether there is an `incident` input: when the platform had a problem, the failing run is attached for `develop` to look at (`flows.development.incident`).
+- The project's own prompt rules (`prompts/develop.md`, `review.md`, `verify.md`, `fix.md`, `risk.md`). At expansion their text is appended verbatim to the prompt of the matching step.
 
 ```sh
 uv run myorch run flows/development.yaml --project mdm -i ticket=18700
-uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i task="只改后台接口，前端另开工单"
-uv run myorch run flows/development.yaml --project blog -i task="给文章页加字数统计"
+uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i task="Backend API only; the frontend gets its own ticket"
+uv run myorch run flows/development.yaml --project blog -i task="Add a word count to article pages"
 uv run myorch run flows/development.yaml --project myorch -i task="..." -i incident=development-1a2b3c4d
-uv run myorch run flows/development.yaml --project mdm -i from_run=<上一次的运行 ID> -i task="自测发现：批量导入时没有校验"
-uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=<PR 的 merge-base> -i ticket_as_of=2026-10-01T08:00:00Z
+uv run myorch run flows/development.yaml --project mdm -i from_run=<previous run ID> -i task="Found in testing: bulk import does not validate"
+uv run myorch run flows/development.yaml --project mdm -i ticket=18700 -i at=<the PR's merge-base> -i ticket_as_of=2026-10-01T08:00:00Z
 ```
 
-控制台：先选项目，任务选「开发」。表单只显示这个项目用得上的字段。
+Console: pick the project first, then the task **Development**. The form shows only the fields this project uses.
 
-- 有 Jira 的项目（mdm）：填工单号（`MD-18700` 或 `18700`）。第一条消息是可选的补充说明：写工单里没有的重点和限制。
-- 没有 Jira 的项目（blog、myorch）：第一条消息就是需求，必填，可以写多行。
-- myorch：平台在某次运行里出了问题时，在「出问题的运行」里填那次运行的 ID。本机 Claude Code 会话发现平台问题时，也用 channel 工具 `start` 发起，第一条消息写看到的现象和初步分析。
+- Projects with Jira (mdm): fill in the ticket number (`MD-18700` or `18700`). The first message is an optional note: write the key points and constraints that are not in the ticket.
+- Projects without Jira (blog, myorch): the first message is the requirement. It is required and can span several lines.
+- myorch: when the platform had a problem in some run, put that run's ID in **Run with the problem**. When a local Claude Code session finds a platform problem, it also starts the run with the channel tool `start`, and the first message describes what was seen and a first analysis.
 
-消息的第一行成为 `task`，全文写进 `docs/external/request.md`。
+The first line of the message becomes `task`. The full text is written to `docs/external/request.md`.
 
 <!-- flow-graph -->
 
-上面的图按 mdm 展开，步骤最全。blog 和 myorch 没有 `fetch-ticket` 和 takeaway 四步，blog 的 review 循环只有 1 个 reviewer、没有 `security`。
+The graph above is expanded for mdm, which has the most steps. blog and myorch have no `fetch-ticket` and none of the four takeaway steps. blog's review loop has only 1 reviewer and no `security`.
 
-## 每一步做什么
+## What each step does
 
-| 步骤 | 做什么 | 产物 |
+| Step | What it does | Artifacts |
 |---|---|---|
-| `sync-master` | 克隆或更新仓库，强制对齐 `origin/<base>`，初始化子模块。第一次克隆走项目共享目录里的镜像仓库，之后只拉增量（[`lib/sync-base.yaml`](lib/sync-base.yaml)） | `outputs.base_sha` |
-| `checkout-branch` | 建这次运行的分支，分支名来自项目包的 `branch`（mdm 是 `MD-<工单号>-myorch-<运行 ID>`，blog 和 myorch 是 `myorch/<运行 ID>`），执行项目的 `setup.sh`。接着改时切到上一次的分支，重放时切到 `at`，见后面两节 | `outputs.branch`、`outputs.since` |
-| `fetch-ticket` | 只在项目有 Jira 时。用 Jira REST API 读工单（只读），写成 `docs/external/ticket.md`，下载截图。见「读工单」 | `docs/external/ticket.md`、`docs/external/attachments/` |
-| `develop` | 一个会话里做完：写需求文档、写技术设计、需要人决定的问题一次问完、改代码、跑检查、写实现记录、提交一次。见「develop」 | `docs/requirements.md`、`docs/design.md`、`docs/implementation.md`、一个提交 |
-| `review-fix` 循环 | `ci`（项目的 `checks.sh`）→ `review`（个数按项目）和 `security` 并行 → `verify` 核实、算出 `blocking` → `fix`（只在 `blocking > 0` 时）→ `pack-choose`、`pack-apply`（只在 `fix` 提了项目包修改时）。轮数和跑满以后怎么办按项目。见「review 循环」 | `docs/ci/round-N.md`、`docs/review/round-N/` |
-| `takeaway-trail` | 只在 `flows.development.takeaway`（mdm）时。宿主机动作：把运行到现在的过程写进 `docs/takeaway/trail.json` | `trail.json` |
-| `takeaway` | 同上。只读的 agent：写任务信息 `task.md` 和经验 `takeaway.md` | `docs/takeaway/task.md`、`takeaway.md` |
-| `takeaway-redact` | 同上。宿主机动作：删掉两个文件里像密钥的行 | |
-| `takeaway-commit` | 同上。把两个文件提交到仓库的 `myorch/<日期>-<运行 ID>/` | 一个提交 |
-| `risk-rules` | 按规则算审批人数：改动路径和内容、review 没解决的问题、检查失败、没经过 review 的提交 | `outputs.approvers`、`head_sha` 等 |
-| `classify-risk` | 读实际的 diff，独立判断要几个人审批，给审批人写风险说明 | `docs/risk.md` |
-| `human-review` | 人工审批，人数见「风险和审批」。人数为 0 时自动通过 | |
-| `deliver` | 核对 HEAD 就是批准的提交，推送分支，写交付说明 | `docs/delivery.md`、`outputs.delivery` |
+| `sync-master` | Clones or updates the repository, force-aligns with `origin/<base>`, initializes submodules. The first clone goes through the mirror repository in the project's shared directory; after that only increments are fetched ([`lib/sync-base.yaml`](lib/sync-base.yaml)) | `outputs.base_sha` |
+| `checkout-branch` | Creates this run's branch. The branch name comes from the project pack's `branch` (mdm: `MD-<ticket number>-myorch-<run ID>`; blog and myorch: `myorch/<run ID>`). Runs the project's `setup.sh`. When continuing, it switches to the previous run's branch; when replaying, to `at`. See the two sections below | `outputs.branch`, `outputs.since` |
+| `fetch-ticket` | Only when the project has Jira. Reads the ticket with the Jira REST API (read-only), writes it as `docs/external/ticket.md`, downloads screenshots. See "Reading the ticket" | `docs/external/ticket.md`, `docs/external/attachments/` |
+| `develop` | Does it all in one session: writes the requirements document, writes the technical design, asks all questions that need a human decision at once, changes the code, runs the checks, writes the implementation record, commits once. See "develop" | `docs/requirements.md`, `docs/design.md`, `docs/implementation.md`, one commit |
+| `review-fix` loop | `ci` (the project's `checks.sh`) → `review` (count per project) and `security` in parallel → `verify` checks the findings and computes `blocking` → `fix` (only when `blocking > 0`) → `pack-choose`, `pack-apply` (only when `fix` proposed project pack changes). The number of rounds and what happens when they run out depend on the project. See "The review loop" | `docs/ci/round-N.md`, `docs/review/round-N/` |
+| `takeaway-trail` | Only with `flows.development.takeaway` (mdm). Host action: writes the run's history so far to `docs/takeaway/trail.json` | `trail.json` |
+| `takeaway` | Same condition. Read-only agent: writes the task info `task.md` and the lessons `takeaway.md` | `docs/takeaway/task.md`, `takeaway.md` |
+| `takeaway-redact` | Same condition. Host action: deletes lines that look like secrets from the two files | |
+| `takeaway-commit` | Same condition. Commits the two files to the repository at `myorch/<date>-<run ID>/` | one commit |
+| `risk-rules` | Computes the number of approvers by rules: changed paths and content, unresolved review findings, failed checks, commits that were not reviewed | `outputs.approvers`, `head_sha` and others |
+| `classify-risk` | Reads the actual diff, judges independently how many approvers are needed, writes a risk note for the approvers | `docs/risk.md` |
+| `human-review` | Human approval. For the number of approvers see "Risk and approval". Passes automatically when the number is 0 | |
+| `deliver` | Checks that HEAD is the approved commit, pushes the branch, writes the delivery note; with `open_pr`, opens the pull request | `docs/delivery.md`, `outputs.delivery`, `outputs.pr_url` |
 
-- `develop` 判断不需要改代码（`proceed` 为 false）时，后面的步骤全部跳过，运行正常结束。
-- 没有 takeaway 的项目，四步在展开时就去掉了，`risk-rules` 直接等 `review-fix`。
-- 流程顶层是 `on_failed: ask`：步骤重试后仍失败时问你。
+- When `develop` decides no code change is needed (`proceed` is false), all later steps are skipped and the run ends normally.
+- For projects without takeaway, the four steps are removed at expansion, and `risk-rules` waits directly on `review-fix`.
+- The flow sets `on_failed: ask` at the top level: when a step still fails after retries, it asks you.
 
-## 你介入的地方
+## Where you step in
 
-| 时机 | 控制台 | 命令行 |
+| When | Console | Command line |
 |---|---|---|
-| `develop` 改代码前提问 | 在对话里回复，或点选项 | `myorch reply <run> develop "回答"` |
-| 采纳项目包修改 | 回复编号，例如 `1,3`、`all`、`none` | `myorch reply <run> pack-choose.r<N> "1,3"`（N 是轮次） |
-| review 跑满仍有阻塞问题（`on_exhausted: ask` 的项目） | 看反思建议，回复 1、2 或 3 | `myorch reply <run> review-fix 1`（1 再跑一轮，2 接受当前结果，3 终止） |
-| 某一步重试后仍失败 | 回复 1、2、3，或者写一句提示 | `myorch reply <run> <步骤> 1`（1 新会话重来，2 跳过，3 终止。写别的文字是提示，在原会话里接着做） |
-| 需要审批 | 运行的「改动」标签页看 diff、review 结论和风险判定，点「批准」「要求修改」或「驳回」 | `myorch review <run>` 打开汇总页；`myorch approve <run> human-review`、`myorch changes <run> human-review "意见"`、`myorch reject <run> human-review` |
-| 推送以后 | — | 在 GitHub 上用推送的分支开 PR（交付说明可以直接当 PR 描述），决定是否合并。myorch 项目合并以后还要发布，见「myorch：合并以后」 |
+| `develop` asks before changing code | Reply in the conversation, or click an option | `myorch reply <run> develop "answer"` |
+| Adopting project pack changes | Reply with numbers, for example `1,3`, `all`, `none` | `myorch reply <run> pack-choose.r<N> "1,3"` (N is the round) |
+| Review runs out of rounds with blocking findings left (projects with `on_exhausted: ask`) | Read the reflect proposal, reply 1, 2 or 3 | `myorch reply <run> review-fix 1` (1 runs one more round, 2 accepts the current result, 3 stops) |
+| A step still fails after retries | Reply 1, 2, 3, or write a hint | `myorch reply <run> <step> 1` (1 starts over in a new session, 2 skips, 3 stops. Any other text is a hint, and the step continues in the same session) |
+| Approval is needed | Read the diff, review verdict and risk verdict on the run's **Changes** tab, click **Approve**, **Request changes** or **Reject** | `myorch review <run>` opens the summary page; `myorch approve <run> human-review`, `myorch changes <run> human-review "comments"`, `myorch reject <run> human-review` |
+| After the push | — | Without `open_pr`, open a PR on GitHub from the pushed branch (the delivery note can serve as the PR description). Review the PR and decide whether to merge. For the myorch project, a release follows the merge; see "myorch: after merging" |
 
-takeaway 的四步失败时不问你（`on_failed: skip`），也不阻塞后面的步骤。宿主机动作失败时也不会问。
+When any of the four takeaway steps fails, you are not asked (`on_failed: skip`), and later steps are not blocked. Failed host actions do not ask either.
 
-## 产物
+## Artifacts
 
-同一个运行的所有步骤共享一个工作区。控制台里运行的「文档」能看所有文档和截图。命令行用 `myorch ws <run>` 列出文件，`myorch ws <run> docs/risk.md` 读一个文件。
+All steps of a run share one workspace. The run's **Docs** tab in the console shows all documents and screenshots. On the command line, `myorch ws <run>` lists the files and `myorch ws <run> docs/risk.md` reads one.
 
 ```
-observed/<运行 ID>/           接着改时上一次的运行、有 incident 时出问题的运行（只读）
+observed/<run ID>/            the previous run when continuing; the failing run with incident (read-only)
 docs/
 ├── external/
-│   ├── request.md            第一条消息的原文（控制台和 Slack 发起时）
-│   ├── ticket.md             工单（fetch-ticket，或 develop 用 MCP 读的）
-│   └── attachments/          工单里的图片
-├── previous/                 接着改时：上一次的文档和对话
-├── requirements.md           需求、验收标准、工单对照；有 incident 时开头是原因分类
-├── design.md                 影响分析、方案、兼容和回滚、测试计划
-├── implementation.md         改动、证据、检查结果、假设、和设计的差异；fix 追加「第 N 轮修复」
-├── ci/round-N.md             每轮的检查报告（round-N/ 里有 result.json、head.txt）
-├── review/round-N/           reviewer-K.json、security.json、verified.json、summary.md、rebuttal.md、approver.json、pack/
-├── takeaway/                 trail.json、task.md、takeaway.md（只在 takeaway 的项目）
-├── risk.md                   风险结论和请审批人重点检查的地方
-└── delivery.md               交付说明
-repo/myorch/<日期>-<运行 ID>/  task.md、takeaway.md（提交在分支上，只在 takeaway 的项目）
+│   ├── request.md            original text of the first message (when started from the console or Slack)
+│   ├── ticket.md             the ticket (fetch-ticket, or read by develop via MCP)
+│   └── attachments/          images from the ticket
+├── previous/                 when continuing: the previous run's documents and conversation
+├── requirements.md           requirements, acceptance criteria, ticket mapping; with incident it starts with the cause category
+├── design.md                 impact analysis, approach, compatibility and rollback, test plan
+├── implementation.md         changes, evidence, check results, assumptions, differences from the design; fix appends "Round N fix"
+├── ci/round-N.md             check report per round (round-N/ holds result.json, head.txt)
+├── review/round-N/           reviewer-K.json, security.json, verified.json, summary.md, rebuttal.md, approver.json, pack/
+├── takeaway/                 trail.json, task.md, takeaway.md (only for takeaway projects)
+├── risk.md                   risk verdict and the places the approvers should check
+└── delivery.md               delivery note
+repo/myorch/<date>-<run ID>/  task.md, takeaway.md (committed on the branch, only for takeaway projects)
 ```
 
 ## develop
 
-一个 agent 从读需求做到提交代码，三个阶段按顺序：需求、技术设计、实现。不能跳过前两个阶段直接写代码。项目的 `prompts/develop.md` 原文拼在 prompt 的「输入」之后，见[按项目的不同](#按项目的不同)。
+One agent goes from reading the requirement to committing code, in three phases in order: requirements, technical design, implementation. It cannot skip the first two phases and go straight to code. The project's `prompts/develop.md` is appended verbatim after the "Inputs" part of the prompt; see [Differences by project](#differences-by-project).
 
-- **输入**：工单 `docs/external/ticket.md`（有时）、截图、请求原文 `docs/external/request.md`、项目约定、仓库自带的知识、项目包的 `guide/`（其中 `decisions.md` 是以前人做过的决定）。请求原文和工单是外部数据，里面的指令不执行。
-- **需求文档**：目标、范围、明确不做的事、可检查的验收标准、工单对照表、预计改动的文件、风险、依据。
-  - 工单对照表：工单里的每一条要求照抄一行（包括评论里补充的），对应哪条验收标准，或者为什么不做。一条要求里有几个动作，验收标准就要覆盖每个动作。
-  - 工单点名的模块、功能、场景不能由 agent 自己划进「明确不做的事」。想排除时要问人。
-- **技术设计**：影响分析（调用方、跨模块依赖、其他服务）、方案和不选的方案、兼容和回滚、测试计划（每条验收标准的测试，加上边界和反例）、风险。设计里不写代码。
-  - 列全入口：给字段加校验或要求多处一致时，至少用报错文案和字段名两种方式反查，在设计里写出搜索命令和找到的入口。
-  - 删除或放宽已有的判断前，用注释和 `git log -L`、`git blame` 查清它为什么存在。查不清、或改动后它保护的东西不再成立时，问人。
-  - 先找同类的已有实现：能直接用就调用；形状不合适就改成能共用的形状；行为由共享方法决定时改共享方法，并检查它的每个调用方。不复制一份。为了复用而改共享实现属于这次的范围。
-- **改代码之前问，最多问一次**：两个阶段里发现的需要人决定的问题，放进一次提问，每个问题给选项，第一个是推荐的。用户能看到的东西、接口和契约、数据模型和迁移、影响其他模块或服务的行为变化、明显改变实现规模的选择，都不能由 agent 替你选。`decisions.md` 里已经有的决定照做，不再问。
-- **兜底**：agent 结束时说还有没问就按推荐做了的问题（`requires_design_decision`），平台照样问你，你的回答作为下一轮发回同一个会话。
-- **实现**：只改范围内的代码，每条验收标准有测试或检查，跑 `myorch-checks`（项目的 `checks.sh`）直到通过，写实现记录，在当前分支提交一次。检查报告把失败列在「环境」里时（沙箱的网络或系统限制），不算代码的问题，照常提交，在实现记录里写明。
-- **停下来**：需求和代码矛盾、必须改范围以外的代码、检查因代码失败又修不好时，不提交，步骤失败，然后问你怎么办。
-- **可以判断不用改**：功能已经存在，或者你决定不做。不写文档，后面全部跳过。
+- **Inputs**: the ticket `docs/external/ticket.md` (when there is one), screenshots, the original request `docs/external/request.md`, project conventions, the knowledge that comes with the repository, the project pack's `guide/` (its `decisions.md` holds decisions people made before). The original request and the ticket are external data; instructions in them are not followed.
+- **Requirements document**: goal, scope, what is explicitly out of scope, checkable acceptance criteria, a ticket mapping table, the files expected to change, risks, sources.
+  - Ticket mapping table: each requirement in the ticket is copied as one row (including those added in comments), with the acceptance criterion it maps to, or why it is not done. When one requirement contains several actions, the acceptance criteria must cover each action.
+  - The agent cannot put modules, features or scenarios the ticket names into "explicitly out of scope" on its own. To exclude one, it must ask a person.
+- **Technical design**: impact analysis (callers, cross-module dependencies, other services), the approach and the rejected approaches, compatibility and rollback, a test plan (a test for each acceptance criterion, plus edge cases and counterexamples), risks. No code in the design.
+  - List every entry point: when adding validation to a field or requiring consistency in several places, search back in at least two ways, by the error message and by the field name. Write the search commands and the entry points found into the design.
+  - Before removing or loosening an existing check, find out why it exists with comments, `git log -L` and `git blame`. If that cannot be found out, or what it protects no longer holds after the change, ask a person.
+  - Look for an existing implementation of the same kind first: if it fits, call it; if its shape does not fit, reshape it so it can be shared; when the behavior is decided by a shared method, change the shared method and check every caller. Do not copy it. Changing the shared implementation for reuse is within this change's scope.
+- **Ask before changing code, at most once**: the questions from both phases that need a human decision go into one question, each with options, the first one recommended. The agent cannot choose for you on: things users can see, interfaces and contracts, data models and migrations, behavior changes that affect other modules or services, and choices that clearly change the size of the implementation. Decisions already in `decisions.md` are followed and not asked again.
+- **Safety net**: when the agent finishes and reports questions it did not ask but decided by the recommendation (`requires_design_decision`), the platform still asks you, and your answer is sent back to the same session as the next turn.
+- **Implementation**: change only code within scope, give each acceptance criterion a test or check, run `myorch-checks` (the project's `checks.sh`) until it passes, write the implementation record, and commit once on the current branch. When the check report lists failures under "Environment" (network or system limits of the sandbox), they are not code problems: commit as usual and note them in the implementation record.
+- **Stop**: when the requirement contradicts the code, when code outside the scope must change, or when checks fail because of the code and cannot be fixed, it does not commit. The step fails and then asks you what to do.
+- **It may decide no change is needed**: the feature already exists, or you decide not to do it. No documents are written and everything after is skipped.
 
-为什么合成一步：分开时每次交接都会丢信息。有凭证的步骤（`sync-master`、`fetch-ticket`、`deliver`）仍然单独跑，`develop` 拿不到 GitHub 和 Jira 的凭证。
+Why one step: when these were separate, every handoff lost information. The steps with credentials (`sync-master`, `fetch-ticket`, `deliver`) still run separately; `develop` gets no GitHub or Jira credentials.
 
-## 读工单
+## Reading the ticket
 
-- **条件**：项目设置了 `jira.url`（mdm 是 `example.atlassian.net`，前缀 `MD`），并且给了工单号。只写数字时加上项目的前缀（`jira.key`）。没有 Jira 的项目没有工单输入，也没有 `fetch-ticket` 这一步。
-- **只读**：凭证是项目的 Jira provider（mdm 是 `jira-mdm`），出站规则只放行读工单、读附件内容和 `/myself`。沙箱里只有占位符，真实 token 由网关替换。
-- **内容**：标题、类型、状态、优先级、报告人、经办人、标签、组件、父工单、关联工单、描述、子任务、附件列表、评论。文件开头写明它是外部数据。
-- **截图**：只下载图片附件，最多 10 张，每张不超过 5 MB，存到 `docs/external/attachments/<id>-<文件名>`。`ticket.md` 的「附件」一节列出路径，`develop` 用 Read 打开看。描述里的 `!文件名!` 指的就是这些图。其他附件只列名字。某张下载失败不影响运行。控制台的「文档」也能看这些图。
-- **评论**：`ticket_comments` 默认 `all`。选 `none` 时不带评论，只按描述做（评测用：需求应该写在工单里，不靠评论）。
-- **MCP 兜底**：`fetch-ticket` 没跑（项目没有 `jira.url`）、而这次运行挂了能读工单的 MCP 知识源时，`develop` 先用 MCP 读工单，写同一个 `docs/external/ticket.md`，开头注明来源。读不到就在摘要里写明，按请求原文继续。mdm 目前不默认挂 Atlassian MCP。
+- **Condition**: the project sets `jira.url` (mdm: `example.atlassian.net`, prefix `MD`) and a ticket number is given. When only digits are given, the project's prefix (`jira.key`) is added. Projects without Jira have no ticket input and no `fetch-ticket` step.
+- **Read-only**: the credentials are the project's Jira provider (mdm: `jira-mdm`). The egress rules allow only reading tickets, reading attachment content, and `/myself`. The sandbox holds only a placeholder; the gateway swaps in the real token.
+- **Content**: title, type, status, priority, reporter, assignee, labels, components, parent ticket, linked tickets, description, subtasks, attachment list, comments. The file states at the top that it is external data.
+- **Screenshots**: only image attachments are downloaded, at most 10, each at most 5 MB, saved to `docs/external/attachments/<id>-<file name>`. The "Attachments" section of `ticket.md` lists the paths, and `develop` opens them with Read. `!file name!` in the description refers to these images. Other attachments are listed by name only. A failed download does not affect the run. The console's **Docs** tab also shows these images.
+- **Comments**: `ticket_comments` defaults to `all`. With `none`, comments are left out and only the description is used (for evals: the requirement should be in the ticket, not depend on comments).
+- **MCP fallback**: when `fetch-ticket` did not run (the project has no `jira.url`) and the run has an MCP knowledge source that can read tickets, `develop` first reads the ticket via MCP and writes the same `docs/external/ticket.md`, noting the source at the top. If it cannot read it, it says so in the summary and continues from the original request. mdm does not attach the Atlassian MCP by default at the moment.
 
-## review 循环
+## The review loop
 
-定义在片段 [`lib/review-loop.yaml`](lib/review-loop.yaml)，[review](review.md) 和 [eval](eval.md) 也用它（只跑 1 轮、不修复）。这里的参数来自项目的 `flows.development`：默认 3 个 reviewer 加单独的 security，最多 3 轮，跑满时问你。项目的 `prompts/review.md`、`verify.md`、`fix.md` 拼进对应步骤。
+Defined in the fragment [`lib/review-loop.yaml`](lib/review-loop.yaml). [review](review.md) and [eval](eval.md) use it too (one round only, no fixing). The parameters here come from the project's `flows.development`: by default 3 reviewers plus a separate security review, at most 3 rounds, and it asks you when it runs out of rounds. The project's `prompts/review.md`, `verify.md` and `fix.md` are appended to the matching steps.
 
-- **每轮看什么**：第 1 轮看整个改动（接着改时只看这次运行的新提交）；之后每轮只看上一轮开始以后的提交。范围由 `ci` 算出，写在 `docs/ci/round-N/head.txt` 里。
-- **先独立判断，最后读作者的说法**：reviewer 先只看需求文档、技术设计和 diff，自己找问题；然后才读实现记录，核对里面的测试和检查是否真的存在、假设站不站得住。实现记录里写了原因，也不是放过问题的理由。
-- **需求文档对照工单原文**：需求文档也是作者写的。漏掉、缩小或改写了工单的要求，工单对照表只覆盖了一部分动作，或者自己把工单点名的内容划出范围，都算 Important。
-- **到仓库里查**：只看 diff 看不出来的三类问题，一律算 Important：
-  - 没有复用已有的同类实现，或者复制了共享方法的分支而不是改它。
-  - 漏掉的入口：同一个字段、同一句报错的其他读写位置没改，设计里也没说为什么。
-  - 删掉或放宽了已有的判断，破坏了它保护的东西，而需求文档没写这是人决定的。
-- **分工**：1 号多看正确性和边界，2 号多看验收标准和测试，3 号多看设计、范围和复用。漏掉的入口和放宽的判断每个人都查。只有 1 个 reviewer 的项目（blog）只有 1 号。
-- **读前面步骤的过程**：`fix` 和 `reflect` 可以用 `/sandbox/bin/myorch-steps` 分段读这次运行前面步骤的 manifest 和日志（例如 develop 当时为什么这么做）。reviewer 和 verify 的 prompt 不提它：它们要先独立判断。前面步骤的记录（`.myorch/`、别的步骤的 `.claude/`）对每一步都是只读的。
-- **规则标记**：上面这些「到仓库里查」「先独立判断」「Nit 最多 5 条」之类的条款，是因为模型以前犯过错才加的。它们在流程文件里用 `[[rule:<规则>/<位置>]]` 标出来，起因登记在 [`rules/registry.yaml`](rules/registry.yaml)。展开时标记去掉、正文照常保留；只有重放时 `--set flows.ablate=<规则>` 会去掉整条，用来评测这条规则还需不需要。
-- **verify**：合并重复，逐条打开代码核实，只有一个人报的也核实，不成立的删掉。删掉纯风格意见，Nit 最多留 5 条。每个检查失败项算一条 Important，环境失败不算。上一轮的问题标成 fixed、open 或 rebutted。`blocking` 是还没解决的 Important 条数，为 0 时循环结束。
-- **fix**：只修 Important，一个问题的所有位置一起改，不碰 Nit。认为发现不成立、或者修复要人决定时，不改代码，写进 `rebuttal.md`（要人决定的以「需要人决定：」开头），下一轮的 verify 会判断。原因在项目包里时，提项目包修改，见下一节。修完跑检查，在实现记录末尾加「第 N 轮修复」，提交一次。
-- **跑满**：`on_exhausted: ask`（默认）时，`reflect` 读完所有轮次，判断是个别问题、方向错了、需要人决定，还是 reviewer 误判，给出建议，然后问你：再跑一轮、接受当前结果、终止。`accept`（blog）时直接往下走，最后一轮的修复没人 review 过，`risk-rules` 会把这些提交列出来。
-- **审批人要求修改**：意见写进下一轮的 `approver.json`，每一条都算 Important，verify 不会把它删掉。
+- **What each round looks at**: round 1 looks at the whole change (when continuing, only this run's new commits); each later round looks only at the commits since the previous round started. `ci` computes the range and writes it to `docs/ci/round-N/head.txt`.
+- **Judge independently first, read the author's account last**: a reviewer first looks only at the requirements document, the technical design and the diff, and finds problems on its own. Only then does it read the implementation record and check that the tests and checks listed there really exist and the assumptions hold. A reason given in the implementation record is no excuse to let a problem pass.
+- **Check the requirements document against the original ticket**: the requirements document is also written by the author. Leaving out, narrowing or rewriting a ticket requirement, a ticket mapping table that covers only some of the actions, or moving something the ticket names out of scope on its own, all count as Important.
+- **Look in the repository**: three kinds of problems that the diff alone does not show always count as Important:
+  - Not reusing an existing implementation of the same kind, or copying a branch of a shared method instead of changing it.
+  - Missed entry points: other places that read or write the same field or the same error message were not changed, and the design does not say why.
+  - An existing check was removed or loosened, breaking what it protected, and the requirements document does not say a person decided this.
+- **Division of work**: reviewer 1 focuses on correctness and edge cases, reviewer 2 on acceptance criteria and tests, reviewer 3 on design, scope and reuse. Everyone checks for missed entry points and loosened checks. Projects with only 1 reviewer (blog) have only reviewer 1.
+- **Reading earlier steps' history**: `fix` and `reflect` can use `/sandbox/bin/myorch-steps` to read, in parts, the manifests and logs of this run's earlier steps (for example why develop did something). The reviewer and verify prompts do not mention it: they must judge independently first. Earlier steps' records (`.myorch/`, other steps' `.claude/`) are read-only for every step.
+- **Rule markers**: rules like "look in the repository", "judge independently first" and "at most 5 Nits" above were added because the model made those mistakes before. They are marked in the flow file with `[[rule:<rule>/<location>]]`, and the reason for each is recorded in [`rules/registry.yaml`](rules/registry.yaml). At expansion the marker is removed and the text stays. Only a replay with `--set flows.ablate=<rule>` removes the whole rule, to evaluate whether the rule is still needed.
+- **verify**: merges duplicates, opens the code for each finding to confirm it, also confirms findings only one reviewer reported, and deletes those that do not hold. Deletes pure style comments and keeps at most 5 Nits. Each failed check counts as one Important; environment failures do not. Findings from the previous round are marked fixed, open or rebutted. `blocking` is the number of unresolved Important findings; the loop ends when it is 0.
+- **fix**: fixes only Important findings, changes all places of one problem together, and leaves Nits alone. When it thinks a finding does not hold, or the fix needs a human decision, it does not change the code and writes it in `rebuttal.md` instead (those needing a human decision start with "Needs a human decision:"); the next round's verify judges it. When the cause is in the project pack, it proposes a project pack change; see the next section. After fixing it runs the checks, appends "Round N fix" to the end of the implementation record, and commits once.
+- **Running out of rounds**: with `on_exhausted: ask` (the default), `reflect` reads all rounds and judges whether it is an isolated problem, a wrong direction, something needing a human decision, or reviewers being wrong. It gives a proposal and then asks you: run one more round, accept the current result, or stop. With `accept` (blog) the flow goes straight on. The last round's fixes were never reviewed, and `risk-rules` lists those commits.
+- **The approver requests changes**: the comments are written into the next round's `approver.json`. Each one counts as Important, and verify will not delete them.
 
-## 项目包的修改（pack-choose、pack-apply）
+## Project pack changes (pack-choose, pack-apply)
 
-阻塞问题有时出在项目包里，例如 `checks.sh` 写错了。项目包在 sandbox 里是只读的（`project/`），`fix` 改不了它。这时：
+Sometimes a blocking problem lies in the project pack, for example a mistake in `checks.sh`. The project pack is read-only in the sandbox (`project/`), so `fix` cannot change it. In that case:
 
-1. `fix` 不改 `project/`，也不为它写 rebuttal。它把 `project/` 复制到 `/tmp`，在副本上改，用副本跑一次相关的检查，再把建议写进 `docs/review/round-N/pack/proposals.json`（机器读）和 `proposals.md`（给人看，含验证结果）。
-2. `pack-choose` 列出建议，问你采纳哪几条。
-3. `pack-apply` 在宿主机上把采纳的改动写回 `myorch-knowledge`，只提交这些文件，重新同步项目快照。每条改动的原文必须在文件里恰好出现一次，否则什么都不写，步骤失败。
-4. 这次运行的下一轮挂新的快照，用新的项目包检查。别的运行不受影响。最后一轮刚写回时，反思步骤会建议再跑一轮。
+1. `fix` does not change `project/` and does not write a rebuttal for it. It copies `project/` to `/tmp`, changes the copy, runs the relevant checks once with the copy, and writes the proposals to `docs/review/round-N/pack/proposals.json` (for machines) and `proposals.md` (for people, including the verification result).
+2. `pack-choose` lists the proposals and asks which ones you adopt.
+3. `pack-apply` writes the adopted changes back to `myorch-knowledge` on the host, commits only those files, and syncs the project snapshot again. The original text of each change must appear exactly once in the file; otherwise nothing is written and the step fails.
+4. The next round of this run mounts the new snapshot and checks with the new project pack. Other runs are not affected. When the write-back happened in the last round, the reflect step proposes one more round.
 
-只能改 `guide/` 下的文件、`checks.sh`、`checks.env`、`setup.sh`（`project.py` 的 `EDITABLE["fix"]`）。`risk-rules.yaml` 和 `security.md` 不能改：运行不能改变自己的改动怎么被审批。要改别的文件时，`fix` 写「需要人决定：」。
+Only files under `guide/`, `checks.sh`, `checks.env` and `setup.sh` can be changed (`EDITABLE["fix"]` in `project.py`). `risk-rules.yaml` and `security.md` cannot: a run must not change how its own changes are approved. To change other files, `fix` writes "Needs a human decision:".
 
-## 任务信息和 takeaway
+## Task info and takeaway
 
-只在项目设置了 `flows.development.takeaway: true` 时（现在只有 mdm）：仓库里放一个 `myorch/` 目录要项目同意。review 循环之后、风险判定之前，四步把这次运行的任务信息和经验提交到仓库。
+Only when the project sets `flows.development.takeaway: true` (currently only mdm): putting a `myorch/` directory in the repository needs the project's consent. After the review loop and before the risk verdict, four steps commit this run's task info and lessons to the repository.
 
-- **提交在分支上**：`takeaway-commit` 把 `task.md` 和 `takeaway.md` 复制到 `repo/myorch/<日期>-<运行 ID>/`（日期是运行开始的那天），只提交这个目录，提交信息固定为 `Add myorch task and takeaway for <运行 ID>`。内容没变时不重复提交。审批时能看到，推送后在 PR 里，合并后进 base 分支，[learn](learn.md) 从那里读。
-- **不阻塞**：四步都是 `on_failed: skip`。失败了记一条失败事件，当作跳过，后面照常。每一步只在上一步给出输出时执行，所以不会提交旧的或写了一半的文件（`takeaway-trail` 先清空两个文件）。
-- **trail**：每一步的状态、摘要、失败原因、重试次数，问答，review 每轮的 blocking 和检查结果，分支、输入、myorch 提交、项目包版本。像密钥的行在写入前删掉。
-- **takeaway 写什么**：`task.md` 只写事实（工单、运行、输入、需求摘要、问答、每轮 review 和检查、结果）。`takeaway.md` 写遇到的问题、根本原因、怎么解决的、缺了什么知识、对流程或平台的建议，每条标类别（项目知识、流程、平台、环境）并给出证据。「缺了什么知识」只写换一个需求也用得上的项目知识，不写这张工单的答案。两个文件合起来不超过 200 行。agent 不挂知识源，只读。
-- **读过程**：除了 `trail.json`，`takeaway` 还可以用 `/sandbox/bin/myorch-steps` 分段读每一步的日志，找最早走偏的地方。
-- **不写密钥**：两个文件会进公司仓库。`takeaway-redact` 按 `knowledge.SECRET_RULES`（和知识源扫描是同一份规则）删掉像密钥的行。两个文件都空时它失败，提交就不会执行。
-- **risk-rules 怎么看这个提交**：它在最后一轮 review 之后，但不算「没有经过 review 的提交」：只有一个父提交、而且只改了 `myorch/` 下 `.md` 文件的提交不计入。合并提交一律计入。`risk-rules` 在这个提交之后取 `head_sha`，所以你批准的、推送的，都是带着这两个文件的提交。
-- **不写的时候**：重放（`at`）不写，否则评测案例的答案会进知识。`develop` 判断不用改时也不写。运行在审批前失败时推不出去，它的经验不在仓库里。
+- **Committed on the branch**: `takeaway-commit` copies `task.md` and `takeaway.md` to `repo/myorch/<date>-<run ID>/` (the date is the day the run started), commits only this directory, with the fixed commit message `Add myorch task and takeaway for <run ID>`. When the content has not changed, it does not commit again. It is visible at approval, is in the PR after the push, and reaches the base branch after merging; [learn](learn.md) reads it from there.
+- **Not blocking**: all four steps have `on_failed: skip`. A failure records a failure event, counts as skipped, and the flow goes on. Each step runs only when the previous one produced output, so stale or half-written files are never committed (`takeaway-trail` empties both files first).
+- **trail**: each step's status, summary, failure reason and retry count; questions and answers; each review round's blocking count and check results; branch, inputs, myorch commit, project pack version. Lines that look like secrets are deleted before writing.
+- **What takeaway writes**: `task.md` holds only facts (ticket, run, inputs, requirements summary, questions and answers, each review round and its checks, the result). `takeaway.md` holds the problems encountered, root causes, how they were solved, the missing knowledge, and suggestions for the flow or platform. Each item is tagged with a category (project knowledge, flow, platform, environment) and gives evidence. "Missing knowledge" holds only project knowledge that would help with a different requirement too, not the answer to this ticket. The two files together are at most 200 lines. The agent has no knowledge sources attached and is read-only.
+- **Reading the history**: besides `trail.json`, `takeaway` can use `/sandbox/bin/myorch-steps` to read each step's logs in parts, to find where things first went wrong.
+- **No secrets**: the two files go into the company repository. `takeaway-redact` deletes lines that look like secrets by `knowledge.SECRET_RULES` (the same rules as the knowledge source scan). When both files end up empty it fails, so the commit does not run.
+- **How risk-rules sees this commit**: it comes after the last review round, but it does not count as a "commit that was not reviewed": a commit with a single parent that changes only `.md` files under `myorch/` is not counted. Merge commits are always counted. `risk-rules` takes `head_sha` after this commit, so what you approve and what is pushed is the commit with these two files.
+- **When it is not written**: replays (`at`) do not write it; otherwise the eval case's answer would get into knowledge. It is also not written when `develop` decides no change is needed. A run that fails before approval cannot be pushed, so its lessons are not in the repository.
 
-## 风险和审批
+## Risk and approval
 
-风险由改动决定，不由作者决定。两个分类器互相兜底：规则可能漏掉语义上的风险，模型可能看漏路径上的风险，最后取较严的一个。
+Risk is decided by the change, not by the author. Two classifiers back each other up: rules may miss semantic risk, the model may miss path-based risk, and the stricter of the two wins.
 
-**risk-rules**（确定性脚本）：
+**risk-rules** (deterministic script):
 
-- 规则来自项目包的 `risk-rules.yaml`（模板的规则加上项目自己的），命中的规则里取最严的。规则可以按路径、按新文件里的文字、按改动行的正则匹配。没有规则命中时用 `default`。
-- 下面任意一种情况，至少 1 人：最后一轮 review 还有没解决的 Important；最后一轮检查失败；最后一轮 review 之后有新的提交（例如跑满后接受了，最后一轮的修复没人看过）。takeaway 的提交不算，见上一节。
-- 输出 `approvers`（规则要求的人数）和 `available`（项目登记的审批人数）。
+- The rules come from the project pack's `risk-rules.yaml` (the template's rules plus the project's own). Of the rules that match, the strictest applies. Rules can match by path, by text in new files, or by a regex on changed lines. When no rule matches, `default` applies.
+- At least 1 approver in any of these cases: the last review round still has unresolved Important findings; the last round's checks failed; there are new commits after the last review round (for example after accepting when the loop ran out of rounds, so nobody looked at the last round's fixes). The takeaway commit does not count; see the previous section.
+- Outputs `approvers` (the number the rules require) and `available` (the number of approvers registered for the project).
 
-**classify-risk**（agent，只读）：读实际的 diff、需求文档、实现记录里的假设、最后一轮 review 和检查、没经过 review 的提交，判断 0、1 或 2 人。改接口或数据、改构建部署、和安全有关、难以撤回、影响下游，任意一条就是 2 人。写 `docs/risk.md`：结论、影响范围、没解决的问题、请审批人重点检查的 3 到 5 处。项目的 `prompts/risk.md` 拼在 prompt 末尾（myorch 用它规定「影响范围」按平台的边界、未结束的运行、部署来写）。
+**classify-risk** (agent, read-only): reads the actual diff, the requirements document, the assumptions in the implementation record, the last review round and checks, and the commits that were not reviewed, and decides 0, 1 or 2 approvers. Any one of these means 2: changes to interfaces or data, changes to build or deployment, anything security-related, hard to undo, affects downstream. It writes `docs/risk.md`: the verdict, the impact, unresolved problems, and 3 to 5 places the approvers should check. The project's `prompts/risk.md` is appended to the end of the prompt (myorch uses it to require that the impact be written in terms of the platform's boundaries, unfinished runs, and deployment).
 
-**human-review** 的人数：
+Number of approvers for **human-review**:
 
 ```
-min(项目登记的审批人数, max(risk-rules 的人数, min(classify-risk 的人数, 2)))
+min(approvers registered for the project, max(risk-rules count, min(classify-risk count, 2)))
 ```
 
-- 三个项目现在都只登记了一个审批人，所以人数最多是 1。
-  - mdm：core-ng 模板默认 1 人，数据库迁移、接口模块、构建和依赖、CI 和部署、环境配置、实体字段注解、破坏性 SQL 是 2 人；mdm 的 protos 子模块 2 人、规格文档 1 人。所以每次都要恰好 1 人。
-  - blog：`default: 1`，每次都要 1 人。
-  - myorch：`default: 0`，平台的边界（sandbox、凭证、profile、部署、调度和审批的代码）要 2 人。两个判断都给 0（例如只改了文档）时自动通过，`deliver` 直接推送分支。推送的只是分支，合并和部署要人做。
-- 发起人必须是审批人之一（`require_initiator`）。agent 的批准不算数。
-- 审批绑定提交：打开审批时记下 `head_sha`，`deliver` 推送前核对。
-- 要求修改：回到 `review-fix`，最多再跑 2 轮。之后 takeaway、风险判定、审批从头再走一遍。
-- 24 小时没人处理，发一次提醒。7 天没人处理，这一步失败（「审批超时」），什么都不推送。
-- 任何一人驳回，运行终止。
+- All three projects currently register only one approver, so the number is at most 1.
+  - mdm: the core-ng template's default is 1. Database migrations, interface modules, build and dependencies, CI and deployment, environment config, entity field annotations and destructive SQL need 2. mdm's protos submodule needs 2 and spec documents need 1. So every run needs exactly 1.
+  - blog: `default: 1`; every run needs 1.
+  - myorch: `default: 0`; the platform's boundaries (code for sandbox, credentials, profiles, deployment, scheduling and approval) need 2. When both judgments give 0 (for example only docs changed), approval passes automatically and `deliver` pushes the branch right away. Only the branch is pushed; merging and deployment are done by a person.
+- The person who started the run must be one of the approvers (`require_initiator`). An agent's approval does not count.
+- Approval is bound to a commit: `head_sha` is recorded when approval opens, and `deliver` checks it before pushing.
+- Request changes: back to `review-fix`, at most 2 more rounds. Then takeaway, the risk verdict and approval run again from the start.
+- After 24 hours with no action, one reminder is sent. After 7 days with no action, the step fails ("approval timed out") and nothing is pushed.
+- If any approver rejects, the run ends.
 
-## 交付
+## Delivery
 
-定义在 [`lib/deliver.yaml`](lib/deliver.yaml)。
+Defined in [`lib/deliver.yaml`](lib/deliver.yaml).
 
-- 当前分支是 base 分支时拒绝推送。HEAD 不等于批准的提交时拒绝推送，要重新运行、重新审批。
-- 推送分支（普通推送，不强推），不调用 GitHub API，不开 PR。
-- 写 `docs/delivery.md`：标题和工单、改了什么（取自实现记录的「改动」）、怎么验证的（检查结果、验收标准表）、review 轮数和没解决的问题、没经过 review 的提交、风险结论和重点检查项、怎么撤回。
-- `outputs.delivery` 带上分支、base、提交、标题、工单、交付说明和仓库的 PR 模板。`run_finished` 事件带着它，控制台和 Slack 据此告诉你推送了哪个分支。PR 由你开。
+- It refuses to push when the current branch is the base branch. It refuses to push when HEAD is not the approved commit; the run must be redone and approved again.
+- Pushes the branch (normal push, no force push). Does not call the GitHub API and does not open a PR.
+- Writes `docs/delivery.md`: title and ticket, what changed (taken from "Changes" in the implementation record), how it was verified (check results, acceptance criteria table), number of review rounds and unresolved problems, commits that were not reviewed, the risk verdict and the places to check, how to undo.
+- `outputs.delivery` carries the branch, base, commit, title, ticket, the delivery note and the repository's PR template. The `run_finished` event carries it, and the console and Slack use it to tell you which branch was pushed.
+- With `flows.development.open_pr` (mdm): after the push, opens the pull request with `gh api` (title: the delivery title; body: the delivery note, then the repository's PR template, then a hidden `<!-- myorch-pr run=… -->` marker; head: the run's branch; base: the project's base). If the branch already has an open PR (a run continued with `from_run`), that PR is reused and the push updates it. The link is output as `pr_url`: the console shows "PR opened" in the run's conversation, the `pr_opened` and `run_finished` events carry it, and the run list has it. If opening the PR fails, the step fails after the push; "Re-run failed steps" pushes again (nothing changes) and retries the PR. Without `open_pr`, you open the PR.
 
-## 接着改（from_run）
+## Continue (from_run)
 
-通用的做法见 [在原分支上接着改](../docs/workflows/README.md#在原分支上接着改)。这个流程里：
+The general procedure is in [Continue on the same branch](../docs/workflows/README.md#continue-on-the-same-branch). In this flow:
 
-- `checkout-branch` 只读挂载上一次运行的工作区，从它的最后一个提交开始。远端同名分支上有人追加了提交时，从远端的最新提交开始。两者分叉时停下来，要人先处理。
-- 复制到 `docs/previous/` 的文件：`requirements.md`、`design.md`、`implementation.md`、`risk.md`、`delivery.md`、`external-request.md`（上一次的请求原文）、最后一轮 review 的 `review-summary.md`、记录上一次运行 ID 的 `RUN`，更早的几次在 `earlier/` 里。`conversation.md` 是宿主机写的：人对上一次运行说过的话。
-- `develop` 的需求文档写完整的需求，在「目标」里单独写一段「这次的修改」。上一次的验收标准仍然有效，除非这次的请求改了它。设计在上一次的基础上改。代码在已有提交上改，不重做。`conversation.md` 里人的决定优先于上一次文档里的假设。
-- `checkout-branch` 输出 `since`（这次开始时的提交）。review 循环的第 1 轮只看 `since` 之后的提交，检查仍然跑整个分支相对 base 改动的文件。风险判定看整个分支。
-- 推送到同一个分支，已经开的 PR 会自动更新。没给工单号、`incident` 时沿用上一次的。
-- 不能和 `at` 同时给。
+- `checkout-branch` mounts the previous run's workspace read-only and starts from its last commit. If someone added commits to the remote branch of the same name, it starts from the latest remote commit. If the two have diverged, it stops and a person must sort it out first.
+- Files copied to `docs/previous/`: `requirements.md`, `design.md`, `implementation.md`, `risk.md`, `delivery.md`, `external-request.md` (the previous original request), the last review round's `review-summary.md`, and `RUN` with the previous run ID. Earlier runs are in `earlier/`. `conversation.md` is written by the host: what people said to the previous run.
+- `develop`'s requirements document states the full requirement, with a separate paragraph "This change" under "Goal". The previous acceptance criteria still hold unless this request changes them. The design is changed on top of the previous one. The code is changed on top of the existing commits, not redone. Human decisions in `conversation.md` take precedence over assumptions in the previous documents.
+- `checkout-branch` outputs `since` (the commit at the start of this run). Round 1 of the review loop looks only at commits after `since`; checks still run on the files the whole branch changed against base. The risk verdict looks at the whole branch.
+- It pushes to the same branch, so a PR that is already open updates automatically. If no ticket number or `incident` is given, the previous ones are reused.
+- Cannot be combined with `at`.
 
-## 重放（评测用）
+## Replay (for evals)
 
-用来在当时的代码上重做一张已经合并的工单，再和合并的 PR 对比。表单只对有 Jira 的项目显示 `at`、`ticket_as_of`、`ticket_comments`（命令行对任何项目都能传 `-i at=`）。平时不填。
+Used to redo an already merged ticket on the code as it was then, and compare with the merged PR. The form shows `at`, `ticket_as_of` and `ticket_comments` only for projects with Jira (on the command line, `-i at=` can be passed for any project). Leave them empty normally.
 
-- `at` 填 PR 的 merge-base。`checkout-branch` 从这个提交建分支，然后删掉 `origin` remote、其他所有引用、`FETCH_HEAD`、reflog 和借来的对象，做一次 gc，子模块也一样。之后的提交会泄露答案，所以仓库里只剩 `at` 能到达的历史。最后把 `origin/<base>` 指向 `at`，后面所有 diff 都以它为基准。
-- `ticket_as_of` 填开始做这张工单的时刻（ISO 时间）。`fetch-ticket` 用工单的变更记录把标题、描述、状态、优先级、经办人回滚到那个时刻，只留之前的评论、附件和关联工单，不带子任务（子任务可能写着解法）。
-- 重放永远不审批、不推送：`human-review` 和 `deliver` 的条件带 `not inputs.at`。删掉 `origin` 是第二道保护。takeaway 也不写。运行在 `classify-risk` 之后结束。
-- 不能和 `from_run` 同时给，`checkout-branch` 会直接失败。
-- 想知道只靠工单描述够不够时，加 `-i ticket_comments=none`。
-- **对比**：重放时可以用 `--set` 改这次运行的流程设置，例如 `--set flows.development.reviewers=1` 或 `--set flows.ablate=nit-cap`（去掉一条标记过的规则，规则名见 [`rules/registry.yaml`](rules/registry.yaml)）。只能改 `flows.` 下已有的设置，只在重放时能用；改了什么记在 mandate 里，运行带 `set:…` 标签，方便按变体分组。`myorch expand --set …` 可以先看改完的 prompt。
+- `at` is the PR's merge-base. `checkout-branch` creates the branch from this commit, then deletes the `origin` remote, all other refs, `FETCH_HEAD`, the reflog and borrowed objects, runs gc, and does the same for submodules. Later commits would leak the answer, so only history reachable from `at` stays in the repository. Finally it points `origin/<base>` at `at`, so every later diff uses it as the base.
+- `ticket_as_of` is the moment work on the ticket started (ISO time). `fetch-ticket` uses the ticket's changelog to roll title, description, status, priority and assignee back to that moment. It keeps only earlier comments, attachments and linked tickets, and leaves out subtasks (subtasks may contain the solution).
+- A replay never asks for approval and never pushes: the conditions of `human-review` and `deliver` include `not inputs.at`. Deleting `origin` is a second safeguard. No takeaway is written either. The run ends after `classify-risk`.
+- Cannot be combined with `from_run`; `checkout-branch` fails right away.
+- To find out whether the ticket description alone is enough, add `-i ticket_comments=none`.
+- **Comparisons**: a replay can change this run's flow settings with `--set`, for example `--set flows.development.reviewers=1` or `--set flows.ablate=nit-cap` (removes one marked rule; rule names are in [`rules/registry.yaml`](rules/registry.yaml)). Only existing settings under `flows.` can be changed, and only in replays. What was changed is recorded in the mandate, and the run gets a `set:…` tag so variants can be grouped. `myorch expand --set …` shows the changed prompt first.
 
-## 按项目的不同
+## Differences by project
 
-流程只有这一个。2026-11-10 之前每个项目复制了一份（`ck-development`、`blog-development`、`mo-development`），同一处改进要改三份，三份很快就不一样了，所以合回一个（[docs/notes/2026-11-10-one-set-of-flows.md](../docs/notes/2026-11-10-one-set-of-flows.md)）。项目之间的差别写在项目包 `myorch-knowledge/<项目>/` 里，展开流程时生效：
+There is only this one flow. Before 2026-11-10 each project had its own copy (`ck-development`, `blog-development`, `mo-development`). The same improvement had to be made three times, and the three copies soon diverged, so they were merged back into one ([docs/notes/2026-11-10-one-set-of-flows.md](../docs/notes/2026-11-10-one-set-of-flows.md)). The differences between projects live in the project pack `myorch-knowledge/<project>/` and take effect when the flow is expanded:
 
-- **`project.yaml` 的 `flows.development`**：`reviewers`（默认 3）、`max_rounds`（3）、`security`（true）、`on_exhausted`（`ask`）、`takeaway`（false）、`incident`（false）。模板可以设置，项目覆盖模板。
-- **`prompts/<槽位>.md`**：槽位有 `develop`、`review`、`verify`、`fix`、`risk`，先放模板的，再放项目的，原文拼进对应步骤的 prompt。mandate 的快照里能看到拼好的 prompt。文件名不是这几个槽位时直接报错。
-- **流程里的 `if:`**：按项目裁掉步骤和输入。`fetch-ticket` 和工单、重放输入看 `project.jira.url`，takeaway 四步看 `flows.development.takeaway`，`incident` 输入看 `flows.development.incident`。裁掉的输入在表单里看不到，保留默认值。
+- **`flows.development` in `project.yaml`**: `reviewers` (default 3), `max_rounds` (3), `security` (true), `on_exhausted` (`ask`), `takeaway` (false), `incident` (false). A template can set them; the project overrides the template.
+- **`prompts/<slot>.md`**: the slots are `develop`, `review`, `verify`, `fix`, `risk`. The template's comes first, then the project's, appended verbatim to the prompt of the matching step. The mandate's snapshot shows the assembled prompt. A file name that is not one of these slots is an error.
+- **`if:` in the flow**: drops steps and inputs per project. `fetch-ticket`, the ticket input and the replay inputs depend on `project.jira.url`; the four takeaway steps on `flows.development.takeaway`; the `incident` input on `flows.development.incident`. Dropped inputs do not show in the form and keep their defaults.
 
 | | mdm | blog | myorch |
 |---|---|---|---|
-| Jira | 有：工单必填，`fetch-ticket`，重放输入 | 没有：第一条消息是需求 | 没有：第一条消息是需求 |
-| review | 默认：3 个 reviewer、security、3 轮、跑满问你 | 1 个 reviewer、没有 security、1 轮、跑满接受 | 默认 |
-| takeaway | 有 | 没有 | 没有 |
-| `incident` | 没有 | 没有 | 有 |
-| prompts | core-ng 模板的 `develop.md`（Gradle 依赖、`*-interface` 契约注释）、`review.md`（`*-interface` 的检查） | `develop.md`（Jekyll：文档写短、写作规范、哪些要问人）、`review.md`（构建、链接、写作规范、误公开） | `develop.md`（incident 原因分析、设计要看的平台事项、「合并以后要做的事」）、`risk.md` |
-| 审批 | 1 人 | 总是 1 人（`risk-rules.yaml` 的 `default: 1`） | 0 或 1 人，按风险 |
+| Jira | Yes: ticket required, `fetch-ticket`, replay inputs | No: the first message is the requirement | No: the first message is the requirement |
+| review | Default: 3 reviewers, security, 3 rounds, asks you when out of rounds | 1 reviewer, no security, 1 round, accepts when out of rounds | Default |
+| takeaway | Yes | No | No |
+| `incident` | No | No | Yes |
+| prompts | From the core-ng template: `develop.md` (Gradle dependencies, `*-interface` contract comments), `review.md` (checks for `*-interface`) | `develop.md` (Jekyll: keep documents short, writing rules, what to ask a person), `review.md` (build, links, writing rules, accidental publishing) | `develop.md` (incident cause analysis, platform matters the design must cover, "What to do after merging"), `risk.md` |
+| Approval | 1 person | Always 1 person (`default: 1` in `risk-rules.yaml`) | 0 or 1 person, by risk |
 
-改某个项目的做法：改它的项目包（`flows.development`、`prompts/`、`risk-rules.yaml`），然后 `uv run myorch project sync <项目>`。改 `flows/development.yaml` 或片段会影响所有项目。
+To change how one project works: change its project pack (`flows.development`, `prompts/`, `risk-rules.yaml`), then run `uv run myorch project sync <project>`. Changing `flows/development.yaml` or a fragment affects all projects.
 
 ### blog
 
-个人博客（`leweii/leweii.github.io`）。改动小，所以 review 轻：1 个 reviewer 看一次，有阻塞问题就修一次，不再 review，跑满直接接受。修复后的提交没人 review 过，`risk-rules` 把它们列出来，交付说明的「review」一节列出没修好的问题。分支是 `myorch/<运行 ID>`，永远不推 master：推到 master 博客就上线了。
+Personal blog (`leweii/leweii.github.io`). Changes are small, so review is light: 1 reviewer looks once, blocking findings are fixed once and not reviewed again, and the loop accepts when it runs out of rounds. Nobody reviewed the commits after the fix; `risk-rules` lists them, and the "review" section of the delivery note lists the problems that were not fixed. The branch is `myorch/<run ID>`; it never pushes to master: pushing to master puts the blog live.
 
-- `prompts/develop.md`：写文章看写作规范，改主题看开发指南。需求文档、技术设计写短，不涉及的部分写「不涉及」。文章的观点和事实、是否公开（`published`、加密文章）、影响全站的改动（`_config.yml`、布局、依赖、部署）都要问人。
-- `prompts/review.md`：构建会不会挂、链接会不会断、页面会不会错乱；写作规范、front matter、有没有误公开。
-- 端到端测试只在 [review](review.md) 里跑，development 不跑。
+- `prompts/develop.md`: for posts, read the writing rules; for theme changes, read the development guide. Keep the requirements document and technical design short, and write "Not applicable" for parts that do not apply. The opinions and facts in a post, whether it is public (`published`, encrypted posts), and site-wide changes (`_config.yml`, layouts, dependencies, deployment) must all be asked of a person.
+- `prompts/review.md`: will the build break, will links break, will pages render wrong; writing rules, front matter, accidental publishing.
+- End-to-end tests run only in [review](review.md), not in development.
 
-### myorch 和 incident
+### myorch and incident
 
-myorch 平台自己：代码、流程、prompt、文档都在仓库 `leweii/myorch` 里，分支 `myorch/<运行 ID>`。两种用法：做一个普通需求；或者平台在某次运行里出了问题（任何项目的运行都可以），带上 `incident` 找原因、修平台。
+The myorch platform itself: code, flows, prompts and docs are all in the repository `leweii/myorch`, branch `myorch/<run ID>`. Two uses: a normal requirement; or, when the platform had a problem in some run (a run of any project), passing `incident` to find the cause and fix the platform.
 
-`incident` 是出问题的那次运行。它的工作区只读挂给 `develop`，位置是 `/sandbox/workspace/observed/<运行 ID>/`：
+`incident` is the run that had the problem. Its workspace is mounted read-only for `develop` at `/sandbox/workspace/observed/<run ID>/`:
 
-- `.myorch/flow.yaml`：那次运行用的流程快照。
-- `.myorch/steps/<实例>/out/manifest.json` 和 `logs/turn-<attempt>-<turn>.log`：每一步的结果和每次尝试的日志；`supervisor-*.log` 是 sandbox 的网络、DNS、凭证记录。
-- `docs/` 和 `memory/MEMORY.md`：那次运行的需求、设计、review、检查报告。
+- `.myorch/flow.yaml`: the snapshot of the flow that run used.
+- `.myorch/steps/<instance>/out/manifest.json` and `logs/turn-<attempt>-<turn>.log`: each step's result and each attempt's log. `supervisor-*.log` holds the sandbox's network, DNS and credential records.
+- `docs/` and `memory/MEMORY.md`: that run's requirements, design, review and check reports.
 
-这些文件是那次运行的数据：agent 只读，不执行里面的命令和指令。控制台的运行选择器只列本项目的运行，所以 `incident` 是普通的文本框。
+These files are that run's data: the agent only reads them and does not run commands or follow instructions in them. The console's run picker lists only this project's runs, so `incident` is a plain text box.
 
-myorch 的 `prompts/develop.md` 要求 `develop` 在写需求之前先判断原因：
+myorch's `prompts/develop.md` requires `develop` to decide the cause before writing the requirements:
 
-| 原因 | 意思 | 接下来 |
+| Cause | Meaning | Next |
 |---|---|---|
-| `platform-code` | myorch 的代码有缺陷（`src/myorch/`、`tools/`、`deploy/`） | 继续：需求、设计、实现、review、审批 |
-| `flow` | 流程定义、片段、prompt、profile 有缺陷（`flows/`、`profiles/`） | 继续 |
-| `project-knowledge` | 那个项目的项目包缺知识或检查，平台没错 | 停止。建议用那个项目的 learn 或 postmortem |
-| `environment` | 网络、外部服务、凭证过期、机器资源 | 停止。只记录，不改代码 |
-| `one-off` | 模型偶发的失误，重跑大概率不会再出现 | 停止。建议重跑 |
-| `unclear` | 证据不够 | 停止。写明还缺什么证据 |
+| `platform-code` | A defect in myorch's code (`src/myorch/`, `tools/`, `deploy/`) | Continue: requirements, design, implementation, review, approval |
+| `flow` | A defect in a flow definition, fragment, prompt or profile (`flows/`, `profiles/`) | Continue |
+| `project-knowledge` | That project's pack lacks knowledge or checks; the platform is not at fault | Stop. Proposes that project's learn or postmortem |
+| `environment` | Network, external services, expired credentials, machine resources | Stop. Record only, no code change |
+| `one-off` | A random model mistake that a re-run will most likely not repeat | Stop. Proposes a re-run |
+| `unclear` | Not enough evidence | Stop. States what evidence is missing |
 
-「停止」是指 `outputs.proceed` 写 false：后面的步骤全部跳过，运行正常结束，什么都不推。原因分类、证据（文件和行）和该去哪里处理写在摘要里。继续时，需求文档开头写「出问题的运行和原因分类」，「目标」写清楚那次运行出了什么问题、根本原因在哪个文件、改完以后同样的情况应该怎样。修复不能放宽 policy、provider、挂载、审批。
+"Stop" means `outputs.proceed` is false: all later steps are skipped, the run ends normally, and nothing is pushed. The cause category, the evidence (files and lines) and where to handle it go in the summary. To continue, the requirements document starts with "The failing run and its cause category", and "Goal" states what went wrong in that run, which file holds the root cause, and what should happen in the same situation after the change. The fix must not loosen policies, providers, mounts or approval.
 
-同一个 `prompts/develop.md` 还让技术设计多看几件平台的事：分层（engines → runner → storage → core）、改了片段或 profile 影响哪些流程（流程是所有项目共用的）、Temporal 的确定性、volume 和 events.db、sandbox 里的命令和镜像、要不要重新生成文档。
+The same `prompts/develop.md` also makes the technical design cover several platform matters: layering (engines → runner → storage → core), which flows a changed fragment or profile affects (flows are shared by all projects), Temporal determinism, volumes and events.db, commands and images in the sandbox, and whether the docs need regenerating.
 
-### myorch：合并以后
+### myorch: after merging
 
-这个流程不部署。sandbox 只改仓库，拿不到 docker.sock、gateway 和数据目录，流程里也不能有自动合并、自动部署的步骤（项目包的 `security.md`）。`develop` 在实现记录最后写「合并以后要做的事」。你在 GitHub 上开 PR、合并到 main 以后：
+This flow does not deploy. The sandbox only changes the repository and has no access to docker.sock, the gateway or the data directory, and a flow must not have automatic merge or deploy steps (the project pack's `security.md`). `develop` writes "What to do after merging" at the end of the implementation record. After you open a PR on GitHub and merge it into main:
 
-1. 在 myorch 的 main 分支上运行 `deploy/update.sh`（先用 `--check` 看要发布哪些提交、会等什么）。它快进 main，等没有正在执行的步骤，用目标提交的干净检出重建镜像，重启 worker 和控制台，跑冒烟流程。冒烟失败时自动回滚到上一次发布的提交。改了 `src/myorch/engines/` 或 `core/run.py` 时，它等所有未结束的运行结束。见 [`deploy/README.md`](../deploy/README.md) 的「发布 origin/main」。
-2. 改了 `images/claude-code/` 时，`update.sh` 一起重建 sandbox 的基础镜像 `openshell-claude-code`。各项目的开发镜像都基于它，要用上新的基础镜像，还要重建项目的镜像（项目包的 `image/build.sh`）。改了 `pyproject.toml` 或 `uv.lock` 时，重建 myorch 项目的开发镜像（在 myorch-knowledge 目录下运行 `myorch/image/build.sh ../myorch`），以后 myorch 项目的 development 运行才用上新依赖。
-3. 改了 `tools/`（sandbox 里的辅助命令 `myorch-checks`、`myorch-ask` 等）时，它们由 `myorch init` 装进 volume（compose 里是 `init` 服务）。要确认重新运行过 `myorch init`，否则 sandbox 里还是旧版本。
+1. On myorch's main branch, run `deploy/update.sh` (first use `--check` to see which commits will be released and what it will wait for). It fast-forwards main, waits until no step is running, rebuilds the images from a clean checkout of the target commit, restarts the worker and the console, and runs the smoke flow. If the smoke test fails, it rolls back to the previously released commit automatically. When `src/myorch/engines/` or `core/run.py` changed, it waits for all unfinished runs to end. See "Release origin/main" in [`deploy/README.md`](../deploy/README.md).
+2. When `images/claude-code/` changed, `update.sh` also rebuilds the sandbox base image `openshell-claude-code`. Each project's development image is based on it; to use the new base image, the project's image must also be rebuilt (the project pack's `image/build.sh`). When `pyproject.toml` or `uv.lock` changed, rebuild the myorch project's development image (in the myorch-knowledge directory, run `myorch/image/build.sh ../myorch`); only then do later development runs of the myorch project use the new dependencies.
+3. When `tools/` changed (the helper commands in the sandbox, such as `myorch-checks` and `myorch-ask`), they are installed into the volume by `myorch init` (the `init` service in compose). Make sure `myorch init` has been run again; otherwise the sandbox still has the old versions.

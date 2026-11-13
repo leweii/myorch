@@ -6,7 +6,7 @@ An input is "string" or a spec:
 
     type      string | text | select | ticket | run | message | hidden
     label     the form label;  hint: the placeholder
-    more      the console folds it under 更多选项 (rarely used inputs); a required one stays in sight
+    more      the console folds it under More options (rarely used inputs); a required one stays in sight
     required  the run does not start without it
     default   goes into the flow's `defaults`
     options   select: values, or {value, label}
@@ -35,13 +35,13 @@ from typing import Any
 # What each role is called in the console, what it does, and its place in the task list. A flow
 # file may override label and hint (`label:`, `hint:` at its top level).
 ROLE_INFO: dict[str, dict[str, str]] = {
-    "development": {"label": "开发", "hint": "从需求到 PR：需求分析、技术设计、实现、多人 review、风险审批。审批通过后才推送分支、创建 PR。"},
-    "review": {"label": "评审 PR", "hint": "评审一个已有的 PR。结论只在控制台显示。"},
-    "postmortem": {"label": "复盘", "hint": "复盘：问题已经进了代码。找出引入它的改动和本该拦住的层，提出知识库修改，并生成评测案例。不改项目代码。"},
-    "sweep": {"label": "找 bug", "hint": "找现有代码里的 bug，每次看一批文件，只出日报。"},
-    "learn": {"label": "学习", "hint": "从历史运行里沉淀知识：改进 guide/、记录人做过的决定、加确定性检查。"},
-    "eval": {"label": "评测", "hint": "重放一个评测案例，给 reviewer 打分。"},
-    "onboard": {"label": "接入项目", "hint": "接入新项目：分析仓库，提出项目包的修改。"},
+    "development": {"label": "Development", "hint": "From requirement to PR: requirement analysis, technical design, implementation, review by several reviewers, risk approval. The branch is pushed and the PR opened only after approval."},
+    "review": {"label": "Review PR", "hint": "Review an existing PR. The verdict is shown only in the console."},
+    "postmortem": {"label": "Postmortem", "hint": "Postmortem: a problem already got into the code. Find the change that introduced it and the layer that should have caught it, propose knowledge changes, and generate an eval case. Does not change project code."},
+    "sweep": {"label": "Find bugs", "hint": "Find bugs in existing code, a batch of files at a time; produces only a daily report."},
+    "learn": {"label": "Learn", "hint": "Distil knowledge from past runs: improve guide/, record decisions people made, add deterministic checks."},
+    "eval": {"label": "Eval", "hint": "Replay an eval case and score the reviewers."},
+    "onboard": {"label": "Onboard project", "hint": "Onboard a new project: analyse the repository and propose changes to the project pack."},
 }
 DEFAULT_ROLE = "development"  # the task the console selects first
 
@@ -101,10 +101,10 @@ def check(declared: dict[str, Any], inputs: dict[str, str], require_one_of: list
     label = lambda n: s.get(n, {}).get("label") or n  # noqa: E731
     missing = [label(n) for n, x in s.items() if x.get("required") and not (inputs.get(n) or "").strip()]
     if missing:
-        raise ValueError(f"请先填：{'、'.join(missing)}")
+        raise ValueError(f"Fill in first: {', '.join(missing)}")
     for group in require_one_of or []:
         if not any((inputs.get(n) or "").strip() for n in group):
-            raise ValueError(f"{' 或 '.join(label(n) for n in group)}，至少填一项")
+            raise ValueError(f"Fill in at least one of: {' or '.join(label(n) for n in group)}")
 
 
 # ---- labels ------------------------------------------------------------------------------------

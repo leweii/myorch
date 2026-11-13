@@ -85,5 +85,5 @@ def test_ablated_rule_is_gone_from_the_expanded_flow():
         pytest.skip(f"needs a full project: {e}")
     project["flows"]["ablate"] = ["nit-cap", "entry-points"]
     cut = read_flow_file(flow, {}, project)
-    assert "[[rule" not in full and "Nit 最多保留 5 条" in full and "列全所有入口" in full
-    assert "Nit 最多保留 5 条" not in cut and "列全所有入口" not in cut and "漏掉的入口" not in cut
+    assert "[[rule" not in full and "Keep at most 5 Nits" in full and "list every entry point" in full
+    assert "Keep at most 5 Nits" not in cut and "list every entry point" not in cut and "Missed entry points" not in cut

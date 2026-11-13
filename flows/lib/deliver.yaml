@@ -4,36 +4,43 @@
 #     id: deliver
 #     with: {approved: "{{approvals.human-review.subject}}"}
 #
-# The workflow only does git: it pushes exactly the approved commit (refuses if the branch moved
-# after approval) and writes docs/delivery.md. It calls no platform API. The run_finished event
-# carries outputs.delivery so channels can say which branch was pushed. myorch opens no pull
-# request: that is for people to do.
+# It pushes exactly the approved commit (refuses if the branch moved after approval) and writes
+# docs/delivery.md. The run_finished event carries outputs.delivery so channels can say which branch
+# was pushed. With open_pr (the project's flows.development.open_pr) it also opens a pull request
+# on the project's repository with gh (title: delivery.title; body: docs/delivery.md, then the
+# repository's PR template, then a hidden <!-- myorch-pr run=... --> marker). If the branch already
+# has an open pull request (a run continued with from_run), that one is reused. Either way the PR's
+# link is output as pr_url: the console, Slack and the run list show it, and it makes a pr_opened
+# event. Without open_pr it calls no platform API and people open the PR themselves.
 # Interface: docs/notes/2026-11-02-delivery-interface.md
 #
 # Docs: https://leweii.github.io/myorch/workflows/#fragments--deliver
 fragment: deliver
-description: 审批通过后推送分支，写交付说明（不调用平台 API）
+description: After approval, pushes the branch, writes the delivery notes and, if the project asks, opens the pull request
 
 params:
   approved: {type: string, required: true}   # the approved commit
+  open_pr:  {type: bool, default: false}      # also open (or reuse) the pull request and output pr_url
 
 item:
   harness: script
   profile: dev-git
   limits: { timeout: 10m, retries: 1 }
   outputs:
-    delivery: "推送了什么（渠道用来告诉人）：branch、base、commit、title、ticket、repo、description、pr_template"
+    delivery: "What was pushed (channels use it to tell people): branch, base, commit, title, ticket, repo, description, pr_template"
+    pr_url: "The pull request's link, when open_pr is set (empty otherwise)"
   prompt: |
     set -euo pipefail
     if [ "$MYORCH_BRANCH" = "$MYORCH_PROJECT_BASE" ]; then
-      echo "当前分支是 base 分支 ${MYORCH_PROJECT_BASE}，不推送。" >&2
+      echo "The current branch is the base branch ${MYORCH_PROJECT_BASE}. Not pushing." >&2
       exit 3
     fi
     export DELIVER_APPROVED="{{params.approved}}"
+    export DELIVER_OPEN_PR="{{params.open_pr}}"
     head=$(git rev-parse HEAD)
     # Push exactly what was approved: refuse if the branch moved after the approval gate.
     if [ -z "$DELIVER_APPROVED" ] || [ "$head" != "$DELIVER_APPROVED" ]; then
-      echo "HEAD 在审批之后变了：批准的是 ${DELIVER_APPROVED:0:12}，现在是 ${head:0:12}。不推送，需要重新运行并重新审批。" >&2
+      echo "HEAD changed after approval: ${DELIVER_APPROVED:0:12} was approved, HEAD is now ${head:0:12}. Not pushing. Run again and get a new approval." >&2
       exit 3
     fi
     basic=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
@@ -76,26 +83,26 @@ item:
         or load(".myorch/steps/analyze-requirement/out/manifest.json", {}).get("outputs", {}).get("title") \
         or os.environ.get("MYORCH_INPUT_TASK", "")[:60]
 
-    changed = section(read("docs/implementation.md"), "改动") or "（实现记录里没有「改动」部分）"
+    changed = section(read("docs/implementation.md"), "Changes") or "(The implementation record has no \"Changes\" section.)"
 
     n, ci_path = last_round("docs/ci/round-*/result.json")
     ci = load(os.path.relpath(ci_path, ws), {}) if ci_path else {}
     if not ci_path:
-        checks = "没有检查结果"
+        checks = "no check results"
     elif ci.get("passed"):
-        checks = f"第 {n} 轮通过"
+        checks = f"passed in round {n}"
     else:
-        checks = f"第 {n} 轮未通过：" + "、".join(map(str, ci.get("failed", [])))
+        checks = f"failed in round {n}: " + ", ".join(map(str, ci.get("failed", [])))
 
     n, summary_path = last_round("docs/review/round-*/summary.md")
     summary = open(summary_path, encoding="utf-8").read() if summary_path else ""
     table = []
-    for line in summary.splitlines()[next((i for i, l in enumerate(summary.splitlines()) if "验收标准" in l), len(summary.splitlines())):]:
+    for line in summary.splitlines()[next((i for i, l in enumerate(summary.splitlines()) if "Acceptance criteria" in l), len(summary.splitlines())):]:
         if line.lstrip().startswith("|"):
             table.append(line)
         elif table:
             break
-    acceptance = "\n".join(table) or "（review 总结里没有验收标准表）"
+    acceptance = "\n".join(table) or "(The review summary has no acceptance criteria table.)"
 
     rounds = sorted(glob.glob(os.path.join(ws, "docs/review/round-*/verified.json")),
                     key=lambda p: int(re.search(r"round-(\d+)", p).group(1)))
@@ -105,59 +112,59 @@ item:
     blocking = sum(1 for fs in every for f in fs if important(f) and f.get("status", "new") == "new")
     unresolved = [f for f in last if important(f) and f.get("status", "new") in ("new", "open")]
     nits = sum(1 for f in last if f.get("severity") == "Nit")
-    review = f"{len(rounds)} 轮，阻塞问题 {blocking} 条，没解决的 {len(unresolved)} 条，Nit {nits} 条"
+    review = f"{len(rounds)} rounds, {blocking} blocking findings, {len(unresolved)} unresolved, {nits} Nits"
     if unresolved:
-        review += "\n" + "\n".join(f"- {f.get('title', '')}（{f.get('file', '')}:{f.get('line', '')}）" for f in unresolved)
+        review += "\n" + "\n".join(f"- {f.get('title', '')} ({f.get('file', '')}:{f.get('line', '')})" for f in unresolved)
 
     # Commits after the last review round (risk-rules lists them): nobody reviewed these.
     unreviewed = load(".myorch/steps/risk-rules/out/manifest.json", {}).get("outputs", {}).get("unreviewed_commits") or []
     if unreviewed:
-        review += f"\nreview 之后的提交 {len(unreviewed)} 个（没有经过 review）：" + "；".join(c.get("subject", "") for c in unreviewed)
+        review += f"\n{len(unreviewed)} commits after the review (not reviewed): " + "; ".join(c.get("subject", "") for c in unreviewed)
 
     # End-to-end block: the last round's smoke and acceptance results.
     e2e_rounds = sorted({int(m.group(1)) for p in glob.glob(os.path.join(ws, "docs/e2e/round-*/"))
                          if (m := re.search(r"round-(\d+)", p))})
     if not e2e_rounds:
-        e2e = "项目没有端到端测试"
+        e2e = "the project has no end-to-end tests"
     else:
         n, parts = e2e_rounds[-1], []
-        for part, label in (("smoke", "冒烟用例"), ("acceptance", "验收用例")):
+        for part, label in (("smoke", "smoke tests"), ("acceptance", "acceptance tests")):
             if not os.path.isdir(os.path.join(ws, f"docs/e2e/round-{n}/{part}")):
                 continue
             r = load(f"docs/e2e/round-{n}/{part}/result.json", None)
             if r is None:
-                parts.append(f"{label}没有结果")
+                parts.append(f"{label}: no result")
                 continue
             failed, env = r.get("failed") or [], r.get("environment") or []
-            text = f"{label}通过" if r.get("passed") else (f"{label}失败：" + "、".join(map(str, failed)) if failed else f"{label}没有通过")
+            text = f"{label} passed" if r.get("passed") else (f"{label} failed: " + ", ".join(map(str, failed)) if failed else f"{label} did not pass")
             if env:
-                text += "（测试环境的问题，没有测成：" + "、".join(map(str, env)) + "）"
+                text += " (test environment problem, not tested: " + ", ".join(map(str, env)) + ")"
             parts.append(text)
-        e2e = f"第 {n} 轮，" + ("，".join(parts) or "没有结果")
+        e2e = f"round {n}, " + (", ".join(parts) or "no result")
 
     risk_md = read("docs/risk.md")
-    risk = "\n\n".join(s for s in (section(risk_md, "结论"), section(risk_md, "请审批人重点检查")) if s) or "（没有风险说明）"
+    risk = "\n\n".join(s for s in (section(risk_md, "Verdict"), section(risk_md, "For the approvers to check")) if s) or "(no risk note)"
 
-    head_lines = f"# {title}\n" + (f"工单：{ticket}\n" if ticket else "")
+    head_lines = f"# {title}\n" + (f"Ticket: {ticket}\n" if ticket else "")
     description = f"""{head_lines}
-    ## 改了什么
+    ## What changed
     {changed}
 
-    ## 怎么验证的
-    - 检查：{checks}
-    - 端到端：{e2e}
-    - 验收标准：
+    ## How it was verified
+    - Checks: {checks}
+    - End-to-end: {e2e}
+    - Acceptance criteria:
 
     {acceptance}
 
     ## review
     {review}
 
-    ## 风险
+    ## Risk
     {risk}
 
-    ## 怎么撤回
-    合并前：放弃分支 {branch}。合并后：revert 这次合并带进来的提交（{base}..{commit[:12]}）。
+    ## How to undo
+    Before merging: drop the branch {branch}. After merging: revert the commits this merge brought in ({base}..{commit[:12]}).
     """
     description = description.strip() + "\n"
     os.makedirs(os.path.join(ws, "docs"), exist_ok=True)
@@ -168,9 +175,34 @@ item:
 
     delivery = {"branch": branch, "base": base, "commit": commit, "title": title, "ticket": ticket,
                 "repo": repo, "description": description, "pr_template": pr_template}
-    json.dump({"status": "ok", "summary": f"已推送 {branch}（{commit[:12]}），交付说明在 docs/delivery.md",
-               "outputs": {"delivery": delivery}},
+    summary = f"Pushed {branch} ({commit[:12]}); delivery notes in docs/delivery.md"
+
+    pr_url = ""
+    if os.environ.get("DELIVER_OPEN_PR", "").strip().lower() in ("true", "1", "yes"):
+        def gh(*args, body=None):
+            r = subprocess.run(["gh", "api", *args] + (["--input", "-"] if body is not None else []),
+                               input=json.dumps(body) if body is not None else None,
+                               capture_output=True, text=True)
+            if r.returncode != 0:
+                raise SystemExit(f"Pushed {branch}, but opening the pull request failed (gh api {args[0]}): "
+                                 f"{(r.stderr or r.stdout).strip()[:800]}")
+            return json.loads(r.stdout or "null")
+
+        owner = repo.split("/")[0]
+        existing = gh(f"repos/{repo}/pulls?state=open&head={owner}:{branch}&per_page=1") or []
+        if existing:
+            pr_url = existing[0]["html_url"]
+            summary = f"Pushed {branch} ({commit[:12]}); updated pull request {pr_url}"
+        else:
+            run_id = os.environ.get("MYORCH_RUN_ID", "")
+            body = description + (f"\n{pr_template}\n" if pr_template else "") + f"\n<!-- myorch-pr run={run_id} -->\n"
+            pr = gh(f"repos/{repo}/pulls", "--method", "POST",
+                    body={"title": title, "head": branch, "base": base, "body": body})
+            pr_url = pr["html_url"]
+            summary = f"Pushed {branch} ({commit[:12]}); opened pull request {pr_url}"
+
+    json.dump({"status": "ok", "summary": summary, "outputs": {"delivery": delivery, "pr_url": pr_url}},
               open(os.path.join(os.environ.get("MYORCH_OUT_DIR", "/sandbox/out"), "manifest.json"), "w"),
               ensure_ascii=False)
-    print(f"pushed {branch} at {commit}")
+    print(f"pushed {branch} at {commit}" + (f"; pull request {pr_url}" if pr_url else ""))
     PY

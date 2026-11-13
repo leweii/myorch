@@ -1,10 +1,10 @@
 # Slack app for myorch (channels/slack.py). Create it at https://api.slack.com/apps → Create New App →
-# From a manifest → pick the workspace → paste this file. Steps: deploy/README.md「Slack」.
+# From a manifest → pick the workspace → paste this file. Steps: deploy/README.md, "Slack".
 #
 # Socket Mode: myorch connects out to Slack, so no request URL and no open port are needed.
 display_information:
   name: myorch
-  description: myorch 的 Slack 入口：发起运行、回答提问、审批
+  description: "myorch in Slack: start runs, answer questions, approve"
 features:
   app_home:
     home_tab_enabled: false
@@ -15,7 +15,7 @@ features:
     always_online: true
   slash_commands:
     - command: /myorch
-      description: 发起一个 myorch 运行
+      description: Start a myorch run
       should_escape: false
 oauth_config:
   scopes:

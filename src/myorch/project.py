@@ -107,6 +107,9 @@ class Development(BaseModel):
     takeaway: bool = False
     # Offer the `incident` input: a run where something went wrong, mounted read-only for develop.
     incident: bool = False
+    # After the approval, deliver also opens a pull request (or reuses the branch's open one) with the
+    # project's GitHub provider and outputs pr_url, which the console, Slack and the run list show.
+    open_pr: bool = False
 
 
 class Flows(BaseModel):
@@ -176,7 +179,7 @@ class Project(BaseModel):
         """What flows and agents may see: {{project.x}} values and the run context."""
         d = self.model_dump(mode="json", by_alias=True)
         d["identity"]["trigger"] = self.identity.trigger_word
-        d["repo_docs_list"] = "\n".join(f"- repo/{p}" for p in self.repo_docs) or "（无）"
+        d["repo_docs_list"] = "\n".join(f"- repo/{p}" for p in self.repo_docs) or "(none)"
         d["submodules_list"] = " ".join(self.submodules)
         return d
 

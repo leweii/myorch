@@ -158,7 +158,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         if watchdog is not None:  # steps that are alive but not getting anywhere (myorch/watchdog.py)
             live = {r["run_id"]: r for r in data["runs"] if r["status"] == "RUNNING"}
             data["inbox"] += [{"kind": "watchdog", "run_id": a["run_id"], "step": a["instance"], "alert": a["id"],
-                               "text": f"{a['label']}：{a['reason']}", "project": live[a["run_id"]].get("project"),
+                               "text": f"{a['label']}: {a['reason']}", "project": live[a["run_id"]].get("project"),
                                "flow": live[a["run_id"]].get("flow")} for a in watchdog.alerts() if a["run_id"] in live]
         return JSONResponse(data)
 
@@ -170,7 +170,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
             return err(str(e))
         if not d:
             why = svc.state_errors.pop(rid, "")
-            return err(f"读不到这个运行的状态：{why}" if why else "运行不存在，或者还没开始。", 404)
+            return err(f"Cannot read the state of this run: {why}" if why else "The run does not exist or has not started yet.", 404)
         from myorch.core.flow import role_of
 
         d["role"] = role_of(d.get("flow") or "", d.get("role"))  # what the flow does: the page decides by role
@@ -192,7 +192,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         try:
             if action == "reply":
                 if not text.strip():
-                    return err("回复不能为空。")
+                    return err("The reply cannot be empty.")
                 await svc.reply(rid, step, text)
             elif action == "approve":
                 await svc.approve(rid, step, text)
@@ -205,13 +205,13 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
                 return JSONResponse({"ok": True, "reset": await svc.resume(rid, steps or None)})
             elif action == "changes":
                 if not text.strip():
-                    return err("请写修改意见。")
+                    return err("Write your change requests.")
                 await svc.request_changes(rid, step, text)
             elif action == "dismiss":  # a watchdog alert, seen by the user
                 if watchdog is None or not watchdog.dismiss(text, user):
-                    return err("没有这条提醒，或者已经处理过。", 404)
+                    return err("No such alert, or it was already handled.", 404)
             else:
-                return err("未知操作。", 404)
+                return err("Unknown action.", 404)
         except ValueError as e:  # the step is not waiting for this, bad ids
             return err(str(e), 409)
         return JSONResponse({"ok": True})
@@ -285,7 +285,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         except (ValueError, RuntimeError) as e:  # RuntimeError: the storage helper (Docker) failed
             return err(str(e))
         if text is None:
-            return err(f"没有这个文件：{path}。", 404)
+            return err(f"No such file: {path}.", 404)
         return JSONResponse({"path": path, "text": text, "html": run_md(text, rid, path) if path.endswith(".md") else None})
 
     async def read_raw(req: Request) -> Response:
@@ -295,7 +295,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         except (ValueError, RuntimeError) as e:
             return err(str(e))
         if got is None:
-            return err(f"没有这个文件：{path}。", 404)
+            return err(f"No such file: {path}.", 404)
         data, kind = got
         # An image only, never a document: no script, and a sandbox even when opened on its own.
         return Response(data, media_type=kind, headers={"content-security-policy": "sandbox", "cache-control": "no-store"})

@@ -49,11 +49,11 @@ def test_the_previous_ticket_is_copied(tmp_path):
 
 
 @pytest.mark.parametrize("events,project,message", [
-    ([], "mdm", "没有这个运行"),
-    ([STARTED], "mdm", "还没有结束"),
-    ([STARTED, ("run_finished", {}), ("run_resumed", {})], "mdm", "还没有结束"),
-    ([STARTED, ("run_finished", {})], "blog", "属于项目 mdm"),
-    ([("run_started", {"flow": "review", "project": "mdm"}), ("run_finished", {})], "mdm", "不是 development 运行"),
+    ([], "mdm", "No such run"),
+    ([STARTED], "mdm", "has not finished yet"),
+    ([STARTED, ("run_finished", {}), ("run_resumed", {})], "mdm", "has not finished yet"),
+    ([STARTED, ("run_finished", {})], "blog", "belongs to project mdm"),
+    ([("run_started", {"flow": "review", "project": "mdm"}), ("run_finished", {})], "mdm", "is not a development run"),
 ])
 def test_only_a_finished_development_run_of_the_project_can_be_continued(tmp_path, events, project, message):
     log = log_with(tmp_path, *events) if events else EventLog(tmp_path / "events.db")

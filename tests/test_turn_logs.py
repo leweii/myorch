@@ -107,5 +107,5 @@ async def test_the_log_tool_reads_new_and_old_names(tmp_path):
     old = ["turn-1.log", "turn-2.log", "turn-2.jsonl", "supervisor-1-2.log"]
     assert await log_tool(tmp_path, old) == "<turn-2.log>"
     assert await log_tool(tmp_path, old, turn=1) == "<turn-1.log>"
-    with pytest.raises(ValueError, match="没有 turn-"):
+    with pytest.raises(ValueError, match="No turn-"):
         await log_tool(tmp_path, old, turn=3)

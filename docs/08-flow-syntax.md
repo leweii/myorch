@@ -1,234 +1,234 @@
-# 8. 写流程：YAML 语法
+# 8. Writing flows: YAML syntax
 
-这一章讲流程文件的写法。每个流程有哪些步骤，见 [流程手册](workflows/README.md)。设计理由见 ARCHITECTURE.md §3。
+This chapter covers how to write flow files. For the steps of each flow, see the [Flow manual](workflows/README.md). For the design reasons, see ARCHITECTURE.md §3.
 
-改完流程后，先用 `uv run myorch expand <flow> --project <p>` 看展开结果，再用小需求试跑。字段的最终依据是 `src/myorch/core/flow.py` 里的 pydantic 模型。
+After changing a flow, first look at the expanded result with `uv run myorch expand <flow> --project <p>`, then try it with a small requirement. The final authority for the fields is the pydantic models in `src/myorch/core/flow.py`.
 
-## 流程文件怎么变成一次运行
+## How a flow file becomes a run
 
 <!-- diagram: flow-expansion.html -->
-图的文件：[diagrams/flow-expansion.html](diagrams/flow-expansion.html)。
+Diagram file: [diagrams/flow-expansion.html](diagrams/flow-expansion.html).
 
-发起运行时（命令行、控制台、Slack、定时任务都一样），`flowfile.read_flow_file` 按顺序处理流程文件：
+When a run starts (the same for the CLI, the console, Slack and scheduled jobs), `flowfile.read_flow_file` processes the flow file in this order:
 
-1. **presets**：按 `presets.by` 指定的输入选一组值，替换 `steps` 里的 `{{preset.x}}`，然后删掉 `presets`。
-2. **按项目裁剪**（`core/fragment.py` 的 `apply_project_if`）：flow 自己的步骤和 `use:` 条目上的 `if:` 为假时去掉，输入上的 `if:` 为假时改成 `hidden`，`required` 表达式求值，`with:` 里的 `{{project.x}}` 填好。见「按项目裁剪：`if:`」。
-3. **片段**：把每个 `use:` 条目换成片段里的步骤或循环，替换 `{{params.x}}`，按片段里的 `if:`（只看 `params`）去掉步骤。
-4. **项目**：用 `--project` 的配置（`project.yaml` 合并模板后的结果，加上 `prompts/`）替换整个文件里的 `{{project.x}}`。流程用了 `{{project.x}}` 或流程层的 `if:` 却没给项目时，报错。
-5. **校验**：按 `Flow` 模型校验字段、ID、依赖和表达式。有错就不提交。
+1. **presets**: picks a set of values by the input named in `presets.by`, replaces `{{preset.x}}` in `steps`, then removes `presets`.
+2. **Per-project trimming** (`apply_project_if` in `core/fragment.py`): the flow's own steps and `use:` entries whose `if:` is false are removed, inputs whose `if:` is false become `hidden`, `required` expressions are evaluated, and `{{project.x}}` in `with:` is filled in. See "Per-project trimming: `if:`".
+3. **Fragments**: each `use:` entry is replaced by the steps or loop in the fragment, `{{params.x}}` is replaced, and steps are removed according to the `if:` in the fragment (which only looks at `params`).
+4. **Project**: `{{project.x}}` in the whole file is replaced with the configuration of `--project` (`project.yaml` merged with its template, plus `prompts/`). If the flow uses `{{project.x}}` or flow-level `if:` but no project is given, this is an error.
+5. **Validation**: fields, IDs, dependencies and expressions are validated against the `Flow` model. If there is an error, nothing is submitted.
 
-提交给 Temporal 的是展开后的 YAML。其他 `{{...}}`（`inputs`、`steps`、`run`、`loop` 等）留到运行时替换，见「模板变量」。
+What is submitted to Temporal is the expanded YAML. Other `{{...}}` (`inputs`, `steps`, `run`, `loop`, etc.) are replaced at run time. See "Template variables".
 
-## 顶层结构
+## Top-level structure
 
 ```yaml
-flow: development                 # 流程名，也是 run_id 的前缀
+flow: development                 # flow name, also the prefix of run_id
 role: development                 # development / review / postmortem / learn / sweep / eval / onboard
-projects: [mdm]                   # 可选：能用它的项目。不写表示所有项目（现有的流程都不写）。用错项目时运行不会启动
-label: 开发                        # 可选：控制台任务按钮上的名字。不写时用角色的名字
-hint: 从需求到 PR……               # 可选：控制台任务下面的一行说明。不写时用角色的说明
-inputs: {task: string, ticket: string}   # 简写：名字 → string。也可以写完整形式，见「输入」
-require_one_of: [[commit, bad]]   # 可选：每组输入至少填一项
-defaults: {ticket: ""}            # 输入的默认值（字符串）
-image: "{{project.image}}"        # 默认镜像
-model: claude-sonnet-5-5          # agent 步骤的默认模型
-on_failed: ask                    # 步骤的默认失败处理：fail（默认）| ask。skip 只能写在步骤上
-presets: {...}                    # 可选：按某个输入选一组参数，见「presets」
-steps: [...]                      # 步骤和循环
+projects: [mdm]                   # optional: the projects that can use it. Leave out for all projects (none of the current flows set it). With the wrong project the run does not start
+label: Development                # optional: the name on the console's task button. Defaults to the role's name
+hint: From requirement to PR...   # optional: one line of description under the task in the console. Defaults to the role's description
+inputs: {task: string, ticket: string}   # short form: name → string. The full form is also allowed, see "Inputs"
+require_one_of: [[commit, bad]]   # optional: at least one input in each group must be filled
+defaults: {ticket: ""}            # default values of inputs (strings)
+image: "{{project.image}}"        # default image
+model: claude-sonnet-5-5          # default model for agent steps
+on_failed: ask                    # default failure handling for steps: fail (default) | ask. skip can only be set on a step
+presets: {...}                    # optional: pick a set of parameters by an input, see "presets"
+steps: [...]                      # steps and loops
 ```
 
-- 一个角色一个流程，所有项目共用。项目之间的差异写在项目包里（`flows:` 设置、`prompts/`），流程用 `{{project.x}}` 和 `if:` 读它们，见「按项目裁剪：`if:`」和 [7. 项目包](07-projects.md#共用流程的项目设置flows)。
-- myorch 按 `role` 认流程，不按名字。没写 `role` 时，名字本身是角色名（`development`），或者去掉前缀后是角色名（2026-11-10 之前的 `ck-development` 这类运行），也算这个角色。
-- 找某个角色的流程时（例如 eval 回放），先找 `projects` 里列了这个项目的，没有再找没写 `projects` 的。
-- 角色的默认名字和说明在 `src/myorch/core/inputs.py` 的 `ROLE_INFO`。
+- One flow per role, shared by all projects. The differences between projects are in the project pack (`flows:` settings, `prompts/`). Flows read them with `{{project.x}}` and `if:`. See "Per-project trimming: `if:`" and [7. Project packs](07-projects.md#project-settings-for-the-shared-flows-flows).
+- myorch identifies flows by `role`, not by name. Without `role`, a flow also counts as a role if its name is the role name (`development`), or is the role name after removing a prefix (runs like `ck-development` before 2026-11-10).
+- When looking up the flow for a role (e.g. for eval replays), myorch first looks for a flow whose `projects` lists the project, and then for one without `projects`.
+- The default names and descriptions of roles are in `ROLE_INFO` in `src/myorch/core/inputs.py`.
 
-## 输入
+## Inputs
 
-输入的完整形式如下。控制台照它画发起表单，命令行用 `-i 名字=值`。控制台不按名字认输入，只看 spec。
+The full form of an input is below. The console draws the start form from it. The CLI uses `-i name=value`. The console does not recognize inputs by name. It only looks at the spec.
 
 ```yaml
 inputs:
   ticket:
-    if: "project.jira.url"        # 可选：只给这个表达式为真的项目。其他项目里变成 hidden，保留默认值
-    type: ticket                  # string（默认）| text | select | ticket | run | message | hidden
-    label: Jira 工单               # 表单上的名字
-    hint: 例如 18700 或 MD-18700    # 输入框里的提示
-    prefix: "{{project.jira.key}}-"   # ticket：去掉这个前缀，MD-18700 和 18700 都存成 18700。spec 里可以写 {{project.x}}
-    required: true                # 必填。不填时运行不启动。也可以是对 project 的表达式，见下
-    default: ""                   # 写进 defaults。defaults 里另写了同名值时，以 defaults 为准
+    if: "project.jira.url"        # optional: only for projects where this expression is true. In other projects it becomes hidden and keeps its default value
+    type: ticket                  # string (default) | text | select | ticket | run | message | hidden
+    label: Jira ticket            # the name on the form
+    hint: e.g. 18700 or MD-18700  # placeholder in the input box
+    prefix: "{{project.jira.key}}-"   # ticket: this prefix is removed, so MD-18700 and 18700 are both stored as 18700. The spec can use {{project.x}}
+    required: true                # required. The run does not start without it. Can also be an expression on project, see below
+    default: ""                   # written into defaults. If defaults has its own value with the same name, defaults wins
   from_run:
-    type: run                     # 从这个项目已结束的运行里选
-    role: development             # 选哪个角色的运行
-    empty: 从 master 新建分支       # 不选时显示的文字
-    option: "接着改：{run_id} · {inputs.ticket} · PR #{pr} · {status}"   # 选项的文字。用 " · " 分段，字段都为空的段不显示
-    carry: [ticket]               # 没填时，从选中的运行复制这些输入
-    continue:                     # 控制台在已结束的运行上显示「接着改」按钮（运行的角色等于 role 时）
-      label: 在这个分支上接着改     # 按钮文字
-      title: 新运行从这个分支的提交开始   # 按钮的提示
-      ended: 这个运行已经结束……     # 运行结束后输入框里的提示
-      note: 在 {run_id} 的分支上接着改……  # 打开表单时显示在上面的说明
-      hint: 写这次要在 {run_id} 的基础上改什么……   # 第一条消息的提示
+    type: run                     # pick from this project's finished runs
+    role: development             # which role's runs to pick from
+    empty: New branch from master # text shown when nothing is picked
+    option: "Continue: {run_id} · {inputs.ticket} · PR #{pr} · {status}"   # text of an option. Split into segments with " · "; a segment whose fields are all empty is not shown
+    carry: [ticket]               # when not filled, these inputs are copied from the picked run
+    continue:                     # the console shows a "continue" button on finished runs (when the run's role equals role)
+      label: Continue on this branch   # button text
+      title: The new run starts from this branch's commit   # button tooltip
+      ended: This run has ended...     # placeholder in the input box after the run has ended
+      note: Continuing on the branch of {run_id}...   # note shown at the top when the form opens
+      hint: Describe what to change on top of {run_id}...   # placeholder for the first message
   depth:
     type: select
-    options: [{value: quick, label: "quick：1 个 reviewer"}, standard]   # 字符串，或 {value, label}
-    more: true                    # 控制台把它收进「更多选项」：不常用的输入。必填的照常显示
+    options: [{value: quick, label: "quick: 1 reviewer"}, standard]   # strings, or {value, label}
+    more: true                    # the console folds it under More options: a rarely used input. A required one is shown as usual
   task:
-    type: message                 # 不画成字段：第一条消息填进来，原文另存 docs/external/request.md
-    from_message: first_line      # first_line：只取第一行（最多 120 个字）。默认 text：取全文
-    label: 需求
-    required: "not project.jira.url"   # 字符串：对 project 求值。没有 Jira 的项目必填，有 Jira 时工单就是需求
+    type: message                 # not drawn as a field: the first message fills it, and the original text is also saved to docs/external/request.md
+    from_message: first_line      # first_line: only the first line (at most 120 characters). Default text: the whole text
+    label: Requirement
+    required: "not project.jira.url"   # string: evaluated on project. Required for projects without Jira; with Jira the ticket is the requirement
   notes:
-    type: text                    # 多行文本框
+    type: text                    # multi-line text box
   runs:
-    type: hidden                  # 不画：由 CLI 或控制台自动填
+    type: hidden                  # not drawn: filled in automatically by the CLI or the console
 ```
 
-规则（`src/myorch/core/inputs.py`，控制台、CLI 和 relay 都执行）：
+Rules (`src/myorch/core/inputs.py`, enforced by the console, the CLI and the relay):
 
-- `required` 和 `require_one_of` 在运行启动前检查。
-- 没有默认值、也没传值的输入，运行不启动（`missing flow inputs`）。
-- 一个流程只认第一个 `type: message` 的输入。调用方已经给了值时，第一条消息不覆盖它。
-- 项目的 `required_inputs` 另外要求某些输入必填，只对声明了这个输入的流程生效（见 [7. 项目包](07-projects.md)）。
-- 输入按项目解析（`core/fragment.py` 的 `resolve_inputs`，`flowfile.flow_inputs(path, project)`）：`if:` 为假的输入变成 `{type: hidden, default: <原来的默认值>}`，表单里不显示，但仍是声明过的输入，prompt 里的 `{{inputs.x}}` 照样能渲染；字符串形式的 `required` 求值成真假；spec 里的 `{{project.x}}` 填好（例如工单前缀来自项目的 Jira key）。CLI、relay、控制台（流程接口按项目返回 `inputs_for`）、Slack 表单和运行标签都用按项目解析后的 spec。
-- 没给项目时：带 `if:` 的输入算 hidden，字符串形式的 `required` 算不必填，spec 照原样。
+- `required` and `require_one_of` are checked before the run starts.
+- If an input has no default value and no value was passed, the run does not start (`missing flow inputs`).
+- A flow only recognizes its first `type: message` input. If the caller has already given a value, the first message does not overwrite it.
+- The project's `required_inputs` makes certain inputs required in addition. It applies only to flows that declare the input (see [7. Project packs](07-projects.md)).
+- Inputs are resolved per project (`resolve_inputs` in `core/fragment.py`, `flowfile.flow_inputs(path, project)`): an input whose `if:` is false becomes `{type: hidden, default: <the original default>}`. It is not shown on the form, but it is still a declared input, so `{{inputs.x}}` in prompts still renders. A `required` given as a string is evaluated to true or false. `{{project.x}}` in the spec is filled in (e.g. the ticket prefix comes from the project's Jira key). The CLI, the relay, the console (the flows API returns `inputs_for` per project), the Slack form and run tags all use the spec resolved per project.
+- When no project is given: inputs with `if:` count as hidden, a `required` given as a string counts as not required, and the spec stays as it is.
 
-### 标签
+### Tags
 
-每个运行带一组标签，运行列表可以按标签搜索。标签在启动时算好，记在 mandate 里：
+Each run has a set of tags, and the run list can be searched by tag. Tags are computed at start and recorded in the mandate:
 
-- `myorch run --label MD-18700` 给的标签（可以写多次）。
-- `type: ticket` 的输入：加上 `prefix`（按运行的项目解析），例如 `18700` 变成 `MD-18700`。2026-11-10 之前的 `ck-development` 运行按 `development.yaml` 的 spec 算。
-- `string` 类型的输入（以及流程没有声明的输入）：里面写的 Jira 号，例如 `tickets: "MD-1,MD-2"`。只认大写的 `ABC-123` 形式，`UTF-8`、`SHA-256` 这类不算。
-- `message`、`text`、`hidden`、`select` 类型的输入不扫描。
+- Tags given with `myorch run --label MD-18700` (can be given several times).
+- Inputs with `type: ticket`: the `prefix` is added (resolved for the run's project), e.g. `18700` becomes `MD-18700`. `ck-development` runs from before 2026-11-10 use the spec of `development.yaml`.
+- Inputs of type `string` (and inputs the flow does not declare): Jira numbers written in them, e.g. `tickets: "MD-1,MD-2"`. Only the uppercase `ABC-123` form counts. Things like `UTF-8` and `SHA-256` do not.
+- Inputs of type `message`, `text`, `hidden` and `select` are not scanned.
 
-最多 20 个标签，每个最多 64 个字符。搜索时，纯数字能找到 `<任意前缀>-<数字>`，也可以搜运行 ID 的一部分。
+At most 20 tags, each at most 64 characters. When searching, a plain number finds `<any prefix>-<number>`. You can also search for part of a run ID.
 
-## 步骤
+## Steps
 
 ```yaml
-- id: analyze                     # 唯一 ID：小写字母、数字、-，以字母或数字开头，最多 63 个字符
-  needs: [sync]                   # 依赖：顶层步骤或循环的 ID
-  harness: claude-code            # claude-code | script（别名 shell）
-  profile: dev-read               # 权限，见「Profile」。写了 harness 就必须写
-  image: myorch-e2e-blog:latest   # 可选：这一步专用的镜像
-  model: claude-opus-5-5          # 可选：这一步的模型
-  interaction: allowed            # never（默认）| allowed：允许 agent 提问
-  escalate_when: "outputs.requires_design_decision"   # 条件成立但 agent 没提问时，强制转为提问。要求 interaction: allowed
-  when: "steps.x.outputs.n > 0"   # 条件不满足时 skipped（下游视同成功）
-  fanout: 3                       # 并行 3 个副本：analyze.x1..x3。1–8，默认 1
-  outputs:                        # 要求 agent 在 manifest.outputs 里给出的键
-    clear: "需求是否清楚"
-  shared: [sweep]                 # 可读写的项目共享目录，挂在 /sandbox/workspace/shared/<名字>/
-  observe_runs: "{{inputs.runs}}" # 只读挂载其他运行的工作区（learn 用）
-  knowledge: false                # 知识源：不写时 agent 步骤挂、脚本步骤不挂。true 都挂，false 都不挂
-  on_failed: ask                  # fail | ask | skip。不写时用 flow 的 on_failed
+- id: analyze                     # unique ID: lowercase letters, digits, -; starts with a letter or digit; at most 63 characters
+  needs: [sync]                   # dependencies: IDs of top-level steps or loops
+  harness: claude-code            # claude-code | script (alias shell)
+  profile: dev-read               # permissions, see "Profile". Required when harness is set
+  image: myorch-e2e-blog:latest   # optional: an image just for this step
+  model: claude-opus-5-5          # optional: the model for this step
+  interaction: allowed            # never (default) | allowed: the agent may ask questions
+  escalate_when: "outputs.requires_design_decision"   # when this holds but the agent did not ask, it is turned into a question. Requires interaction: allowed
+  when: "steps.x.outputs.n > 0"   # when the condition does not hold: skipped (downstream treats it as success)
+  fanout: 3                       # 3 replicas in parallel: analyze.x1..x3. 1–8, default 1
+  outputs:                        # keys the agent must give in manifest.outputs
+    clear: "Is the requirement clear"
+  shared: [sweep]                 # read-write project shared directories, mounted at /sandbox/workspace/shared/<name>/
+  observe_runs: "{{inputs.runs}}" # mount other runs' workspaces read-only (used by learn)
+  knowledge: false                # knowledge sources: when not set, agent steps mount them and script steps do not. true: both mount, false: neither
+  on_failed: ask                  # fail | ask | skip. When not set, the flow's on_failed is used
   limits: {timeout: 30m, retries: 1, input_timeout: 24h}
   prompt: |
-    需求：{{inputs.task}}
+    Requirement: {{inputs.task}}
 ```
 
-| 字段 | 默认 | 说明 |
+| Field | Default | Description |
 |---|---|---|
-| `harness` | — | `claude-code`：agent。`script`（或 `shell`）：prompt 当 bash 脚本运行。和 `action` 只能写一个。两个都不写时必须有 `approval`（纯审批步骤） |
-| `profile` | — | 写了 `harness` 就必须写 |
-| `image` | — | 优先级：步骤的 `image` → profile 的 `image` → flow 的 `image` → harness 自带的 `openshell-claude-code:latest`。空字符串等于不写 |
-| `model` | — | 只对 agent 步骤有效。优先级：步骤 → profile → flow → Claude Code 自己的默认 |
-| `when` | 总是执行 | 表达式。为假时步骤记为 `skipped`，下游照常执行 |
-| `fanout` | 1 | 副本之间互不知道。下游看到所有副本的 manifest。表达式里的 `steps.<id>.outputs` 只取第一个副本的 |
-| `outputs` | `{}` | 名字 → 说明。写进 prompt 的「输出要求」。下游的条件、循环、审批人数只读 `outputs` |
-| `shared` | `[]` | 和项目的 `shared` 合在一起挂。需要项目 |
-| `observe_runs` | — | 逗号分隔的运行 ID（可以用模板），最多 20 个，不能是自己。挂在 `/sandbox/workspace/observed/<run_id>/` |
-| `knowledge` | 见上 | MCP 知识源只给 agent 步骤 |
-| `limits.timeout` | `30m` | 一轮的时间上限。时长写成 `30s`、`45m`、`2h`、`7d` |
-| `limits.retries` | 0 | 失败后再试几次，0–5 |
-| `limits.input_timeout` | `24h` | 等你回复的时间：agent 提问、`on_failed: ask` 的问题 |
+| `harness` | — | `claude-code`: an agent. `script` (or `shell`): the prompt runs as a bash script. Only one of this and `action` can be set. If neither is set, there must be an `approval` (a pure approval step) |
+| `profile` | — | Required when `harness` is set |
+| `image` | — | Priority: the step's `image` → the profile's `image` → the flow's `image` → the harness's own `openshell-claude-code:latest`. An empty string is the same as not set |
+| `model` | — | Only for agent steps. Priority: step → profile → flow → Claude Code's own default |
+| `when` | always runs | An expression. When false, the step is recorded as `skipped` and downstream runs as usual |
+| `fanout` | 1 | Replicas do not know about each other. Downstream sees the manifests of all replicas. `steps.<id>.outputs` in expressions takes only the first replica's |
+| `outputs` | `{}` | Name → description. Written into the "output requirements" of the prompt. Downstream conditions, loops and approver counts read only `outputs` |
+| `shared` | `[]` | Mounted together with the project's `shared`. Needs a project |
+| `observe_runs` | — | Comma-separated run IDs (templates allowed), at most 20, not the run itself. Mounted at `/sandbox/workspace/observed/<run_id>/` |
+| `knowledge` | see above | MCP knowledge sources are only given to agent steps |
+| `limits.timeout` | `30m` | Time limit for one turn. Durations are written as `30s`, `45m`, `2h`, `7d` |
+| `limits.retries` | 0 | How many more times to try after a failure, 0–5 |
+| `limits.input_timeout` | `24h` | How long to wait for your reply: agent questions, questions from `on_failed: ask` |
 
-- agent 步骤的 prompt 是给模型的指令。平台在后面追加其他部分，见「prompt 怎么组成」。
-- script 步骤的 prompt 是 bash 脚本，`{{...}}` 先替换。脚本自己写 `/sandbox/out/manifest.json`。
+- An agent step's prompt is the instruction to the model. The platform appends other parts after it. See "How the prompt is assembled".
+- A script step's prompt is a bash script. `{{...}}` are replaced first. The script writes `/sandbox/out/manifest.json` itself.
 
-### 失败和重试
+### Failures and retries
 
-- 重试时清空本步骤的 `out/`，换新会话。共享的 `repo/`、`docs/` 保留。
-- 例外：上一次是被平台中断的（worker 丢了心跳、activity 被取消、sandbox 起不来），重试接着原来的会话，并提醒 agent 先 `git status` 看清楚上次留下的改动。步骤自己超过 `limits.timeout` 不算中断，换新会话（ARCHITECTURE.md 第 9 节）。
-- `interaction: never` 的步骤里 agent 仍然提问时，步骤直接失败，不重试。
+- On retry, the step's `out/` is cleared and a new session is used. The shared `repo/` and `docs/` are kept.
+- Exception: if the previous attempt was interrupted by the platform (the worker lost its heartbeat, the activity was cancelled, the sandbox failed to start), the retry continues the original session and reminds the agent to run `git status` first to see the changes left by the last attempt. A step exceeding its own `limits.timeout` does not count as an interruption and gets a new session (ARCHITECTURE.md section 9).
+- If the agent still asks a question in an `interaction: never` step, the step fails at once, without retries.
 
-重试用完后仍失败时，看 `on_failed`：
+When the step still fails after the retries are used up, `on_failed` decides:
 
-| 值 | 做什么 |
+| Value | What happens |
 |---|---|
-| `fail`（默认） | 步骤失败。下游步骤记为 `blocked`，运行失败 |
-| `ask` | 运行进入 `waiting_input` 问你。回复 `1` 重新开始（新 attempt、新会话），`2` 跳过（记为 skipped，后面照常），`3` 终止。其他文字当作提示：接着失败那一轮的会话再跑一轮，agent 记得自己试过什么。之后再失败会再问你，不再自动重试。等待超过 `limits.input_timeout` 按失败处理 |
-| `skip` | 步骤记为 `skipped`，`error` 里写明失败原因，后面的步骤照常执行，运行不会因此失败，也不问人。用于可有可无的步骤，例如 development 的 takeaway |
+| `fail` (default) | The step fails. Downstream steps are recorded as `blocked`, and the run fails |
+| `ask` | The run enters `waiting_input` and asks you. Reply `1` to start over (new attempt, new session), `2` to skip (recorded as skipped, the rest runs as usual), `3` to stop. Any other text is a hint: one more turn runs in the session of the failed turn, and the agent remembers what it has tried. If it fails again, you are asked again, with no more automatic retries. Waiting longer than `limits.input_timeout` counts as a failure |
+| `skip` | The step is recorded as `skipped` with the failure reason in `error`. The following steps run as usual, the run does not fail because of it, and nobody is asked. For optional steps, e.g. development's takeaway |
 
-- development 在 flow 顶层写了 `on_failed: ask`。
-- flow 顶层只能写 `fail` 或 `ask`。
-- 宿主机动作（`action:`）不问人：失败就失败，写了 `on_failed: skip` 时跳过。
-- `on_failed: skip` 不能写在循环里（包括 `reflect`）：跳过的步骤会被 `until` 当成完成。
-- 失败后跳过的步骤没有 outputs。后面的步骤要用它的结果时，`when` 写成依赖它的某个输出（例如 `steps.takeaway.outputs.items != null`），不要用 `steps.x.status`：跳过和成功在表达式里都是 `succeeded`。
-- 失败后跳过时，事件里先发一条 `status: failed` 的 `step_finished`，再发 `skipped` 的。看事件的人和 learn 都能看到失败。
+- development sets `on_failed: ask` at the flow top level.
+- At the flow top level only `fail` or `ask` is allowed.
+- Host actions (`action:`) do not ask: a failure is a failure. With `on_failed: skip` they are skipped.
+- `on_failed: skip` is not allowed inside loops (including `reflect`): `until` would treat a skipped step as done.
+- A step skipped after a failure has no outputs. When later steps need its result, write `when` on one of its outputs (e.g. `steps.takeaway.outputs.items != null`), not on `steps.x.status`: skipped and succeeded are both `succeeded` in expressions.
+- When a step is skipped after a failure, the events first carry a `step_finished` with `status: failed`, then one with `skipped`. Whoever reads the events, and learn, can see the failure.
 
-## 审批
+## Approvals
 
-任何步骤都可以带 `approval`：先等审批，通过后再执行这一步。没有 `harness` 和 `action` 的步骤只审批，叫纯审批步骤。
+Any step can have an `approval`: it first waits for approval, and runs only after it is approved. A step without `harness` and `action` only does the approval and is called a pure approval step.
 
 ```yaml
 - id: human-review
   needs: [classify-risk]
   approval:
-    when: "..."                   # 可选：为假时不需要审批
+    when: "..."                   # optional: when false, no approval is needed
     count: "min(steps.risk-rules.outputs.available, max(steps.risk-rules.outputs.approvers, steps.classify-risk.outputs.approvers))"
-    subject: "{{steps.risk-rules.outputs.head_sha}}"   # 审批打开时固定。后面用 {{approvals.human-review.subject}} 核对
-    require_initiator: true       # 默认 true：发起人必须是审批人之一
-    changes: {loop: review-fix, rounds: 2}   # 可选：审批人可以提修改意见，把运行送回这个循环
-    remind_after: 24h             # 可选：这么久没人处理，发一条 approval_reminder 事件
-    timeout: 7d                   # 可选：这么久没人处理，这一步失败（「审批超时」）
+    subject: "{{steps.risk-rules.outputs.head_sha}}"   # fixed when the approval opens. Check it later with {{approvals.human-review.subject}}
+    require_initiator: true       # default true: the initiator must be one of the approvers
+    changes: {loop: review-fix, rounds: 2}   # optional: approvers can request changes, which send the run back to this loop
+    remind_after: 24h             # optional: if nobody acts for this long, an approval_reminder event is sent
+    timeout: 7d                   # optional: if nobody acts for this long, this step fails ("approval timed out")
 ```
 
-| 字段 | 默认 | 说明 |
+| Field | Default | Description |
 |---|---|---|
-| `when` | 总是要 | 表达式 |
-| `count` | 1 | 整数或表达式，表示要几个不同的人批准。0 表示自动通过。表达式的结果读不出数字时按 1 人 |
-| `subject` | — | 审批的对象，例如提交 SHA。审批打开时渲染并固定 |
-| `require_initiator` | `true` | 只在 `count` 大于 0 时检查 |
-| `changes.loop` | — | 必须是顶层循环，并且在这个审批步骤之前（审批步骤直接或间接依赖它） |
-| `changes.rounds` | 2 | 送回后最多再跑几轮，1–5 |
-| `remind_after`、`timeout` | 不提醒、不超时 | 时长 |
+| `when` | always required | An expression |
+| `count` | 1 | An integer or an expression: how many different people must approve. 0 means approved automatically. If the expression's result cannot be read as a number, 1 person is used |
+| `subject` | — | What is being approved, e.g. a commit SHA. Rendered and fixed when the approval opens |
+| `require_initiator` | `true` | Only checked when `count` is greater than 0 |
+| `changes.loop` | — | Must be a top-level loop that comes before this approval step (the approval step depends on it directly or indirectly) |
+| `changes.rounds` | 2 | At most how many more rounds run after the run is sent back, 1–5 |
+| `remind_after`, `timeout` | no reminder, no timeout | Durations |
 
-- 简写：`approval: required` 等于 `count: 1`。`approval: none` 等于不写。
-- 驳回：步骤记为 `rejected`，下游 `blocked`，运行失败。
-- 提修改意见（只在配置了 `changes` 时可以）：意见写进 `docs/review/round-<下一轮>/approver.json`（reviewer 的格式），循环再开最多 `rounds` 轮。循环之后的所有顶层步骤（包括这个审批步骤）回到等待状态，重新执行。
-- 审批记录（批准人、驳回人、修改意见、时间）在 `{{approvals.<step>.…}}` 里，绑定 `subject`。
+- Short forms: `approval: required` equals `count: 1`. `approval: none` equals not setting it.
+- Reject: the step is recorded as `rejected`, downstream is `blocked`, and the run fails.
+- Request changes (only possible when `changes` is configured): the comments are written to `docs/review/round-<next round>/approver.json` (in the reviewer format), and the loop opens up to `rounds` more rounds. All top-level steps after the loop (including this approval step) go back to waiting and run again.
+- The approval record (who approved, who rejected, the requested changes, the times) is in `{{approvals.<step>.…}}`, bound to `subject`.
 
-## 宿主机动作
+## Host actions
 
 ```yaml
 - id: apply
-  action: project-apply           # 只能用 runner/actions.py 里注册的动作
-  args: {scope: learn}            # 值可以用模板，运行时替换
+  action: project-apply           # only actions registered in runner/actions.py
+  args: {scope: learn}            # values can use templates, replaced at run time
 ```
 
-宿主机动作不起 sandbox，在 worker 上执行确定性的代码，不执行 agent 写的代码。每个步骤实例只执行一次（Temporal 层面最多试 2 次，动作本身是幂等的），时间上限是 `limits.timeout`。结果的 manifest 也写进 `out/`，后面的步骤能读到它的 outputs。
+A host action does not start a sandbox. It runs deterministic code on the worker and does not run code written by agents. Each step instance runs it only once (at most 2 tries at the Temporal level; the action itself is idempotent), with `limits.timeout` as the time limit. The resulting manifest is also written to `out/`, so later steps can read its outputs.
 
-| 动作 | 参数 | 做什么 | 用在 |
+| Action | Arguments | What it does | Used in |
 |---|---|---|---|
-| `project-apply` | `scope`（`learn` 默认、`onboard`、`fix`）、`proposals`（默认 `docs/learn/proposals.json`）、`accepted`（默认 `docs/learn/accepted.json`） | 把采纳的建议写回项目包，在 `myorch-knowledge` 里提交，重新同步快照。`scope` 限制能改的文件（`project.py` 的 `EDITABLE`）。全部能干净地应用才写，否则一个都不写。这次运行后面的步骤挂新快照。每个步骤实例只提交一次，所以循环里每一轮都可以写回一次 | learn、onboard、postmortem、development 的 review 循环（`pack-apply`） |
-| `postmortem-replay` | `phase`（`before` 默认、`after`）、`depth`（默认 `standard`） | 写 postmortem 的评测案例，另起一个 eval 运行回放引入问题的改动。`before` 用现在的知识库回放。`after` 写入期望的发现，采纳了建议时再回放一次 | postmortem |
-| `run-trail` | `path`（默认 `docs/takeaway/trail.json`）、`clear`（空格分隔的文件） | 把运行到现在的过程写进工作区：每步的状态、摘要、失败原因、重试次数，问答，review 每轮的 blocking 和 CI 结果，加上 myorch 提交和项目包版本。像密钥的行先删掉。`clear` 里的文件清空 | development（takeaway） |
-| `takeaway-redact` | `files`（空格分隔） | 删掉这些文件里像密钥的行（`knowledge.SECRET_RULES`）。文件都空时失败 | development（takeaway） |
-| `takeaways-learned` | `picked`（默认 `docs/learn/takeaways.json`） | 把 learn 读过的 takeaway 的 run_id 记进 `myorch-data/learn/<项目>/takeaways.json`，下次跳过 | learn |
+| `project-apply` | `scope` (`learn` by default, `onboard`, `fix`), `proposals` (default `docs/learn/proposals.json`), `accepted` (default `docs/learn/accepted.json`) | Writes the adopted proposals back to the project pack, commits in `myorch-knowledge`, and re-syncs the snapshot. `scope` limits which files can be changed (`EDITABLE` in `project.py`). It writes only if everything applies cleanly; otherwise it writes nothing. The later steps of this run mount the new snapshot. Each step instance commits only once, so in a loop each round can write back once | learn, onboard, postmortem, development's review loop (`pack-apply`) |
+| `postmortem-replay` | `phase` (`before` by default, `after`), `depth` (default `standard`) | Writes postmortem eval cases and starts a separate eval run that replays the change that introduced the problem. `before` replays with the current knowledge. `after` writes the expected findings and replays once more if proposals were adopted | postmortem |
+| `run-trail` | `path` (default `docs/takeaway/trail.json`), `clear` (space-separated files) | Writes the run's history so far into the workspace: each step's status, summary, failure reason and retry count, the questions and answers, each review round's blocking issues and CI result, plus the myorch commit and the project pack version. Lines that look like secrets are removed first. The files in `clear` are emptied | development (takeaway) |
+| `takeaway-redact` | `files` (space-separated) | Removes lines that look like secrets from these files (`knowledge.SECRET_RULES`). Fails when all files are empty | development (takeaway) |
+| `takeaways-learned` | `picked` (default `docs/learn/takeaways.json`) | Records the run_ids of the takeaways learn has read in `myorch-data/learn/<project>/takeaways.json`, so they are skipped next time | learn |
 
-建议文件（`proposals.json`）是一个列表，每条是 `{id, title, changes: [{file, content | edits: [{old, new}] | append}]}`。`file` 写成 sandbox 里看到的路径，例如 `project/guide/review-guide.md`。`edits` 的每个 `old` 必须在文件里恰好出现一次。`accepted.json` 是 `{"accepted": [id, ...]}`。
+The proposal file (`proposals.json`) is a list. Each entry is `{id, title, changes: [{file, content | edits: [{old, new}] | append}]}`. `file` is the path as seen in the sandbox, e.g. `project/guide/review-guide.md`. Each `old` in `edits` must appear exactly once in the file. `accepted.json` is `{"accepted": [id, ...]}`.
 
-## 循环
+## Loops
 
 ```yaml
 - loop: review-fix
   needs: [implement]
-  when: "..."                     # 可选：为假时整个循环 skipped
-  max_rounds: 3                   # 1–10，默认 3
-  until: "steps.verify.outputs.blocking == 0"   # 必填
-  on_exhausted: ask               # ask（默认）| fail | accept
-  reflect: {id: reflect, ...}     # 可选：跑满后、问你之前先反思
+  when: "..."                     # optional: when false, the whole loop is skipped
+  max_rounds: 3                   # 1–10, default 3
+  until: "steps.verify.outputs.blocking == 0"   # required
+  on_exhausted: ask               # ask (default) | fail | accept
+  reflect: {id: reflect, ...}     # optional: reflect after the loop runs out of rounds, before asking you
   steps:
     - {id: review, fanout: 3, ...}
     - {id: verify, needs: [review], ...}
@@ -236,89 +236,89 @@ inputs:
 ```
 
 <!-- diagram: loop-round.html -->
-图的文件：[diagrams/loop-round.html](diagrams/loop-round.html)。
+Diagram file: [diagrams/loop-round.html](diagrams/loop-round.html).
 
-一轮怎么跑：
+How a round runs:
 
-1. 循环的 `needs` 都完成后，`when` 为真就开始第 1 轮。
-2. 一轮里的步骤按 `needs` 执行。实例 ID：`verify.r2` 是第 2 轮，`review.r2.x1` 是第 2 轮的第 1 个副本。
-3. 这一轮所有步骤都结束后：
-   - 有步骤失败（或被驳回、blocked）：循环失败。
-   - `until` 为真：循环成功。
-   - 还没到 `max_rounds`：开始下一轮。
-   - 到了 `max_rounds`：按 `on_exhausted` 处理。`accept`：当作成功。`fail`：循环失败。`ask`：有 `reflect` 时先跑它（`reflect.r<轮>`），再问你。
-4. `ask` 的问题有三个选项：再跑一轮、接受当前结果并继续、终止流程。`reflect` 的 `outputs.recommendation` 和 `outputs.reason`（没有时用摘要）附在问题后面。24 小时没回复，循环失败。`reflect` 失败不影响运行的结果。
+1. When all of the loop's `needs` are done and `when` is true, round 1 starts.
+2. The steps in a round run according to their `needs`. Instance IDs: `verify.r2` is round 2, `review.r2.x1` is the first replica in round 2.
+3. When all steps of the round have ended:
+   - A step failed (or was rejected, or is blocked): the loop fails.
+   - `until` is true: the loop succeeds.
+   - `max_rounds` not reached yet: the next round starts.
+   - `max_rounds` reached: handled by `on_exhausted`. `accept`: counts as success. `fail`: the loop fails. `ask`: if there is a `reflect`, it runs first (`reflect.r<round>`), then you are asked.
+4. The `ask` question has three options: run one more round, accept the current result and continue, stop the flow. The `reflect` step's `outputs.recommendation` and `outputs.reason` (the summary if they are missing) are appended to the question. If there is no reply within 24 hours, the loop fails. A failed `reflect` does not affect the run's result.
 
-依赖规则：
+Dependency rules:
 
-- 循环体里的步骤可以 `needs` 同一轮的步骤，或者循环外的顶层步骤。不能 `needs` 自己所在的循环。
-- 循环外的步骤只能 `needs` 循环 ID，看到的是最后一轮的结果。
-- 从第 2 轮起，每个实例能看到上一轮所有实例的 manifest。
-- `until` 和循环体里的表达式看的是当前这一轮的步骤。
+- Steps in the loop body can `need` steps in the same round, or top-level steps outside the loop. They cannot `need` their own loop.
+- Steps outside the loop can only `need` the loop ID, and see the results of the last round.
+- From round 2 on, each instance can see the manifests of all instances of the previous round.
+- `until` and expressions in the loop body look at the steps of the current round.
 
-## 片段（`use:`）
+## Fragments (`use:`)
 
 ```yaml
 - use: lib/review-loop.yaml
   id: review-fix
   needs: [develop]
   when: "..."
-  if: "..."                       # 可选：对 project 求值，为假时整条 use 不要，见「按项目裁剪」
+  if: "..."                       # optional: evaluated on project; when false, the whole use entry is dropped, see "Per-project trimming"
   with: {base: "{{project.base}}", reviewers: "{{project.flows.development.reviewers}}"}
 ```
 
-- `use` 条目只能有 `use`、`id`、`needs`、`with`、`when`，以及流程层的 `if:`。`id` 必填，成为展开后的步骤或循环的 ID。
-- 路径相对流程文件所在的目录，不能跑到目录外面。
-- 片段里的 `{{params.x}}` 在展开时替换。整个值都是 `{{params.x}}` 时按类型替换（例如 `fanout: "{{params.reviewers}}"` 变成整数）。值的一部分是 `{{params.x}}` 时，布尔值写成 `true`/`false`。
-- 片段里的步骤写 `if: "params.fix"` 时，表达式为假就去掉这个步骤，其他步骤 `needs` 里的它也一起去掉。整个 `use` 被去掉时，flow 里 `needs` 它的地方也去掉。片段里的 `if:` 只能用 `params`，不能用 `project`：片段要看项目时，由 flow 把项目值经 `with:` 传进来。
-- 参数严格校验：缺必填、类型不对、越界、不在 `enum` 里、多传、引用没声明的参数，都在提交前报错。
-- `with:` 里的 `{{project.x}}` 在片段绑定参数之前填好。整个值是 `{{project.x}}` 时保留类型，所以项目值可以传给 `int`、`bool` 参数（`reviewers: "{{project.flows.development.reviewers}}"`、`acceptance: "{{project.e2e.acceptance}}"`），按参数的类型、范围、`enum` 校验。`{{preset.x}}` 早于片段展开，同样可以传给 `int`、`bool` 参数。
-- 限制：
-  - 不支持片段嵌套。
-  - 循环片段里的步骤 ID 是固定的，所以同一个循环片段在一个 flow 里只能用一次。单步片段的 ID 由 `use` 条目给，可以用多次。
-  - 引用方的 ID 不能和片段内的步骤重名。所以 review 流程的循环叫 `review-round`，不叫 `review`。
+- A `use` entry can only have `use`, `id`, `needs`, `with`, `when`, and the flow-level `if:`. `id` is required and becomes the ID of the expanded step or loop.
+- The path is relative to the directory of the flow file and cannot leave that directory.
+- `{{params.x}}` in the fragment is replaced on expansion. When the whole value is `{{params.x}}`, it is replaced with its type (e.g. `fanout: "{{params.reviewers}}"` becomes an integer). When `{{params.x}}` is part of a value, booleans are written as `true`/`false`.
+- When a step in a fragment has `if: "params.fix"` and the expression is false, the step is removed, and it is also removed from the `needs` of other steps. When a whole `use` is removed, the places in the flow that `need` it drop it too. `if:` in fragments can only use `params`, not `project`: when a fragment needs to look at the project, the flow passes the project value in through `with:`.
+- Parameters are validated strictly: missing required parameters, wrong types, out-of-range values, values not in `enum`, extra parameters, and references to undeclared parameters are all errors before submission.
+- `{{project.x}}` in `with:` is filled in before the fragment binds its parameters. When the whole value is `{{project.x}}`, the type is kept, so project values can be passed to `int` and `bool` parameters (`reviewers: "{{project.flows.development.reviewers}}"`, `acceptance: "{{project.e2e.acceptance}}"`), and are validated against the parameter's type, range and `enum`. `{{preset.x}}` is replaced before fragment expansion and can also be passed to `int` and `bool` parameters.
+- Limits:
+  - Nested fragments are not supported.
+  - Step IDs inside a loop fragment are fixed, so the same loop fragment can be used only once in a flow. The ID of a single-step fragment is given by the `use` entry, so it can be used several times.
+  - The referring flow's IDs cannot clash with step IDs inside the fragment. That is why the review flow's loop is called `review-round`, not `review`.
 
-片段文件的格式：
+Format of a fragment file:
 
 ```yaml
 fragment: review-loop
-description: CI → 并行 reviewer + security → verify 投票 →（可选）fix
+description: CI → parallel reviewers + security → verify vote → (optional) fix
 params:
   base:      {type: string, required: true}
   reviewers: {type: int, default: 3, min: 1, max: 8}
   on_exhausted: {type: string, default: ask, enum: [ask, fail, accept]}
-item:                             # 一个步骤（有 id）或一个循环（有 loop）。ID 会被 use 条目的 id 替换
+item:                             # one step (has id) or one loop (has loop). The ID is replaced by the use entry's id
   loop: _
   ...
 ```
 
-参数的 `type` 是 `string`、`int` 或 `bool`。可以写 `required`、`default`、`min`、`max`、`enum`。必填参数不能有默认值。
+A parameter's `type` is `string`, `int` or `bool`. It can have `required`, `default`, `min`, `max`, `enum`. A required parameter cannot have a default value.
 
-现有片段（`flows/lib/`），所有项目共用：
+The current fragments (`flows/lib/`), shared by all projects:
 
-| 片段 | 是什么 | 参数（默认值） | 用在 |
+| Fragment | What it is | Parameters (defaults) | Used in |
 |---|---|---|---|
-| `sync-base` | 单步（script，dev-git）：clone 或 fetch 项目仓库，切到最新的 base，初始化子模块。用共享目录 `git-mirror` 里的裸镜像加速 clone | 无 | development、sweep、onboard |
-| `review-loop` | 循环：`ci` → 并行 `review`（fanout）+ `security` → `verify` 投票 →（可选）`fix` → `pack-choose`、`pack-apply`，直到没有阻塞问题。带 `reflect`。阻塞问题出在项目包时，fix 提出项目包修改，`pack-choose` 让你挑，`pack-apply` 用 `project-apply`（scope `fix`）写回。`fix: false` 时这三步都没有。review、verify、fix 的 prompt 里拼进项目的 `prompts/review.md`、`verify.md`、`fix.md` | `base`（必填）、`reviewers`（3，1–8）、`max_rounds`（3，1–10）、`security`（true）、`fix`（true）、`on_exhausted`（ask）、`since`（空：第 1 轮只看这个提交之后的改动）、`requirement_doc`（`docs/requirements.md`）、`review_model`、`verify_model`、`fix_model`（空：用 flow 的模型） | development（参数来自 `flows.development`）、review、eval |
-| `e2e` | 循环：`e2e-smoke`（项目的固定用例）+ `e2e-accept`（agent 按验收标准写用例）→（可选）`e2e-fix`。工具由项目决定，见 [7. 项目包 · e2e/ 约定](07-projects.md#e2e-约定可选) | `image`（必填）、`profile`（dev-read）、`acceptance`（bool，true）、`base`（必填）、`max_rounds`（2，1–5）、`fix`（true）、`on_exhausted`（ask）、`requirement_doc`（`docs/requirements.md`）、`check_model`、`fix_model` | review（`if: project.e2e.image`，`fix: false`、1 轮） |
-| `choose-proposals` | 单步（script，可以提问）：列出 `<dir>/proposals.json` 里的建议让你挑编号，写 `<dir>/accepted.json`，输出 `accepted` | `dir`（必填）、`what`（`修改建议`） | learn、postmortem、onboard |
-| `deliver` | 单步（script，dev-git）：审批通过后推送批准的那个提交，写交付说明 `docs/delivery.md`，输出 `delivery`。分支在审批后变了、或者当前分支是 base 分支时拒绝推送。不调用平台 API，不开 PR | `approved`（必填：批准的提交） | development |
+| `sync-base` | A single step (script, dev-git): clones or fetches the project repository, checks out the latest base, initializes submodules. Uses a bare mirror in the shared directory `git-mirror` to speed up the clone | none | development, sweep, onboard |
+| `review-loop` | A loop: `ci` → parallel `review` (fanout) + `security` → `verify` vote → (optional) `fix` → `pack-choose`, `pack-apply`, until there are no blocking issues. Has `reflect`. When a blocking issue is in the project pack, fix proposes project pack changes, `pack-choose` lets you pick, and `pack-apply` writes them back with `project-apply` (scope `fix`). With `fix: false` none of these three steps exist. The prompts of review, verify and fix include the project's `prompts/review.md`, `verify.md`, `fix.md` | `base` (required), `reviewers` (3, 1–8), `max_rounds` (3, 1–10), `security` (true), `fix` (true), `on_exhausted` (ask), `since` (empty: round 1 only looks at changes after this commit), `requirement_doc` (`docs/requirements.md`), `review_model`, `verify_model`, `fix_model` (empty: use the flow's model) | development (parameters from `flows.development`), review, eval |
+| `e2e` | A loop: `e2e-smoke` (the project's fixed cases) + `e2e-accept` (the agent writes cases from the acceptance criteria) → (optional) `e2e-fix`. The project decides the tools, see [7. Project packs · e2e/ convention](07-projects.md#e2e-convention-optional) | `image` (required), `profile` (dev-read), `acceptance` (bool, true), `base` (required), `max_rounds` (2, 1–5), `fix` (true), `on_exhausted` (ask), `requirement_doc` (`docs/requirements.md`), `check_model`, `fix_model` | review (`if: project.e2e.image`, `fix: false`, 1 round) |
+| `choose-proposals` | A single step (script, can ask questions): lists the proposals in `<dir>/proposals.json` for you to pick by number, writes `<dir>/accepted.json`, outputs `accepted` | `dir` (required), `what` (default `change proposals`) | learn, postmortem, onboard |
+| `deliver` | A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note `docs/delivery.md`, outputs `delivery`. Refuses to push when the branch changed after approval or the current branch is the base branch. With `open_pr`, also opens (or reuses) the pull request and outputs `pr_url`; otherwise calls no platform API | `approved` (required: the approved commit), `open_pr` (default `false`; development passes the project's `flows.development.open_pr`) | development |
 
-控制台侧栏「流程定义」的「片段」组列出所有片段、参数和用到它的流程。
+The **Fragments** group in the console's **Flow definitions** side bar lists all fragments, their parameters and the flows that use them.
 
-## 按项目裁剪：`if:`
+## Per-project trimming: `if:`
 
-一套流程给所有项目。流程的形状按项目变化时，在 flow 里写 `if:`，表达式对 `project`（合并模板后的项目配置，`{{project.x}}` 的那份值）求值。它在提交时、展开片段之前求值（`core/fragment.py` 的 `apply_project_if`），运行时看不到。
+One set of flows serves all projects. When a flow's shape varies by project, write `if:` in the flow. The expression is evaluated on `project` (the project configuration merged with its template, the same values as `{{project.x}}`). It is evaluated at submission, before fragments are expanded (`apply_project_if` in `core/fragment.py`), and is not visible at run time.
 
-能写 `if:` 的地方：
+Where `if:` can be written:
 
-| 位置 | 为假时 |
+| Location | When false |
 |---|---|
-| flow 自己的顶层步骤和顶层循环 | 去掉这一项。依赖它的步骤**继承它的 `needs`** |
-| `use:` 条目 | 整条去掉，同上 |
-| `inputs` 里的输入 | 不删除，变成 `{type: hidden, default: <原来的默认值>}`，见「输入」 |
+| The flow's own top-level steps and top-level loops | The item is removed. Steps that depend on it **inherit its `needs`** |
+| `use:` entries | The whole entry is removed, as above |
+| Inputs in `inputs` | Not removed. It becomes `{type: hidden, default: <the original default>}`, see "Inputs" |
 
-片段里的步骤、循环体里的步骤不能写对 `project` 的 `if:`（片段里的 `if:` 只看 `params`）。
+Steps in fragments and steps in loop bodies cannot have an `if:` on `project` (`if:` in fragments only looks at `params`).
 
 ```yaml
 - id: takeaway-commit
@@ -326,38 +326,38 @@ item:                             # 一个步骤（有 id）或一个循环（�
   needs: [takeaway-redact]
   ...
 - id: risk-rules
-  needs: [takeaway-commit]        # 没有 takeaway 的项目：takeaway 四步都去掉，risk-rules 改为等 review-fix
+  needs: [takeaway-commit]        # projects without takeaway: all four takeaway steps are removed, and risk-rules waits for review-fix instead
 ```
 
-继承 `needs` 是为了让链条保持顺序：只从 `needs` 里删掉的话，`risk-rules` 就没有依赖，会在一开始就运行。连续去掉几步时一路往上找，直到找到留下来的步骤。
+`needs` is inherited to keep the chain in order: if the step were only removed from `needs`, `risk-rules` would have no dependencies and would run at the very start. When several steps in a row are removed, the search goes up the chain until it finds a step that stays.
 
-- 用了流程层的 `if:` 却没给 `--project` 时报错。
-- 表达式的语法见「表达式」。上下文里只有 `project`（其他引用都是 `null`），例如 `project.jira.url`、`project.e2e.image`、`project.flows.development.incident`。空字符串、`false`、`null` 都算假。
-- `myorch expand <flow> --project <p>` 看某个项目裁剪后的结果。
+- Using flow-level `if:` without `--project` is an error.
+- For the expression syntax, see "Expressions". The context only has `project` (all other references are `null`), e.g. `project.jira.url`, `project.e2e.image`, `project.flows.development.incident`. Empty strings, `false` and `null` all count as false.
+- `myorch expand <flow> --project <p>` shows the result trimmed for a project.
 
-### 项目的 prompt 条款：`{{project.prompts.<slot>}}`
+### Project prompt clauses: `{{project.prompts.<slot>}}`
 
-项目专属的 prompt 条款不写在流程里，写在项目包的 `prompts/<slot>.md`，见 [7. 项目包 · prompt 槽位](07-projects.md#prompt-槽位prompts)。流程在 prompt 里写 `{{project.prompts.<slot>}}`，提交时原文拼进去，展开后的流程（工作区的 `.myorch/flow.yaml`）里能看到。槽位只有 `develop`、`review`、`verify`、`fix`、`risk`（`project.py` 的 `PROMPT_SLOTS`）。项目没有这个文件时是空字符串。
+Project-specific prompt clauses are not written in the flow. They go in `prompts/<slot>.md` in the project pack. See [7. Project packs · Prompt slots](07-projects.md#prompt-slots-prompts). The flow writes `{{project.prompts.<slot>}}` in the prompt. The text is inserted verbatim at submission and is visible in the expanded flow (`.myorch/flow.yaml` in the workspace). The only slots are `develop`, `review`, `verify`, `fix`, `risk` (`PROMPT_SLOTS` in `project.py`). If the project has no such file, the value is an empty string.
 
-现在用到的地方：development 的 `develop` 步骤（槽位 `develop`）和 `classify-risk`（`risk`）；review-loop 片段的 `review`、`verify`、`fix` 步骤（同名槽位），所以 development、review、eval 都会带上。
+Where they are used now: development's `develop` step (slot `develop`) and `classify-risk` (`risk`); the `review`, `verify` and `fix` steps of the review-loop fragment (slots with the same names), so development, review and eval all include them.
 
-## prompt 里的规则（`[[rule:]]`）
+## Rules in prompts (`[[rule:]]`)
 
-prompt 里有些条款是为了弥补模型犯过的错加的，例如「列全入口」「删掉已有判断前先查原因」。模型变强以后，这些条款可能已经不需要，只占注意力。所以每条这样的条款都标出来，能在评测里单独去掉：
+Some clauses in prompts were added to make up for mistakes models have made, e.g. "list all entry points", "find out why before removing an existing check". As models get stronger, these clauses may no longer be needed and only take up attention. So each such clause is marked, and can be removed on its own in an eval:
 
 ```yaml
 prompt: |
   ...
   [[rule:entry-points/develop]]
-  - 要给某个字段加校验时：列全所有入口……
+  - When adding validation to a field: list all entry points...
   [[/rule]]
 ```
 
-- 标记各占一行，id 是 `<规则>/<位置>`，同一条规则在 develop、review、verify 里各有一处。不能嵌套。
-- 展开时删掉标记行，正文照常保留。项目的 `flows.ablate` 里有这条规则时，整块删掉：写 `entry-points` 删掉它的每一处，写 `entry-points/review` 只删一处（`core/fragment.py` 的 `strip_rules`）。
-- 每条规则为什么存在写在 `flows/rules/registry.yaml`：补的是什么错、来自哪个案例和差距编号、哪次改动、哪天加的，以及最近一次去掉它评测的结果（`checked`）。`tests/test_rules.py` 检查登记表和流程里的标记一一对应。
-- 评测：同一批案例重放两遍，一遍照常，一遍 `myorch run ... -i at=... --set flows.ablate=<规则>`（见 [5. 命令参考 · run](05-cli.md#run)）。结果没有变差的规则可以删掉，变差的在 `checked` 里记下日期、模型和结果。
-- 改 prompt 时，新加的「补短板」条款也要标出来并登记。
+- Each marker is on its own line. The id is `<rule>/<place>`. The same rule has one place each in develop, review and verify. Markers cannot be nested.
+- On expansion the marker lines are removed and the body is kept as usual. When the rule is in the project's `flows.ablate`, the whole block is removed: `entry-points` removes every place of it, `entry-points/review` removes only one place (`strip_rules` in `core/fragment.py`).
+- Why each rule exists is written in `flows/rules/registry.yaml`: which mistake it makes up for, which case and gap number it comes from, which change, the date it was added, and the result of the latest eval with it removed (`checked`). `tests/test_rules.py` checks that the registry and the markers in the flows match one to one.
+- Eval: replay the same batch of cases twice, once as usual and once with `myorch run ... -i at=... --set flows.ablate=<rule>` (see [5. CLI reference · run](05-cli.md#run)). Rules whose results do not get worse can be deleted. For those that get worse, record the date, the model and the result in `checked`.
+- When changing a prompt, new clauses that make up for weaknesses must also be marked and registered.
 
 ## presets
 
@@ -374,110 +374,110 @@ steps:
     with: {reviewers: "{{preset.reviewers}}"}
 ```
 
-- `by` 指定用哪个输入选。值取发起时给的输入，没给时取 `defaults`。都没有、或者值不是某个 preset 的名字时报错。
-- `{{preset.x}}` 只在 `steps` 里替换，在提交时替换，早于片段展开。整个值都是 `{{preset.x}}` 时保留类型。
-- 引用 preset 里没有的值时报错。
+- `by` names the input used to pick. The value is the input given at start, or `defaults` if none was given. If neither exists, or the value is not the name of a preset, it is an error.
+- `{{preset.x}}` is replaced only in `steps`, at submission, before fragment expansion. When the whole value is `{{preset.x}}`, the type is kept.
+- Referencing a value the preset does not have is an error.
 
-## 表达式
+## Expressions
 
-用于 `when`、`until`、`approval.when`、`approval.count`、`escalate_when`，片段的 `if`，以及流程层的 `if` 和字符串形式的输入 `required`。提交时检查语法。
+Used in `when`, `until`, `approval.when`, `approval.count`, `escalate_when`, the `if` in fragments, the flow-level `if`, and an input's `required` given as a string. The syntax is checked at submission.
 
-- 引用：`steps.<id>.outputs.<key>`、`steps.<id>.status`、`inputs.<name>`、`loop.round`、`run.id`、`run.branch`、`approvals.<step>.<字段>`、`project.<字段>`、`replica`。`escalate_when` 里只能用 `outputs.<key>`，指本步骤自己的输出。片段的 `if` 里只能用 `params.<name>`，流程层的 `if` 和输入的 `required` 里只能用 `project.<字段>`。
-- 字面量：数字、`'字符串'` 或 `"字符串"`、`true`、`false`、`null`。
-- 运算：`== != < <= > >=`、`and or not`、括号、`max() min() len()`。没有算术，所以 `-` 可以出现在步骤 ID 里（`steps.risk-rules.outputs.approvers`）。
-- 引用不存在时值是 `null`。`null` 参与大小比较时结果一律是 false，所以缺失的输出永远不满足 `> 0`。`max`、`min` 忽略 `null`，`len(null)` 是 0。
-- `steps.<id>.status`：步骤（所有副本）都成功或跳过时是 `succeeded`，有失败的是 `failed`，否则是当前状态。
+- References: `steps.<id>.outputs.<key>`, `steps.<id>.status`, `inputs.<name>`, `loop.round`, `run.id`, `run.branch`, `approvals.<step>.<field>`, `project.<field>`, `replica`. `escalate_when` can only use `outputs.<key>`, which refers to the step's own outputs. The `if` in fragments can only use `params.<name>`. The flow-level `if` and an input's `required` can only use `project.<field>`.
+- Literals: numbers, `'string'` or `"string"`, `true`, `false`, `null`.
+- Operators: `== != < <= > >=`, `and or not`, parentheses, `max() min() len()`. There is no arithmetic, so `-` can appear in step IDs (`steps.risk-rules.outputs.approvers`).
+- A reference that does not exist has the value `null`. A size comparison with `null` is always false, so a missing output never satisfies `> 0`. `max` and `min` ignore `null`. `len(null)` is 0.
+- `steps.<id>.status`: `succeeded` when the step (all replicas) succeeded or was skipped, `failed` when one failed, otherwise the current status.
 
-## 模板变量
+## Template variables
 
-| 变量 | 何时替换 | 能用在哪里 |
+| Variable | When replaced | Where it can be used |
 |---|---|---|
-| `{{preset.x}}` | 提交时 | `steps` 里的任何值 |
-| `{{params.x}}` | 提交时（片段展开） | 片段里的任何值 |
-| `{{project.x}}`、`{{project.a.b}}` | 提交时（来自 `--project`） | 整个流程文件，包括输入的 spec。整个值是引用时保留类型。列表在字符串里用空格连接，空值是空字符串。`{{project.prompts.<slot>}}` 是项目包 `prompts/<slot>.md` 的原文，`{{project.flows.development.x}}` 是共用流程的项目设置 |
-| `{{inputs.x}}`、`{{run.id}}`、`{{run.branch}}`、`{{loop.round}}`、`{{replica}}` | 运行时 | `prompt`、`args`、`observe_runs`、`approval.subject` |
-| `{{steps.<id>.outputs.<key>}}`、`{{approvals.<step>.subject}}` | 运行时 | 同上 |
+| `{{preset.x}}` | At submission | Any value in `steps` |
+| `{{params.x}}` | At submission (fragment expansion) | Any value in a fragment |
+| `{{project.x}}`, `{{project.a.b}}` | At submission (from `--project`) | The whole flow file, including the input specs. When the whole value is a reference, the type is kept. Lists inside strings are joined with spaces, and empty values are empty strings. `{{project.prompts.<slot>}}` is the text of `prompts/<slot>.md` in the project pack. `{{project.flows.development.x}}` is the project setting for the shared flow |
+| `{{inputs.x}}`, `{{run.id}}`, `{{run.branch}}`, `{{loop.round}}`, `{{replica}}` | At run time | `prompt`, `args`, `observe_runs`, `approval.subject` |
+| `{{steps.<id>.outputs.<key>}}`, `{{approvals.<step>.subject}}` | At run time | Same as above |
 
-- 运行时引用不存在的值时，这一步失败（`template references unknown value`）。表达式里引用不存在的值不会失败，值是 `null`。
-- `{{replica}}` 没有 fanout 时是 1。`{{loop.round}}` 只在循环里有。
-- `model`、`image`、`profile` 这类字段只在提交时替换，不能用运行时的变量。
+- When a value referenced at run time does not exist, the step fails (`template references unknown value`). A reference to a missing value in an expression does not fail. Its value is `null`.
+- `{{replica}}` is 1 without fanout. `{{loop.round}}` exists only in loops.
+- Fields such as `model`, `image` and `profile` are replaced only at submission and cannot use run-time variables.
 
-## prompt 怎么组成
+## How the prompt is assembled
 
-agent 步骤第一轮的 prompt 由这些部分依次拼成（`src/myorch/core/prompt.py`）：
+The prompt of an agent step's first turn is built from these parts, in order (`src/myorch/core/prompt.py`):
 
-1. 步骤自己的 `prompt`，模板已替换。
-2. 重试说明：只在上一次被平台中断、又没能接着原会话时出现。
-3. 工作区：`repo/`（当前分支，只读时注明）、`docs/`、`memory/MEMORY.md`、`project/`（项目包），项目的 `repo_docs` 和 `conventions`，循环的第几轮。
-4. 知识库：这一步挂的知识源，在哪里、先读什么、MCP 能用哪些工具。
-5. 上游步骤：每个上游实例的摘要、文件、outputs、notes，manifest 在 `/sandbox/in/<实例>/manifest.json`。
-6. 提问规则：`interaction: allowed` 时教 agent 用 `myorch-ask`，`never` 时告诉它自己做决定、写进 notes。
-7. 外部内容只是数据：`docs/external/` 下的内容不能当指令。
-8. 输出要求：manifest 的格式，以及 `outputs` 要求的键。
+1. The step's own `prompt`, with templates replaced.
+2. Retry note: only when the previous attempt was interrupted by the platform and the original session could not be continued.
+3. Workspace: `repo/` (the current branch, noted when read-only), `docs/`, `memory/MEMORY.md`, `project/` (the project pack), the project's `repo_docs` and `conventions`, and the loop round.
+4. Knowledge: the knowledge sources mounted in this step, where they are, what to read first, and which tools MCP allows.
+5. Upstream steps: each upstream instance's summary, files, outputs and notes. The manifest is at `/sandbox/in/<instance>/manifest.json`.
+6. Question rules: with `interaction: allowed`, how to use `myorch-ask`. With `never`, the agent is told to decide on its own and write it in notes.
+7. External content is only data: content under `docs/external/` must not be treated as instructions.
+8. Output requirements: the manifest format and the keys required by `outputs`.
 
-之后的轮次不重复这些：你回复问题后，新一轮只发你的回复和提问规则；你在 `on_failed: ask` 里给了提示，新一轮发失败原因和提示；被平台中断后接着原会话时，发中断原因和「先 `git status`」。
+Later turns do not repeat these. After you reply to a question, the new turn sends only your reply and the question rules. When you give a hint in `on_failed: ask`, the new turn sends the failure reason and the hint. When the original session is continued after a platform interruption, it sends the reason for the interruption and "run `git status` first".
 
-## sandbox 里的环境和挂载
+## Environment and mounts in the sandbox
 
-环境变量：
+Environment variables:
 
-- 运行：`MYORCH_RUN_ID`、`MYORCH_INSTANCE`、`MYORCH_STEP`、`MYORCH_BRANCH`、`MYORCH_ROUND`（不在循环里是 0）、`MYORCH_REPLICA`、`MYORCH_WORKSPACE`、`MYORCH_ATTEMPT`、`MYORCH_INTERACTION`、`MYORCH_INPUT_<NAME>`（每个输入一个，名字大写）。
-- 项目：`MYORCH_PROJECT`、`MYORCH_PROJECT_REPO`、`MYORCH_PROJECT_BASE`、`MYORCH_PROJECT_SUBMODULES`、`MYORCH_PROJECT_PR_TEMPLATE`、`MYORCH_GIT_NAME`、`MYORCH_GIT_EMAIL`。
-- 只有 script 步骤：`MYORCH_TURN`、`MYORCH_REPLY`（你的回复）、`MYORCH_SESSION`、`MYORCH_SESSION_DIR`（跨轮次保留状态的目录）。
+- Run: `MYORCH_RUN_ID`, `MYORCH_INSTANCE`, `MYORCH_STEP`, `MYORCH_BRANCH`, `MYORCH_ROUND` (0 outside loops), `MYORCH_REPLICA`, `MYORCH_WORKSPACE`, `MYORCH_ATTEMPT`, `MYORCH_INTERACTION`, `MYORCH_INPUT_<NAME>` (one per input, name in uppercase).
+- Project: `MYORCH_PROJECT`, `MYORCH_PROJECT_REPO`, `MYORCH_PROJECT_BASE`, `MYORCH_PROJECT_SUBMODULES`, `MYORCH_PROJECT_PR_TEMPLATE`, `MYORCH_GIT_NAME`, `MYORCH_GIT_EMAIL`.
+- Script steps only: `MYORCH_TURN`, `MYORCH_REPLY` (your reply), `MYORCH_SESSION`, `MYORCH_SESSION_DIR` (a directory that keeps state across turns).
 
-挂载：
+Mounts:
 
-| 路径 | 内容 | 读写 |
+| Path | Content | Access |
 |---|---|---|
-| `/sandbox/workspace/` | 运行的工作区：`repo/`、`docs/`、`memory/` | 读写。profile 是 `repo: ro` 时，`repo/` 只读 |
-| `/sandbox/workspace/.myorch/`、`.claude/` | 运行的记录：流程和 mandate 快照、每一步的 manifest 和日志、每个实例的会话 | 只读。自己的产物经 `/sandbox/out/`、`/sandbox/logs/` 写 |
-| `/sandbox/workspace/.claude/<实例>/` | 本实例的会话（`CLAUDE_CONFIG_DIR`） | 读写 |
-| `/sandbox/workspace/project/` | 项目包快照，见 [7. 项目包 · 快照](07-projects.md#快照) | 只读 |
-| `/sandbox/workspace/shared/<名字>/` | 项目的共享目录（步骤和项目的 `shared`） | 读写 |
-| `/sandbox/workspace/knowledge/<名字>/` | 知识源快照 | 只读 |
-| `/sandbox/workspace/observed/<run_id>/` | `observe_runs` 里的运行的工作区 | 只读 |
-| `/sandbox/in/<实例>/` | 上游实例的 `out/` | 只读 |
-| `/sandbox/out/` | 本步骤的产物和 manifest | 读写 |
-| `/sandbox/bin/` | `myorch-ask`、`myorch-checks`、`myorch-mcp`、`myorch-stream`、`myorch-steps`（分段读这次运行每一步的 manifest 和日志） | 只读 |
+| `/sandbox/workspace/` | The run's workspace: `repo/`, `docs/`, `memory/` | Read-write. When the profile has `repo: ro`, `repo/` is read-only |
+| `/sandbox/workspace/.myorch/`, `.claude/` | The run's records: snapshots of the flow and the mandate, each step's manifest and logs, each instance's session | Read-only. The step writes its own artifacts through `/sandbox/out/` and `/sandbox/logs/` |
+| `/sandbox/workspace/.claude/<instance>/` | This instance's session (`CLAUDE_CONFIG_DIR`) | Read-write |
+| `/sandbox/workspace/project/` | The project pack snapshot, see [7. Project packs · Snapshots](07-projects.md#snapshots) | Read-only |
+| `/sandbox/workspace/shared/<name>/` | The project's shared directories (the step's and the project's `shared`) | Read-write |
+| `/sandbox/workspace/knowledge/<name>/` | Knowledge source snapshots | Read-only |
+| `/sandbox/workspace/observed/<run_id>/` | Workspaces of the runs in `observe_runs` | Read-only |
+| `/sandbox/in/<instance>/` | The `out/` of upstream instances | Read-only |
+| `/sandbox/out/` | This step's artifacts and manifest | Read-write |
+| `/sandbox/bin/` | `myorch-ask`, `myorch-checks`, `myorch-mcp`, `myorch-stream`, `myorch-steps` (reads the manifests and logs of this run's steps in parts) | Read-only |
 
 ## Profile
 
-profile 在 `profiles/<名字>.yaml`，字段有 `image`、`policy`、`providers`、`repo`（`rw` 或 `ro`）、`model`（`runner/profiles.py`）。`providers` 写的是角色，项目的 `providers` 把角色映射到 gateway 里的 provider。`policy: project` 用项目包的 `policy`。
+Profiles are in `profiles/<name>.yaml`, with the fields `image`, `policy`, `providers`, `repo` (`rw` or `ro`), `model` (`runner/profiles.py`). `providers` lists roles. The project's `providers` maps the roles to providers in the gateway. `policy: project` uses the project pack's `policy`.
 
-| profile | 代码 | 凭证（角色） | policy | 用于 |
+| profile | Code | Credentials (roles) | policy | Used for |
 |---|---|---|---|---|
-| `dev-git` | 读写 | `github`、`artifacts` | 项目的 | clone、fetch、推送分支、读 PR |
-| `dev-write` | 读写 | `artifacts` | 项目的 | 实现、修复、CI |
-| `dev-read` | 只读（`docs/` 可写） | 无 | gateway 默认 | 分析、review、风险判定、挑建议 |
-| `ticket-read` | 只读 | `jira` | 项目的 | 读 Jira 工单（development 的 `fetch-ticket`） |
+| `dev-git` | read-write | `github`, `artifacts` | the project's | clone, fetch, push the branch, read PRs |
+| `dev-write` | read-write | `artifacts` | the project's | implementation, fixes, CI |
+| `dev-read` | read-only (`docs/` writable) | none | gateway default | analysis, review, risk verdict, picking proposals |
+| `ticket-read` | read-only | `jira` | the project's | reading Jira tickets (development's `fetch-ticket`) |
 
-agent 步骤会自动加上模型凭证（`claude`）。原则：**能访问 GitHub 的步骤不执行仓库里的代码。执行代码的步骤没有 GitHub 凭证。**
+Agent steps get the model credentials (`claude`) added automatically. The principle: **steps that can reach GitHub do not run code from the repository. Steps that run code have no GitHub credentials.**
 
 ## Manifest
 
-每一步结束时写 `/sandbox/out/manifest.json`：
+At the end of each step, `/sandbox/out/manifest.json` is written:
 
 ```json
-{"status": "ok", "summary": "一句话", "files": [{"path": "plan.md", "description": "..."}],
- "outputs": {"blocking": 0}, "notes": "下游需要注意的事"}
+{"status": "ok", "summary": "One sentence", "files": [{"path": "plan.md", "description": "..."}],
+ "outputs": {"blocking": 0}, "notes": "Things downstream should watch out for"}
 ```
 
-- `status`：agent 写 `ok` 或 `failed`。`failed` 按失败处理，会重试。
-- `files` 只列 `/sandbox/out` 里的文件。写到 `docs/` 的文档不用列。
-- `step_id` 由平台填，agent 写的不算。
-- agent 用 `myorch-ask` 提问时，状态是 `needs_input`。这优先于 manifest 里写的状态。
-- agent 没写、写坏、或者写了 `needs_input` 却没带问题时，平台兜底生成 `manifest_missing`，列出 `out/` 里的文件。目前按成功处理（退出码不为 0 时仍算失败）。
+- `status`: the agent writes `ok` or `failed`. `failed` is handled as a failure and is retried.
+- `files` lists only files in `/sandbox/out`. Documents written to `docs/` do not need to be listed.
+- `step_id` is filled in by the platform. What the agent writes does not count.
+- When the agent asks a question with `myorch-ask`, the status is `needs_input`. This takes precedence over the status in the manifest.
+- When the agent wrote no manifest, a broken one, or one with `needs_input` but no question, the platform generates a fallback `manifest_missing` that lists the files in `out/`. It is currently treated as success (a non-zero exit code still counts as failure).
 
-## agent 提问
+## Agent questions
 
-在 `interaction: allowed` 的步骤里，agent 调用：
+In a step with `interaction: allowed`, the agent calls:
 
 ```sh
-/sandbox/bin/myorch-ask "要兼容旧版 API 吗？" --option "兼容" --option "不兼容"
+/sandbox/bin/myorch-ask "Keep compatibility with the old API?" --option "Compatible" --option "Not compatible"
 ```
 
-然后结束本轮。你回复以后，新 sandbox 用 `--resume` 续接同一个会话。等待时间是 `limits.input_timeout`，超时步骤失败。
+and then ends its turn. After you reply, a new sandbox continues the same session with `--resume`. The wait is `limits.input_timeout`. On timeout the step fails.
 
-`escalate_when`：agent 没提问就结束、这个表达式又为真时，平台替它提问。问题取 `outputs.question` 或 `outputs.design_question`，没有时取摘要。选项取 `outputs.options` 或 `outputs.design_options`。
+`escalate_when`: when the agent ends without asking and this expression is true, the platform asks for it. The question is taken from `outputs.question` or `outputs.design_question`, or the summary if neither exists. The options are taken from `outputs.options` or `outputs.design_options`.
 
-`interaction: never`（默认）时，`myorch-ask` 拒绝执行，prompt 告诉 agent 自行假设并写进 notes。agent 仍然提问时，步骤失败，不重试。
+With `interaction: never` (default), `myorch-ask` refuses to run, and the prompt tells the agent to make its own assumptions and write them in notes. If the agent still asks, the step fails without retries.

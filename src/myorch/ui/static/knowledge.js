@@ -5,8 +5,8 @@
 "use strict";
 
 const KN = { project: undefined, rows: null, picked: new Set(), touched: false, error: "" };
-const KIND_LABEL = { dir: "文件夹", git: "git", mcp: "MCP" };
-const LEVEL_LABEL = { global: "全局", template: "模板", project: "项目" };
+const KIND_LABEL = { dir: "folder", git: "git", mcp: "MCP" };
+const LEVEL_LABEL = { global: "global", template: "template", project: "project" };
 
 // What the start sends: the checked names, or null (the project's defaults) while the list is unknown.
 function knowledgeSelection() {
@@ -37,23 +37,23 @@ async function loadKnowledgePick() {
 function renderKnowledgePick() {
   const box = $("#sfKnowledge");
   if (!box) return;
-  if (KN.error) { box.replaceChildren(el("div", { class: "warn small", text: `读不到知识库列表：${KN.error}。启动时用项目的默认知识库。` })); return; }
+  if (KN.error) { box.replaceChildren(el("div", { class: "warn small", text: `Cannot read the knowledge list: ${KN.error}. The run starts with the project's default knowledge.` })); return; }
   if (!KN.rows || !KN.rows.length) { box.replaceChildren(); return; }
   const item = (r) => {
     const ok = knowledgeUsable(r);
-    const why = r.problems.length ? r.problems.join("；") : (!r.latest && r.kind !== "mcp" ? "还没同步过：启动运行时会先同步" : "");
+    const why = r.problems.length ? r.problems.join("; ") : (!r.latest && r.kind !== "mcp" ? "Not synced yet: it syncs when the run starts" : "");
     const box = el("input", { type: "checkbox", disabled: ok ? null : "disabled" });
     box.checked = KN.picked.has(r.name);
     box.addEventListener("change", () => { KN.touched = true; if (box.checked) KN.picked.add(r.name); else KN.picked.delete(r.name); });
-    const when = r.kind === "mcp" ? "实时查询" : r.latest ? `同步于 ${fmtTime(r.latest.synced_at)} · ${r.latest.files} 个文件` : "启动时同步";
+    const when = r.kind === "mcp" ? "live queries" : r.latest ? `synced ${fmtTime(r.latest.synced_at)} · ${r.latest.files} files` : "syncs at start";
     return el("label", { class: `kitem${ok ? "" : " off"}`, title: why || r.expanded || r.where },
       box, el("span", { class: "kname", text: r.name }),
       el("span", { class: "tag", text: KIND_LABEL[r.kind] || r.kind }), el("span", { class: "tag ghost", text: LEVEL_LABEL[r.level] || r.level }),
       el("span", { class: "kwhen", text: when }),
       why ? el("span", { class: "kwhy", text: why }) : null);
   };
-  box.replaceChildren(el("div", { class: "khead" }, el("span", { text: "知识库" }),
-    el("span", { class: "muted small", text: "只读挂进每个 agent 步骤，版本在启动时固定" })),
+  box.replaceChildren(el("div", { class: "khead" }, el("span", { text: "Knowledge" }),
+    el("span", { class: "muted small", text: "Mounted read-only into every agent step. The version is fixed at start." })),
     el("div", { class: "klist" }, KN.rows.map(item)));
 }
 
@@ -62,16 +62,16 @@ function renderKnowledgePick() {
 
 function renderKnowledgeUse(out, d) {
   const kids = [];
-  if (!d.transcripts) kids.push(el("p", { class: "muted small", text: "这个步骤没有会话记录（脚本步骤，或者还没开始）。" }));
-  else if (!d.queries.length && !d.reads.length) kids.push(el("p", { class: "muted small", text: "这个步骤没有用到知识库。" }));
+  if (!d.transcripts) kids.push(el("p", { class: "muted small", text: "This step has no transcript (a script step, or not started yet)." }));
+  else if (!d.queries.length && !d.reads.length) kids.push(el("p", { class: "muted small", text: "This step did not use the knowledge." }));
   if (d.reads.length) {
-    kids.push(el("div", { class: "muted small", text: `读了 ${d.reads.length} 次知识库文件` }),
+    kids.push(el("div", { class: "muted small", text: `Read knowledge files ${d.reads.length} times` }),
       el("div", { class: "filelist" }, d.reads.map((r) => el("div", { class: "f", title: JSON.stringify(r.input) },
         el("span", { class: "tag", text: r.tool }), " ", (r.target || "").replace("/sandbox/workspace/knowledge/", "")))));
   }
   if (d.queries.length) {
-    kids.push(el("div", { class: "muted small", text: `查询了 ${d.queries.length} 次 MCP 知识库` }));
-    d.queries.forEach((q, n) => kids.push(fileView({ path: "result.json", title: `${n + 1}. ${q.tool} ${JSON.stringify(q.input)}`, text: q.result || "（没有返回内容）", html: null })));
+    kids.push(el("div", { class: "muted small", text: `Queried MCP knowledge ${d.queries.length} times` }));
+    d.queries.forEach((q, n) => kids.push(fileView({ path: "result.json", title: `${n + 1}. ${q.tool} ${JSON.stringify(q.input)}`, text: q.result || "(no result)", html: null })));
   }
   out.replaceChildren(...kids);
 }

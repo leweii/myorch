@@ -1,275 +1,275 @@
-# 3. 架构
+# 3. Architecture
 
-服务怎么起、谁依赖谁见 [2. 服务和依赖](02-services.md)。完整的设计理由见 [ARCHITECTURE.md](../ARCHITECTURE.md)。
+For how services start and what depends on what, see [2. Services and dependencies](02-services.md). For the full design rationale, see [ARCHITECTURE.md](../ARCHITECTURE.md).
 
-## 技术栈
+## Tech stack
 
-| 层 | 用什么 | 负责 |
+| Layer | What it uses | Responsible for |
 |---|---|---|
-| 入口 | Python CLI（argparse）。`myorch serve`：控制台（Starlette + uvicorn，静态 HTML/JS）、Slack 适配器（slack-sdk，Socket Mode）。Claude Code channel（MCP 服务器，aiohttp 访问 HTTP 接口） | 发起、查看、回复、审批 |
-| 流程引擎 | Temporal dev server，Python SDK `temporalio` | 持久状态、重试、超时、等待人工信号、取消、定时触发（Schedule） |
-| 核心库 | Python 3.12，pydantic、pyyaml | 流程 schema、调度规划、表达式、输入规则、prompt 组装、manifest、事件 |
-| 沙箱 | OpenShell 0.1.6（gateway + supervisor），Docker driver | sandbox 生命周期、凭证注入、网络 policy、Landlock 文件系统隔离 |
-| 存储 | Docker volume `myorch-artifacts`。宿主机目录 `myorch-data`（SQLite `events.db` 等） | volume：工作区、项目包和知识源快照、共享缓存、辅助命令。`myorch-data`：事件日志和本机状态 |
-| agent | Claude Code CLI（`claude -p`），装在 sandbox 镜像里（`images/claude-code`） | 执行 agent 步骤 |
-| 开发工具 | uv、pytest、import-linter | 依赖、测试、分层检查 |
+| Entry points | Python CLI (argparse). `myorch serve`: the console (Starlette + uvicorn, static HTML/JS), the Slack adapter (slack-sdk, Socket Mode). The Claude Code channel (MCP server, aiohttp for the HTTP interface) | Start, view, reply, approve |
+| Flow engine | Temporal dev server, Python SDK `temporalio` | Durable state, retries, timeouts, waiting for human signals, cancellation, scheduled triggers (Schedule) |
+| Core library | Python 3.12, pydantic, pyyaml | Flow schema, scheduling plan, expressions, input rules, prompt assembly, manifest, events |
+| Sandbox | OpenShell 0.1.6 (gateway + supervisor), Docker driver | Sandbox lifecycle, credential injection, network policy, Landlock filesystem isolation |
+| Storage | Docker volume `myorch-artifacts`. Host directory `myorch-data` (SQLite `events.db` and others) | volume: workspaces, project pack and knowledge source snapshots, shared caches, helper commands. `myorch-data`: event log and local state |
+| agent | Claude Code CLI (`claude -p`), installed in the sandbox image (`images/claude-code`) | Executes agent steps |
+| Dev tools | uv, pytest, import-linter | Dependencies, tests, layer checks |
 
-## 分层
+## Layers
 
 <!-- diagram: layers.html -->
 
-图的文件：[diagrams/layers.html](diagrams/layers.html)。
+Diagram file: [diagrams/layers.html](diagrams/layers.html).
 
-依赖方向：`engines → runner → storage → core`。`uv run lint-imports` 检查 `pyproject.toml` 里的两条规则：
+Dependency direction: `engines → runner → storage → core`. `uv run lint-imports` checks two rules in `pyproject.toml`:
 
-- 这四层只能向下依赖。
-- `core`、`storage`、`runner` 不能 import `temporalio`（间接 import 也不行）。
+- These four layers may only depend downward.
+- `core`, `storage` and `runner` must not import `temporalio` (not even indirectly).
 
-`core` 不做 IO、只 import `core` 自己，这一条靠约定，lint 不检查。
+That `core` does no IO and imports only `core` itself is a convention; lint does not check it.
 
-四层之外还有两类模块，lint 的分层规则不管它们：
+Outside the four layers there are two kinds of modules that the lint layer rules do not cover:
 
-- **领域模块**：`project.py`、`knowledge.py`、`evals.py`、`takeaways.py`、`trail.py`、`runs.py`、`localrepo.py`、`flowfile.py`。它们只依赖 `core`。`runner`（宿主机动作）和 `storage` 用它们。
-- **入口**：`cli.py`、`channels/`、`ui/`、`watchdog.py`、`review_page.py`。它们可以用所有下层，发命令经过 `engines/temporal/client.py`。
+- **Domain modules**: `project.py`, `knowledge.py`, `evals.py`, `takeaways.py`, `trail.py`, `runs.py`, `localrepo.py`, `flowfile.py`. They depend only on `core`. `runner` (host actions) and `storage` use them.
+- **Entry points**: `cli.py`, `channels/`, `ui/`, `watchdog.py`, `review_page.py`. They may use all the lower layers, and send commands through `engines/temporal/client.py`.
 
-## 组件图
+## Component diagram
 
 <!-- diagram: components.html -->
 
-图的文件：[diagrams/components.html](diagrams/components.html)。
+Diagram file: [diagrams/components.html](diagrams/components.html).
 
-## 职责边界
+## Responsibility boundaries
 
-| 关注点 | 负责方 | 说明 |
+| Concern | Owner | Notes |
 |---|---|---|
-| 原始凭证 | OpenShell gateway | 其他组件只接触 provider 的名字 |
-| 网络和文件系统权限 | OpenShell policy | 步骤的 profile 选择用哪个 policy |
-| 调度、重试、取消、等人 | 流程引擎 | 调度逻辑在 `core/run.py`，引擎只驱动 |
-| 产物和 manifest | volume `myorch-artifacts` | **以 volume 为准**。Temporal 里的状态只是缓存 |
-| 交付 | 流程的 `deliver` 步骤（脚本，profile `dev-git`） | 审批后只推送批准的那个提交，写 `docs/delivery.md`。不调用平台 API，不开 PR |
-| 人的交互 | 控制台、Slack | 发起、回复、审批。CLI 能做同样的事。Claude Code channel 能做除审批以外的事 |
-| 和外部系统通信 | channel 层（`channels/`） | 引擎只写事件，不轮询外部系统。适配器：控制台、Slack、Claude Code channel |
+| Raw credentials | OpenShell gateway | Other components touch only provider names |
+| Network and filesystem permissions | OpenShell policy | The step's profile chooses which policy to use |
+| Scheduling, retries, cancellation, waiting for people | Flow engine | The scheduling logic is in `core/run.py`; the engine only drives it |
+| Artifacts and manifests | volume `myorch-artifacts` | **The volume is the source of truth.** The state in Temporal is only a cache |
+| Delivery | The flow's `deliver` step (script, profile `dev-git`) | After approval, pushes only the approved commit and writes `docs/delivery.md`. Calls no platform API and opens no PR |
+| Human interaction | Console, Slack | Start, reply, approve. The CLI can do the same. The Claude Code channel can do everything except approve |
+| Communication with external systems | The channel layer (`channels/`) | The engine only writes events and does not poll external systems. Adapters: console, Slack, Claude Code channel |
 
-## 代码地图
+## Code map
 
 ```
 src/myorch/
-  cli.py                 所有命令的入口
-  flowfile.py            读 flow 文件，按项目裁剪、展开片段，按项目看输入，读 role 和 projects（客户端）
-  project.py             项目包：加载、模板继承、快照同步、可写范围（EDITABLE）、生成 GitHub profile
-  knowledge.py           知识源：登记、快照、密钥扫描、MCP 配置
-  runs.py                运行记录（list、learn 选运行用）；运行的标签
-  trail.py               从事件日志整理多个运行的经过（learn 用）；接着改时的对话记录
-  takeaways.py           learn 已经读过哪些 takeaway（存在 myorch-data）
-  evals.py               reviewer 评测的案例
-  localrepo.py           用本机克隆填充新运行的 repo/
-  watchdog.py            检查运行中的步骤有没有进展（在 myorch serve 里跑）
-  review_page.py         myorch review 生成的审批单页
-  core/                  纯逻辑，不做 IO
-    flow.py              流程 schema 和校验，role_of
-    fragment.py          use: 片段、presets 和流程层 if:（按项目裁剪步骤和输入）的展开
-    inputs.py            输入的类型和规则（CLI、控制台、Slack 共用），标签的匹配
-    expr.py              条件表达式（不用 eval）
-    run.py               RunState：实例展开、调度规划、审批、重试、reopen ← 调度的核心
-    prompt.py            prompt 组装
-    manifest.py          manifest schema 和兜底
-    events.py            从 RunState 算出要发布的事件
-    runtrail.py          一个运行到现在的经过（run-trail 动作用）
-    types.py             StepKey、StepResult、RunContext
+  cli.py                 Entry point for all commands
+  flowfile.py            Reads flow files, tailors them per project, expands fragments, shows inputs per project, reads role and projects (client side)
+  project.py             Project packs: loading, template inheritance, snapshot sync, writable scope (EDITABLE), generating GitHub profiles
+  knowledge.py           Knowledge sources: registration, snapshots, secret scanning, MCP configuration
+  runs.py                Run records (for list, and for learn choosing runs); run tags
+  trail.py               Assembles the history of several runs from the event log (for learn); the conversation record when continuing a run
+  takeaways.py           Which takeaways learn has already read (stored in myorch-data)
+  evals.py               Cases for reviewer evals
+  localrepo.py           Fills a new run's repo/ from a local clone
+  watchdog.py            Checks whether running steps are making progress (runs inside myorch serve)
+  review_page.py         The single approval page generated by myorch review
+  core/                  Pure logic, no IO
+    flow.py              Flow schema and validation, role_of
+    fragment.py          Expansion of use: fragments, presets and flow-level if: (tailoring steps and inputs per project)
+    inputs.py            Input types and rules (shared by the CLI, console and Slack), label matching
+    expr.py              Condition expressions (no eval)
+    run.py               RunState: instance expansion, scheduling plan, approvals, retries, reopen ← the core of scheduling
+    prompt.py            Prompt assembly
+    manifest.py          Manifest schema and fallback
+    events.py            Computes the events to publish from RunState
+    runtrail.py          A run's history so far (for the run-trail action)
+    types.py             StepKey, StepResult, RunContext
   storage/
-    base.py              ArtifactStore 协议和 volume 布局
-    docker_volume.py     用辅助容器操作 volume（macOS 宿主机看不到 volume 内部）
-    events.py            事件日志（SQLite，只追加）。宿主机上经控制台读（HttpEventLog）
+    base.py              ArtifactStore protocol and volume layout
+    docker_volume.py     Operates the volume through helper containers (the macOS host cannot see inside the volume)
+    events.py            Event log (SQLite, append-only). Read through the console on the host (HttpEventLog)
   runner/
-    runner.py            StepRunner：一轮步骤从头到尾
-    openshell.py         openshell CLI 封装、挂载参数，读 supervisor 日志
-    profiles.py          profile 加载
-    harnesses/           harness adapter：每种 agent 怎么启动（base.py）
+    runner.py            StepRunner: one turn of a step from start to end
+    openshell.py         openshell CLI wrapper, mount arguments, reading supervisor logs
+    profiles.py          Profile loading
+    harnesses/           Harness adapters: how each agent is started (base.py)
       claude_code.py     Claude Code
-      script.py          shell 脚本
-    actions.py           宿主机动作（5 个，见 8. 流程语法）
-    jobs.py              一次性 sandbox 任务：git 知识源的克隆、Watchdog 的判断
+      script.py          Shell scripts
+    actions.py           Host actions (5 of them, see 8. Flow syntax)
+    jobs.py              One-off sandbox jobs: cloning git knowledge sources, Watchdog judgments
   engines/temporal/
     workflow.py          FlowWorkflow
-    activities.py        activity：只做参数转换
-    schedules.py         定时触发：ScheduledLaunch
-    replay.py            起一个 eval 回放运行
-    worker.py、client.py、models.py
+    activities.py        activities: only convert arguments
+    schedules.py         Scheduled triggers: ScheduledLaunch
+    replay.py            Starts an eval replay run
+    worker.py, client.py, models.py
   ui/
-    app.py               控制台的网页服务和 JSON API
-    service.py           控制台的读写逻辑，经过 channel 转发层
-    runview.py           用事件拼出一个运行的状态
-    flowgraph.py         流程定义的展开图
-    static/              页面（HTML、JS、CSS）
-  channels/              channel 层
-    relay.py             转发层：事件、命令、内容
-    http.py              转发层的 HTTP 和 SSE 接口（/channel）
-    model.py             channels.yaml：身份对应、Watchdog 设置
-    serve.py             myorch serve：转发层 + 控制台 + Slack 适配器 + Watchdog
-    slack.py             Slack 适配器：私信线程、提问、审批按钮、/myorch 发起
-    claude_code.py       Claude Code channel：本机 MCP 服务器，推送事件，提供工具（单独的进程）
+    app.py               The console's web server and JSON API
+    service.py           The console's read and write logic, through the channel relay layer
+    runview.py           Builds a run's state from events
+    flowgraph.py         The expanded graph of a flow definition
+    static/              Pages (HTML, JS, CSS)
+  channels/              The channel layer
+    relay.py             Relay layer: events, commands, contents
+    http.py              HTTP and SSE interface of the relay layer (/channel)
+    model.py             channels.yaml: identity mapping, Watchdog settings
+    serve.py             myorch serve: relay layer + console + Slack adapter + Watchdog
+    slack.py             Slack adapter: DM threads, questions, approval buttons, starting runs with /myorch
+    claude_code.py       Claude Code channel: local MCP server, pushes events, provides tools (a separate process)
 
-flows/                   流程（flows/lib/ 是片段）。说明见流程手册 docs/workflows/
-profiles/                sandbox 的 profile：dev-git、dev-write、dev-read、ticket-read
-tools/                   sandbox 里的辅助命令（myorch init 装进 volume）
-images/claude-code/      agent 步骤的默认镜像
-openshell/providers/     provider profile
-channels.yaml            身份对应（谁在哪个平台是哪个账号）
-deploy/                  docker compose：服务、myorch 镜像、gateway 配置、凭证导入（provision.py）、
-                         发布（update.sh）、新机器安装（bootstrap-mac.sh）、冒烟流程（smoke.yaml）
+flows/                   Flows (flows/lib/ holds fragments). Described in the Flow manual docs/workflows/
+profiles/                Sandbox profiles: dev-git, dev-write, dev-read, ticket-read
+tools/                   Helper commands in the sandbox (myorch init installs them into the volume)
+images/claude-code/      Default image for agent steps
+openshell/providers/     Provider profiles
+channels.yaml            Identity mapping (who is which account on which platform)
+deploy/                  docker compose: services, the myorch image, gateway configuration, credentials import (provision.py),
+                         publishing (update.sh), new machine setup (bootstrap-mac.sh), smoke flow (smoke.yaml)
 ```
 
-## 一个步骤怎么执行
+## How a step executes
 
 <!-- diagram: step-execution.html -->
 
-图的文件：[diagrams/step-execution.html](diagrams/step-execution.html)。
+Diagram file: [diagrams/step-execution.html](diagrams/step-execution.html).
 
-- 一个实例一个 sandbox，不复用。sandbox 创建后，policy 就锁死了。
-- sandbox 名字是 `<流程>-<步骤>-<哈希5>`，例如 development 的 develop 步骤是 `dev-deve-3f2a9`。哈希由 run、步骤、attempt、turn 算出。流程共用，名字里没有项目。OpenShell 限制名字最长 19 个字符，完整的 id 放在 label 上（`myorch.run`、`myorch.step`、`myorch.attempt`、`myorch.turn`、`myorch.model`，以及项目 `myorch.project`）。
-- sandbox 由 `run_step` 自己删除。删除前，supervisor 日志存到步骤的 `logs/supervisor-<attempt>-<turn>.log`。`cleanup_step` 只在 `run_step` 异常结束时（worker 崩溃、心跳超时）补删。
-- 宿主机动作（`action:`）不起 sandbox，由 worker 直接执行（activity `run_action`）。只有 `runner/actions.py` 里注册的动作可用，目前有 5 个，见 [8. 流程语法 · 宿主机动作](08-flow-syntax.md#宿主机动作)。动作的 manifest 也写进 `out/`，后面的 sandbox 能挂载它。
+- One sandbox per instance, never reused. Once the sandbox is created, its policy is locked.
+- The sandbox name is `<flow>-<step>-<hash5>`, for example `dev-deve-3f2a9` for the develop step of development. The hash is computed from the run, the step, the attempt and the turn. Flows are shared, so the name contains no project. OpenShell limits names to 19 characters, so the full ids are put on labels (`myorch.run`, `myorch.step`, `myorch.attempt`, `myorch.turn`, `myorch.model`, and the project `myorch.project`).
+- `run_step` deletes the sandbox itself. Before deleting it, it saves the supervisor log to the step's `logs/supervisor-<attempt>-<turn>.log`. `cleanup_step` deletes it only when `run_step` ends abnormally (worker crash, heartbeat timeout).
+- Host actions (`action:`) start no sandbox; the worker executes them directly (activity `run_action`). Only the actions registered in `runner/actions.py` are available; there are 5 now, see [8. Flow syntax · Host actions](08-flow-syntax.md#host-actions). An action's manifest is also written into `out/`, and later sandboxes can mount it.
 
-## 运行怎么继续
+## How a run continues
 
-一个步骤或一个运行没走完，有四种办法接着做。
+When a step or a run did not finish, there are four ways to continue it.
 
 <!-- diagram: run-continuation.html -->
 
-图的文件：[diagrams/run-continuation.html](diagrams/run-continuation.html)。
+Diagram file: [diagrams/run-continuation.html](diagrams/run-continuation.html).
 
-| 办法 | 谁触发 | 运行 | 会话和 sandbox |
+| Way | Triggered by | Run | Session and sandbox |
 |---|---|---|---|
-| 自动重试 | `limits.retries` | 同一个运行，同一个步骤，新 attempt | 新 sandbox。上一次是平台中断（超时、activity 丢失、sandbox 起不来）时，接着被中断的会话。运行被取消时不重试 |
-| 失败后问人 | `on_failed: ask` | 同一个运行，等你选 | 选「重新开始」：新 attempt、新会话。写提示：同一个 attempt 的下一轮，接着原会话 |
-| 恢复（`myorch resume`、控制台按钮） | 人，对失败或取消的运行 | 同一个 run id。Temporal 里起一个新的执行，带着原来的状态。工作区和 mandate 不变 | `RunState.reopen` 把失败、取消的步骤和被它们挡住的步骤重置。成功的步骤和审批保留。驳回不重开 |
-| 接着改（输入类型 `run`，例如 development 的 `from_run`） | 人，对已结束的运行 | 新运行，新 run id，同一个项目和角色 | 新工作区。原运行的对话写进 `docs/previous/conversation.md`，`carry` 列出的输入和标签从原运行带过来 |
+| Automatic retry | `limits.retries` | Same run, same step, new attempt | New sandbox. When the previous attempt was interrupted by the platform (timeout, lost activity, sandbox failed to start), it resumes the interrupted session. No retry when the run was cancelled |
+| Ask a person after failure | `on_failed: ask` | Same run, waits for your choice | Choosing **Start over**: new attempt, new session. Writing a hint: the next turn of the same attempt, resuming the original session |
+| Resume (`myorch resume`, the console button) | A person, on a failed or cancelled run | Same run id. A new execution starts in Temporal, carrying the original state. The workspace and mandate do not change | `RunState.reopen` resets failed and cancelled steps and the steps they blocked. Succeeded steps and approvals are kept. Rejections are not reopened |
+| Continue (input type `run`, for example development's `from_run`) | A person, on a finished run | New run, new run id, same project and role | New workspace. The original run's conversation is written to `docs/previous/conversation.md`; the inputs and tags listed in `carry` are carried over from the original run |
 
-失败和重试的规则见 [8. 流程语法 · 失败和重试](08-flow-syntax.md#失败和重试)。`resume` 的用法见 [5. 命令参考](05-cli.md#resume)。
+For the failure and retry rules, see [8. Flow syntax · Failures and retries](08-flow-syntax.md#failures-and-retries). For how to use `resume`, see [5. CLI reference](05-cli.md#resume).
 
-## 凭证怎么流动
+## How credentials flow
 
-图里是工作凭证的路径。工作凭证用来推分支、读工单、访问私有依赖源和模型。渠道凭证（例如 Slack bot token）由 channel 直接管理，不经过 OpenShell，见 [9. 设计原则](09-principles.md#1-凭证分两类agent-都碰不到)。
+The diagram shows the path of work credentials. Work credentials are used to push branches, read tickets, and access private dependency sources and models. Channel credentials (for example the Slack bot token) are managed directly by the channel and do not go through OpenShell; see [9. Design principles](09-principles.md#1-two-kinds-of-credentials-agents-reach-neither).
 
 <!-- diagram: credential-flow.html -->
 
-图的文件：[diagrams/credential-flow.html](diagrams/credential-flow.html)。
+Diagram file: [diagrams/credential-flow.html](diagrams/credential-flow.html).
 
-worker、控制台、CLI 和 agent 都拿不到真实 token。控制台进程也会起 sandbox（git 知识源的克隆、Watchdog 的判断，见 `runner/jobs.py`），同样只传 provider 的名字。
+The worker, the console, the CLI and the agent never get real tokens. The console process also starts sandboxes (cloning git knowledge sources, Watchdog judgments, see `runner/jobs.py`), and it too passes only provider names.
 
-在 docker compose 里，两类凭证各有一个文件，都在 `deploy/secrets/`（不进 git，不进镜像）：
+In docker compose, each of the two kinds of credentials has one file, both in `deploy/secrets/` (not in git, not in images):
 
-| 文件 | 凭证 | 谁读 | 去哪里 |
+| File | Credentials | Read by | Where they go |
 |---|---|---|---|
-| `providers.yaml` | 工作凭证（Claude、GitHub、Azure Artifacts、Jira、Atlassian） | 只有 `providers` 服务（`deploy/provision.py`） | 通过子进程的环境变量交给 `openshell provider create/update`，存进 gateway。值不出现在命令行参数和日志里 |
-| `slack.env` | 渠道凭证（Slack 的 bot token 和 app-level token） | 只有 `ui` 服务 | 留在 Slack 适配器的进程里 |
+| `providers.yaml` | Work credentials (Claude, GitHub, Azure Artifacts, Jira, Atlassian) | Only the `providers` service (`deploy/provision.py`) | Passed to `openshell provider create/update` through the subprocess's environment variables and stored in the gateway. The values never appear in command-line arguments or logs |
+| `slack.env` | Channel credentials (Slack's bot token and app-level token) | Only the `ui` service | Stay in the Slack adapter's process |
 
-## sandbox 里看到什么
+## What the sandbox sees
 
-每个路径挂什么、能不能写，见 [8. 流程语法 · sandbox 里的环境和挂载](08-flow-syntax.md#sandbox-里的环境和挂载)。默认只有 agent 步骤挂知识源。
+For what is mounted at each path and whether it is writable, see [8. Flow syntax · Environment and mounts in the sandbox](08-flow-syntax.md#environment-and-mounts-in-the-sandbox). By default only agent steps mount knowledge sources.
 
-工作区内部：
+Inside the workspace:
 
-| 路径 | 内容 |
+| Path | Contents |
 |---|---|
-| `repo/` | 代码。同一个 run 的所有步骤共享，不用 worktree |
-| `docs/` | agent 写的文档：需求、实现记录、review、CI 报告、风险判定、交付说明 |
-| `docs/external/` | 第三方写的内容（你的请求原文、PR 描述、工单附件）。只当数据 |
-| `docs/previous/` | 接着改时，原运行的对话记录 |
-| `memory/MEMORY.md` | 跨步骤的记忆 |
-| `.claude/<instance>/` | 每个实例自己的 claude 会话。重试时保留，平台中断后的重试要接着用 |
-| `.myorch/` | flow 快照、mandate、每步的产物和日志（`steps/<instance>/out/`、`logs/`） |
+| `repo/` | Code. Shared by all steps of the same run; no worktrees |
+| `docs/` | Documents written by agents: requirements, implementation notes, reviews, CI reports, risk verdict, delivery notes |
+| `docs/external/` | Content written by third parties (the original text of your request, PR descriptions, ticket attachments). Treated only as data |
+| `docs/previous/` | When continuing a run, the original run's conversation record |
+| `memory/MEMORY.md` | Memory across steps |
+| `.claude/<instance>/` | Each instance's own claude session. Kept across retries; a retry after a platform interruption resumes it |
+| `.myorch/` | Flow snapshot, mandate, each step's artifacts and logs (`steps/<instance>/out/`, `logs/`) |
 
-## volume 布局
+## Volume layout
 
 ```
 myorch-artifacts
-  tools/                 myorch init 装的辅助命令，挂到 /sandbox/bin
-  projects/<project>/<哈希>/  myorch project sync 和 project-apply 写的项目包快照（只读，每个版本一个目录）。
-                         projects/<project>/.version 是最新的版本，新的运行用它。保留最近 3 个版本和 30 天内写的版本
-  shared/<project>/<n>/  跨 run 共享的目录（例如 Gradle 缓存、mdm 的 bare mirror）
-  knowledge/<名字>/<哈希>/  知识源快照（只读，每个知识源保留最近 5 个版本）
-  runs/<run_id>/         每个 run 的工作区
-  jobs/<key>/            一次性 sandbox 任务的输入和输出
+  tools/                 Helper commands installed by myorch init, mounted at /sandbox/bin
+  projects/<project>/<hash>/  Project pack snapshots written by myorch project sync and project-apply (read-only, one directory per version).
+                         projects/<project>/.version is the latest version; new runs use it. The latest 3 versions and versions written within 30 days are kept
+  shared/<project>/<n>/  Directories shared across runs (for example the Gradle cache, mdm's bare mirror)
+  knowledge/<name>/<hash>/  Knowledge source snapshots (read-only, the latest 5 versions of each knowledge source are kept)
+  runs/<run_id>/         Each run's workspace
+  jobs/<key>/            Inputs and outputs of one-off sandbox jobs
 ```
 
-不同 run 互相看不到。唯一的例外是 `observe_runs`，它只读。
+Different runs cannot see each other. The only exception is `observe_runs`, which is read-only.
 
-## 宿主机上的数据目录
+## The data directory on the host
 
-`myorch-data`（compose 里挂到容器的 `/data`）放本机的状态。它不在 volume 里，不进 sandbox。
+`myorch-data` (mounted at `/data` in containers in compose) holds local state. It is not in the volume and does not go into sandboxes.
 
-| 路径 | 内容 | 谁写 |
+| Path | Contents | Written by |
 |---|---|---|
-| `events.db` | 事件日志（`events` 表）和运行中步骤的实时输出（`output` 表） | worker |
-| `temporal.db` | Temporal 的数据。已结束的运行保留 24 小时（dev server 默认值） | temporal |
-| `watchdog.json` | Watchdog 的检查记录和告警 | myorch serve |
-| `ui/`、`slack/` | 控制台和 Slack 适配器自己的状态 | myorch serve |
-| `learn/<project>/takeaways.json` | learn 已经读过的 takeaway | 宿主机动作 `takeaways-learned` |
-| `evals/` | 评测数据。reviewer 评测的案例在 `evals/cases/` | `myorch eval collect`、宿主机动作 `postmortem-replay` |
-| `reviews/<run>.html` | `myorch review` 生成的页面 | CLI |
-| `local-repos.yaml` | 本机克隆的位置（seed 用） | 你 |
+| `events.db` | The event log (`events` table) and live output of running steps (`output` table) | worker |
+| `temporal.db` | Temporal's data. Finished runs are kept for 24 hours (the dev server default) | temporal |
+| `watchdog.json` | The Watchdog's check records and alerts | myorch serve |
+| `ui/`, `slack/` | The console's and the Slack adapter's own state | myorch serve |
+| `learn/<project>/takeaways.json` | Takeaways learn has already read | Host action `takeaways-learned` |
+| `evals/` | Eval data. Reviewer eval cases are in `evals/cases/` | `myorch eval collect`, host action `postmortem-replay` |
+| `reviews/<run>.html` | Pages generated by `myorch review` | CLI |
+| `local-repos.yaml` | Locations of local clones (for seeding) | You |
 
-**宿主机上的进程不直接打开 `events.db`。** worker 和控制台在容器里用 SQLite WAL 打开它，宿主机进程不共享它们的锁。宿主机上的 CLI 通过控制台的 `/channel/events.json` 读事件（`storage/events.py` 的 `HttpEventLog`）。排错见 [11. 排错](11-troubleshooting.md)。
+**Processes on the host do not open `events.db` directly.** The worker and the console open it inside containers with SQLite WAL, and host processes do not share their locks. The CLI on the host reads events through the console's `/channel/events.json` (`HttpEventLog` in `storage/events.py`). For troubleshooting, see [11. Troubleshooting](11-troubleshooting.md).
 
-## channel 层
+## The channel layer
 
 <!-- diagram: channel-layer.html -->
 
-图的文件：[diagrams/channel-layer.html](diagrams/channel-layer.html)。
+Diagram file: [diagrams/channel-layer.html](diagrams/channel-layer.html).
 
-channel 层在 myorch 和人用的平台之间转发，自己不保存运行状态。转发层是 `channels/relay.py`，三个方向：
+The channel layer relays between myorch and the platforms people use; it keeps no run state of its own. The relay layer is `channels/relay.py`, with three directions:
 
-| 方向 | 从哪里 | 到哪里 |
+| Direction | From | To |
 |---|---|---|
-| 事件 | worker 写进 `events.db`（`FlowWorkflow` 的 `publish_events`） | 适配器。按 `seq` 顺序读，断开后从上次的 `seq` 接着读，不漏不重 |
-| 命令 | 适配器（发起、回复、审批、驳回、要求修改、取消、恢复） | Temporal client。按 `channels.yaml` 的 `identities` 换成人名 |
-| 内容 | run 的工作区（文档、diff、日志、步骤产物） | 适配器。用的时候读，不复制 |
+| Events | Written by the worker into `events.db` (`publish_events` of `FlowWorkflow`) | Adapters. Read in `seq` order; after a disconnect, reading continues from the last `seq`, with nothing missed or repeated |
+| Commands | Adapters (start, reply, approve, reject, request changes, cancel, resume) | The Temporal client. Mapped to people's names through `identities` in `channels.yaml` |
+| Contents | The run's workspace (docs, diffs, logs, step artifacts) | Adapters. Read when needed, not copied |
 
-- 事件只在运行开始、需要人、结束时说话（`core/events.py`）。新运行另外发详细事件（步骤开始和结束、循环轮次、审批进度、回复），控制台只靠事件就能画出整个运行。
-- 每个运行带标签：调用方给的、工单输入（`18700` → `MD-18700`）、输入里的 Jira 编号、输入里引用的运行的标签。标签存在 mandate 和 `run_started` 事件里。按标签搜索时扫描整个事件日志，Temporal 已经删掉的运行也能找到。
-- 运行列表的状态来自 Temporal。没有标签条件时，只列出 Temporal 还保留的运行。
+- Events speak only when a run starts, needs a person, or ends (`core/events.py`). New runs also send detailed events (step start and end, loop rounds, approval progress, replies), so the console can draw a whole run from events alone.
+- Each run carries tags: those given by the caller, ticket inputs (`18700` → `MD-18700`), Jira numbers in the inputs, and the tags of runs referenced in the inputs. Tags are stored in the mandate and in the `run_started` event. Searching by tag scans the whole event log, so runs that Temporal has already deleted can still be found.
+- The status in the run list comes from Temporal. Without a tag condition, only the runs Temporal still keeps are listed.
 
-## 控制台怎么工作
+## How the console works
 
 <!-- diagram: console.html -->
 
-图的文件：[diagrams/console.html](diagrams/console.html)。
+Diagram file: [diagrams/console.html](diagrams/console.html).
 
-- 控制台是 channel 层的 web 适配器。它不直接调用 Temporal，也不直接读 volume，所有读写都经过 `channels/relay.py`。运行状态由 `ui/runview.py` 按事件拼出，浏览器通过 SSE（`/channel/events`）收到新事件。没有详细事件的旧运行，暂时回退到 Temporal query。
-- 控制台里没有 agent。运行的标签页就是它的对话。你写的第一条消息是请求，原文写进 `docs/external/request.md`。之后的消息原样发给正在提问的步骤。
-- 审批是按钮。审批人是本机用户。在 compose 里，容器拿到宿主机的用户名（`USER`、`LOGNAME`），所以不是 `root`。
-- 控制台显示的内容来自 run，不可信。控制台有这些防护：
-  - Host 必须是 `127.0.0.1:<端口>` 或 `localhost:<端口>`，防 DNS rebinding。
-  - 每个 POST 必须带 `X-Myorch-UI` 头，防跨站请求。
-  - Markdown 渲染时不保留原始 HTML，链接只允许 http(s) 和相对路径。
-  - CSP 只允许 `/static` 下的脚本。
-  - 工作区里的图片（png、jpg、gif、webp，最大 10 MB）经 `/api/runs/<id>/raw` 显示，响应带 `Content-Security-Policy: sandbox`。其他类型不能这样打开。
-- 实时输出：步骤执行时，worker 用一个只读挂载 volume、关闭网络的辅助容器 `tail -F` 这一轮的日志（`/sandbox/logs/turn-<attempt>-<turn>.log`），每 0.5 秒把新内容写进 `events.db` 的 `output` 表。浏览器打开执行中的步骤时，通过 SSE（`/channel/output?run=&step=`）收到这些内容。
-  - agent 步骤：claude 用 `--output-format stream-json` 输出，经 sandbox 里的 `myorch-stream`（`tools/`）转成可读的行再写日志。原始事件留在 `turn-<attempt>-<turn>.jsonl`。重试不覆盖之前尝试的日志。volume 上没有这个工具时，claude 照旧输出纯文本。
-  - `output` 是单独的表，不进 `events`，所以运行列表、适配器、Watchdog 读事件时不受影响。每轮最多 200 万字符，超过的部分只在日志文件里。worker 启动时删除 7 天前的内容。
-  - 步骤结束后，辅助容器最多再读 1.5 秒就删除。辅助容器带 `timeout`，worker 意外退出时它也会自己结束。
-- diff 用 `alpine/git` 辅助容器计算。volume 只读挂载，网络关闭。git 关闭了外部 diff、textconv、fsmonitor 和 hooks，仓库里的配置不能在本机执行任何东西。
+- The console is the web adapter of the channel layer. It neither calls Temporal directly nor reads the volume directly; all reads and writes go through `channels/relay.py`. The run state is built from events by `ui/runview.py`, and the browser receives new events through SSE (`/channel/events`). Old runs without detailed events fall back to a Temporal query for now.
+- There is no agent in the console. A run's tab is its conversation. The first message you write is the request, and its original text is written to `docs/external/request.md`. Later messages are sent unchanged to the step that is asking.
+- Approvals are buttons. The approver is the local user. In compose, the container gets the host's user name (`USER`, `LOGNAME`), so it is not `root`.
+- What the console shows comes from the run and is not trusted. The console has these protections:
+  - Host must be `127.0.0.1:<port>` or `localhost:<port>`, against DNS rebinding.
+  - Every POST must carry the `X-Myorch-UI` header, against cross-site requests.
+  - Markdown rendering does not keep raw HTML, and links may only be http(s) or relative paths.
+  - CSP allows only scripts under `/static`.
+  - Images in the workspace (png, jpg, gif, webp, at most 10 MB) are shown through `/api/runs/<id>/raw`, and the response carries `Content-Security-Policy: sandbox`. Other types cannot be opened this way.
+- Live output: while a step executes, the worker uses a helper container, with the volume mounted read-only and the network off, to `tail -F` the log of this turn (`/sandbox/logs/turn-<attempt>-<turn>.log`), and every 0.5 seconds writes new content into the `output` table of `events.db`. When the browser opens an executing step, it receives this content through SSE (`/channel/output?run=&step=`).
+  - Agent steps: claude outputs with `--output-format stream-json`; `myorch-stream` (`tools/`) in the sandbox turns it into readable lines before writing the log. The raw events stay in `turn-<attempt>-<turn>.jsonl`. Retries do not overwrite the logs of earlier attempts. When this tool is not on the volume, claude outputs plain text as before.
+  - `output` is a separate table, not part of `events`, so the run list, the adapters and the Watchdog are not affected when they read events. Each turn holds at most 2 million characters; anything beyond that is only in the log file. The worker deletes content older than 7 days when it starts.
+  - After a step ends, the helper container reads for at most 1.5 more seconds and is then deleted. The helper container has a `timeout`, so it also ends on its own if the worker exits unexpectedly.
+- Diffs are computed with an `alpine/git` helper container. The volume is mounted read-only and the network is off. git has external diff, textconv, fsmonitor and hooks disabled, so configuration in the repository cannot execute anything on the local machine.
 
-## 其他平台适配器
+## Other platform adapters
 
-控制台之外，还有两个适配器接在 channel 层上。三者看到的是同一个运行，在哪边处理都行。
+Besides the console, two more adapters connect to the channel layer. All three see the same run, and you can handle it on any of them.
 
-| 适配器 | 进程 | 能做什么 | 设计 |
+| Adapter | Process | What it can do | Design |
 |---|---|---|---|
-| Slack（`channels/slack.py`） | `myorch serve` 进程里，Socket Mode | 私信发起人：每个运行一个线程、一条原地更新的进度消息。提问有选项按钮，线程里回复也算回答。审批有批准、要求修改、驳回按钮。结束时说推送了哪个分支。`/myorch` 打开发起弹窗：先选项目，再选这个项目的流程 | [notes/2026-11-05-slack-adapter.md](notes/2026-11-05-slack-adapter.md) |
-| Claude Code channel（`channels/claude_code.py`） | 本机 Claude Code 会话启动的 MCP 服务器（stdio），只通过 HTTP 访问 myorch | 推送运行结束、提问、审批和审批提醒、失败的步骤。工具：读运行（可按标签搜索）、事件、完整日志、supervisor 日志、文件、diff，发起、回复、恢复、关注。**不能审批** | [notes/2026-11-05-claude-code-channel.md](notes/2026-11-05-claude-code-channel.md) |
+| Slack (`channels/slack.py`) | In the `myorch serve` process, Socket Mode | Sends direct messages to the person who started the run: one thread per run, with one progress message updated in place. Questions have option buttons, and a reply in the thread also counts as an answer. Approvals have approve, request changes and reject buttons. At the end it says which branch was pushed. `/myorch` opens the start dialog: pick a project first, then one of that project's flows | [notes/2026-11-05-slack-adapter.md](notes/2026-11-05-slack-adapter.md) |
+| Claude Code channel (`channels/claude_code.py`) | An MCP server (stdio) started by a local Claude Code session; it reaches myorch only over HTTP | Pushes run ends, questions, approvals and approval reminders, and failed steps. Tools: read runs (searchable by tag), events, full logs, supervisor logs, files, diffs; start, reply, resume, follow. **Cannot approve** | [notes/2026-11-05-claude-code-channel.md](notes/2026-11-05-claude-code-channel.md) |
 
-- **身份**：Slack 用户按 `channels.yaml` 的 `identities` 对应到人，没登记的人不能操作。Claude Code channel 以运行 myorch 的人的名义发出命令。
-- **来源**：命令带来源（`via`）：`web`、`slack`、`claude-code`。HTTP 接口用 `X-Myorch-Via` 头声明来源，并拒绝 `claude-code` 发来的审批、驳回、要求修改。审批只能由人做。
-- **推送什么**：两个适配器都只在运行开始、需要人、结束时说话。Claude Code channel 另外推送失败的步骤，方便它分析。
+- **Identity**: Slack users are mapped to people through `identities` in `channels.yaml`; people not registered cannot act. The Claude Code channel sends commands in the name of the person running myorch.
+- **Source**: commands carry a source (`via`): `web`, `slack`, `claude-code`. The HTTP interface declares the source with the `X-Myorch-Via` header, and rejects approve, reject and request changes coming from `claude-code`. Only people can approve.
+- **What is pushed**: both adapters speak only when a run starts, needs a person, or ends. The Claude Code channel also pushes failed steps, so it can analyze them.
 
-## 本机部署形态
+## Local deployment
 
 <!-- diagram: deployment.html -->
 
-图的文件：[diagrams/deployment.html](diagrams/deployment.html)。
+Diagram file: [diagrams/deployment.html](diagrams/deployment.html).
 
-日常用 docker compose 运行（`deploy/compose.yaml`）。sandbox 仍然是宿主机 Docker 上的容器，和 compose 的服务平级：gateway 和 worker 通过挂进容器的 `/var/run/docker.sock` 操作宿主机的 Docker。服务之间的调用关系见 [2. 服务和依赖 · docker compose 里的服务](02-services.md#docker-compose-里的服务)。
+The everyday setup runs with docker compose (`deploy/compose.yaml`). Sandboxes are still containers on the host's Docker, at the same level as the compose services: the gateway and the worker operate the host's Docker through `/var/run/docker.sock` mounted into their containers. For how the services call each other, see [2. Services and dependencies · Services in docker compose](02-services.md#services-in-docker-compose).
 
-只支持单机。团队化（服务端事件存储、网页界面加登录、按项目的权限）和 Kubernetes 都还没做。
+Only a single machine is supported. Team use (server-side event storage, a web UI with login, per-project permissions) and Kubernetes are not done yet.

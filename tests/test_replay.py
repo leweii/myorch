@@ -73,12 +73,12 @@ def test_a_replay_starts_at_the_commit_with_the_future_removed(tmp_path: Path):
         assert subprocess.run(["git", "-C", str(repo), "cat-file", "-e", shas[later]], capture_output=True).returncode != 0
     assert not (repo / ".git" / "FETCH_HEAD").exists()
     summary = json.loads((tmp_path / "manifest.json").read_text())["summary"]
-    assert "重放" in summary and shas["a"][:12] in summary
+    assert "Replay" in summary and shas["a"][:12] in summary
 
 
 def test_replay_and_continue_do_not_mix(tmp_path: Path):
     r, _, _ = _checkout(tmp_path, at="a", from_run="development-1")
-    assert r.returncode == 3 and "不能同时给" in r.stderr
+    assert r.returncode == 3 and "cannot both be given" in r.stderr
 
 
 @pytest.mark.parametrize("step", ["human-review", "deliver"])

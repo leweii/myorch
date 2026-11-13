@@ -9,8 +9,8 @@ import pytest
 
 from myorch import evals
 
-WANT = [{"severity": "Important", "title": "字数单位显示成 words", "file": "_layouts/home.html", "line": 40},
-        {"severity": "Nit", "title": "缺少测试", "file": "_includes/x.html", "line": 5,
+WANT = [{"severity": "Important", "title": "Word count unit shown as words", "file": "_layouts/home.html", "line": 40},
+        {"severity": "Nit", "title": "Missing tests", "file": "_includes/x.html", "line": 5,
          "locations": [{"file": "_includes/x.html", "line": 5}, {"file": "_includes/y.html", "line": 90}]}]
 
 
@@ -23,12 +23,12 @@ def test_findings_match_by_file_and_nearby_line():
 
 
 def test_score_counts_caught_missed_and_extra():
-    found = [{"severity": "Important", "file": "_layouts/home.html", "line": 41, "title": "单位错"},
-             {"severity": "Important", "file": "a.js", "line": 3, "title": "别的问题"},
+    found = [{"severity": "Important", "file": "_layouts/home.html", "line": 41, "title": "Wrong unit"},
+             {"severity": "Important", "file": "a.js", "line": 3, "title": "Another problem"},
              {"severity": "Pre-existing", "file": "_includes/x.html", "line": 5}]  # not counted
     s = evals.score(found, WANT)
     assert (s["expected"], s["caught"], s["missed"], s["extra"], s["extra_important"]) == (2, 1, 1, 1, 1)
-    assert s["missed_titles"] == ["缺少测试"]
+    assert s["missed_titles"] == ["Missing tests"]
 
 
 def test_report_compares_variants():

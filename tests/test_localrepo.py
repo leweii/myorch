@@ -46,7 +46,7 @@ def test_a_clone_that_does_not_fit_skips(tmp_path: Path):
     data = config(tmp_path, f"mdm: {c}\nother: {tmp_path / 'missing'}\n")
     other = find_seed(data, "mdm", "example-org/master-data-management", "master")
     assert other.git_dir is None and "someone/other" in other.reason
-    assert "不存在" in find_seed(data, "other", "x/y", "master").reason
+    assert "does not exist" in find_seed(data, "other", "x/y", "master").reason
 
 
 def test_a_clone_without_the_base_skips(tmp_path: Path):

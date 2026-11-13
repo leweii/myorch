@@ -8,11 +8,11 @@ once, so the worker can follow the step's log while it runs. Copies every input 
 RAW_FILE when given. Lines that are not JSON pass through as they are.
 
 Readable form:
-    · 会话开始 (model)          system init
+    · session start (model)    system init
     agent text                   assistant text, as written
     → Tool: what                 a tool call (Bash command, file path, pattern, ...)
       ← first lines of result    the tool's result, cut short; "✗" when it is an error
-    ═══ 结果 ═══                  the result event: the final answer (unless it was the last text
+    ═══ result ═══                the result event: the final answer (unless it was the last text
                                  shown), then a summary line
 """
 import json
@@ -43,7 +43,7 @@ def result_text(content):
     lines = [ln for ln in str(content or "").splitlines() if ln.strip()]
     out = [one_line(ln, RESULT_CHARS) for ln in lines[:RESULT_LINES]]
     if len(lines) > RESULT_LINES:
-        out.append(f"…（共 {len(lines)} 行）")
+        out.append(f"… ({len(lines)} lines)")
     return out
 
 
@@ -53,7 +53,7 @@ LAST = {"text": ""}  # the last assistant text, so the result does not repeat it
 def render(ev):
     t = ev.get("type")
     if t == "system" and ev.get("subtype") == "init":
-        return [f"· 会话开始（{ev.get('model', '')}）"]
+        return [f"· session start ({ev.get('model', '')})"]
     if t == "assistant":
         out = []
         for c in (ev.get("message") or {}).get("content") or []:
@@ -70,20 +70,20 @@ def render(ev):
             if isinstance(c, dict) and c.get("type") == "tool_result":
                 mark = "✗" if c.get("is_error") else "←"
                 lines = result_text(c.get("content"))
-                out += [f"  {mark} {ln}" for ln in lines] or [f"  {mark} （无输出）"]
+                out += [f"  {mark} {ln}" for ln in lines] or [f"  {mark} (no output)"]
         return out
     if t == "result":
-        out = ["═══ 结果 ═══"]
+        out = ["═══ result ═══"]
         if ev.get("result") and str(ev["result"]).strip() != LAST["text"]:
             out += str(ev["result"]).rstrip().splitlines()
         parts = [ev.get("subtype", "")]
         if ev.get("num_turns") is not None:
-            parts.append(f"{ev['num_turns']} 轮")
+            parts.append(f"{ev['num_turns']} turns")
         if ev.get("duration_ms") is not None:
-            parts.append(f"{ev['duration_ms'] / 1000:.0f} 秒")
+            parts.append(f"{ev['duration_ms'] / 1000:.0f}s")
         if ev.get("total_cost_usd") is not None:
             parts.append(f"${ev['total_cost_usd']:.2f}")
-        out.append("· " + "，".join(p for p in parts if p))
+        out.append("· " + ", ".join(p for p in parts if p))
         return out
     return []
 
@@ -106,7 +106,7 @@ def main():
         try:
             out = render(ev)
         except Exception as e:  # an unexpected event shape must not stop the log
-            out = [f"· （无法显示的事件 {ev.get('type')}: {e}）"]
+            out = [f"· (cannot show event {ev.get('type')}: {e})"]
         if out:
             sys.stdout.write("\n".join(out) + "\n")
             sys.stdout.flush()

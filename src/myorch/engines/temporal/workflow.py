@@ -254,7 +254,7 @@ class FlowWorkflow:
 
                 if workflow.patched(APPROVAL_PATCH):
                     if not await self._wait_gate(iid, step.approval, decided):
-                        inst.status, inst.error = "failed", f"审批超时：{step.approval.timeout} 内没有人处理"
+                        inst.status, inst.error = "failed", f"approval timed out: nobody handled it within {step.approval.timeout}"
                         return
                 else:
                     await workflow.wait_condition(decided)
@@ -320,7 +320,7 @@ class FlowWorkflow:
             except ActivityError as e:  # prepare_step or collect_manifest gave up (run_step's own errors are caught)
                 if state.flow.failure_policy(step) != "skip" or cancel_requested():
                     raise
-                skip_after_failure(inst, f"平台错误：{e.cause or e}")
+                skip_after_failure(inst, f"platform error: {e.cause or e}")
                 return
             if outcome == "succeeded":
                 inst.status = "succeeded"
@@ -345,17 +345,17 @@ class FlowWorkflow:
                     lambda: iid in self._replies, timeout=timedelta(seconds=step.limits.input_timeout_seconds)
                 )
             except asyncio.TimeoutError:
-                inst.error = f"步骤失败后等待用户决定超时（{step.limits.input_timeout}）：{failure}"
+                inst.error = f"timed out ({step.limits.input_timeout}) waiting for the user to decide after the step failed: {failure}"
                 break
             choice, hint = parse_failure_reply(self._replies.pop(iid))
             inst.status, inst.question = "running", None
             if choice == "skip":
-                inst.status, inst.error = "skipped", f"失败后由用户跳过：{failure}"
+                inst.status, inst.error = "skipped", f"skipped by the user after failure: {failure}"
                 return
             if choice == "abort":
-                inst.error = f"失败后由用户终止：{failure}"
+                inst.error = f"stopped by the user after failure: {failure}"
                 break
-            if choice == "retry":  # "重新开始（新会话）": what the person chose
+            if choice == "retry":  # "Start over (new session)": what the person chose
                 attempt, turn, reply, failure = attempt + 1, 1, None, None
                 continues = interrupted = None
             else:  # hint: the next turn of the same attempt, so the session remembers what was tried
@@ -398,9 +398,9 @@ class FlowWorkflow:
         rnd = state.change_round(iid)
         first = text.strip().splitlines()[0] if text.strip() else text
         at = workflow.now().isoformat(timespec="seconds")
-        finding = {"severity": "Important", "class": "acceptance", "title": f"审批人：{first[:100]}",
+        finding = {"severity": "Important", "class": "acceptance", "title": f"Approver: {first[:100]}",
                    "locations": [{"file": "-", "line": 0}], "evidence": text,
-                   "detail": f"{by} 在 {at} 提出的修改意见"}
+                   "detail": f"change request from {by} at {at}"}
         await workflow.execute_activity_method(
             Activities.write_run_file,
             RunFileInput(run_id=state.run_id, rel_path=f"docs/review/round-{rnd}/approver.json",
@@ -458,7 +458,7 @@ class FlowWorkflow:
             inst.question = inst.manifest.question
             if step.interaction == "never":
                 # Retrying would most likely ask again, so this is final.
-                inst.error = "agent 在 interaction=never 的步骤里提问了，按失败处理"
+                inst.error = "the agent asked a question in a step with interaction=never; treated as a failure"
                 return "fatal"
             inst.status = "waiting_input"
             try:
@@ -466,7 +466,7 @@ class FlowWorkflow:
                     lambda: iid in self._replies, timeout=timedelta(seconds=step.limits.input_timeout_seconds)
                 )
             except asyncio.TimeoutError:
-                inst.error = f"等待用户回复超时（{step.limits.input_timeout}）"
+                inst.error = f"timed out waiting for the user's reply ({step.limits.input_timeout})"
                 return "fatal"
             reply = self._replies.pop(iid)
             inst.status, inst.question = "running", None
@@ -502,7 +502,7 @@ class FlowWorkflow:
             await workflow.wait_condition(lambda: loop_id in self._replies, timeout=_LOOP_DECISION_TIMEOUT)
         except asyncio.TimeoutError:
             lr = self._state.loops[loop_id]
-            lr.status, lr.error, lr.question = "failed", "等待用户决定超时", None
+            lr.status, lr.error, lr.question = "failed", "timed out waiting for the user to decide", None
             return
         self._state.resolve_loop(loop_id, self._replies.pop(loop_id))
 

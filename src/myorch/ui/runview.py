@@ -113,7 +113,7 @@ def fold(flow: Flow, events: list[LoggedEvent], engine_status: str | None = None
             finished = d
         elif e.kind == "run_resumed":  # continued from its failed steps (RunState.reopen), from any channel
             finished = None
-            said.append({"kind": "resume", "step": "", "text": "、".join(d.get("steps") or []), "by": d.get("by"),
+            said.append({"kind": "resume", "step": "", "text": ", ".join(d.get("steps") or []), "by": d.get("by"),
                          "at": d.get("at")})
             for iid in d.get("steps") or []:  # unless a later attempt already shows (older logs wrote it late)
                 if inst(iid)["status"] in ("failed", "cancelled", "blocked", "waiting_input", "waiting_approval"):
@@ -161,7 +161,7 @@ def fold(flow: Flow, events: list[LoggedEvent], engine_status: str | None = None
                                 "options": i["question"]["options"]})
             elif i["status"] == "waiting_approval":
                 waiting.append({"step": i["id"], "kind": "approval",
-                                "text": i["missing"] or f"需要 {i['approvals_needed']} 人批准", "approvals": i["approvals"]})
+                                "text": i["missing"] or f"{i['approvals_needed']} approval(s) needed", "approvals": i["approvals"]})
         for lid, lp in loops.items():
             if lp["status"] == "waiting_input" and lp["question"]:
                 waiting.append({"step": lid, "kind": "loop", "text": lp["question"]["question"],

@@ -47,15 +47,15 @@ def test_fold_draws_the_run_from_events():
     evs = events(
         STARTED,
         ("step_started", "analyze", {"step": "analyze", "loop": "", "round": 0, "replica": 0, "attempt": 1, "turn": 1, "model": "opus"}),
-        ("question", "analyze", {"question": "全额还是部分？", "options": ["全额", "部分"]}),
-        ("replied", "analyze", {"text": "全额", "question": "全额还是部分？", "at": "t"}),
+        ("question", "analyze", {"question": "Full or partial?", "options": ["Full", "Partial"]}),
+        ("replied", "analyze", {"text": "Full", "question": "Full or partial?", "at": "t"}),
         ("step_started", "analyze", {"step": "analyze", "loop": "", "round": 0, "replica": 0, "attempt": 1, "turn": 2, "model": "opus"}),
         ("step_finished", "analyze", {"step": "analyze", "loop": "", "round": 0, "replica": 0, "status": "succeeded",
                                       "summary": "done", "outputs": {"proceed": True}, "attempts": 1, "turns": 2}),
         ("loop_round", "review", {"loop": "review", "round": 1, "max_rounds": 2, "status": "running", "until": "u"}),
         ("step_started", "check.r1.x1", {"step": "check", "loop": "review", "round": 1, "replica": 1, "attempt": 1, "turn": 1}),
         ("step_finished", "check.r1.x2", {"step": "check", "loop": "review", "round": 1, "replica": 2, "status": "succeeded"}),
-        ("approval", "gate", {"needed": 1, "missing": "还需要 1 人批准"}),
+        ("approval", "gate", {"needed": 1, "missing": "needs 1 more approval"}),
     )
     v = runview.fold(f, evs, "RUNNING")
     assert (v["status"], v["project"], v["mandate"]["initiator"]) == ("running", "blog", "jakobhe")
@@ -67,8 +67,8 @@ def test_fold_draws_the_run_from_events():
     (rnd,) = review["rounds"]
     assert sorted((i["id"], i["status"]) for i in rnd["instances"]) == [("check.r1.x1", "running"), ("check.r1.x2", "succeeded")]
     assert gate["instances"][0]["status"] == "waiting_approval"
-    assert v["waiting"] == [{"step": "gate", "kind": "approval", "text": "还需要 1 人批准", "approvals": []}]
-    assert v["said"] == [{"kind": "reply", "step": "analyze", "text": "全额", "question": "全额还是部分？",
+    assert v["waiting"] == [{"step": "gate", "kind": "approval", "text": "needs 1 more approval", "approvals": []}]
+    assert v["said"] == [{"kind": "reply", "step": "analyze", "text": "Full", "question": "Full or partial?",
                           "options": [], "at": "t", "by": None}]
     assert runview.progress(v) == {"done": 2, "total": 4, "current": ["check.r1.x1", "gate"]}
 
@@ -101,7 +101,7 @@ class FakeRelay:
         return [{"run_id": "r1", "status": "RUNNING", **STARTED[2]}]
 
     async def read_file(self, run_id, rel):
-        return {".myorch/flow.yaml": FLOW, "docs/external/request.md": "# 原始请求（来自 web）\n\n说明\n\n给 blog 加功能"}.get(rel)
+        return {".myorch/flow.yaml": FLOW, "docs/external/request.md": "# Original request (from web)\n\nNote\n\nAdd a feature to the blog"}.get(rel)
 
     async def reply(self, *a, **kw):
         self.calls.append(("reply", a, kw))
@@ -123,10 +123,10 @@ def test_the_console_reads_and_writes_through_the_relay(tmp_path: Path):
         assert [w["step"] for w in listing["inbox"]] == ["analyze"]
         d = await svc.run_detail("r1")
         conv = await svc.conversation("r1", d)
-        assert conv["items"][0] == {"kind": "request", "by": "jakobhe", "at": "2026-11-02T10:00:00", "text": "给 blog 加功能"}
+        assert conv["items"][0] == {"kind": "request", "by": "jakobhe", "at": "2026-11-02T10:00:00", "text": "Add a feature to the blog"}
         assert conv["target"]["mode"] == "reply" and conv["target"]["step"] == "analyze"
         await svc.reply("r1", "analyze", "a")
-        await svc.approve("r1", "gate", "看过了")
+        await svc.approve("r1", "gate", "Looked at it")
         return d
 
     d = asyncio.run(go())
@@ -167,7 +167,7 @@ def test_the_step_page_shows_what_the_agent_read_and_queried(tmp_path: Path):
         {"timestamp": "t1", "message": {"content": [
             {"type": "tool_use", "id": "a", "name": "Read", "input": {"file_path": "/sandbox/workspace/knowledge/notes/README.md"}},
             {"type": "tool_use", "id": "b", "name": "Read", "input": {"file_path": "/sandbox/workspace/repo/x.java"}},
-            {"type": "tool_use", "id": "c", "name": "mcp__wiki__search", "input": {"query": "退款"}}]}},
+            {"type": "tool_use", "id": "c", "name": "mcp__wiki__search", "input": {"query": "refund"}}]}},
         {"message": {"content": [{"type": "tool_result", "tool_use_id": "c", "content": [{"type": "text", "text": "3 pages"}]}]}},
     ])
 
@@ -181,7 +181,7 @@ def test_the_step_page_shows_what_the_agent_read_and_queried(tmp_path: Path):
     svc = Service(R(events(STARTED)), tmp_path, tmp_path, "jakobhe")
     d = asyncio.run(svc.step_knowledge_use("r1", "implement"))
     assert [r["target"] for r in d["reads"]] == ["/sandbox/workspace/knowledge/notes/README.md"]
-    assert [(q["tool"], q["input"], q["result"]) for q in d["queries"]] == [("mcp__wiki__search", {"query": "退款"}, "3 pages")]
+    assert [(q["tool"], q["input"], q["result"]) for q in d["queries"]] == [("mcp__wiki__search", {"query": "refund"}, "3 pages")]
 
 
 def test_a_resumed_run_runs_again_from_its_failed_step():

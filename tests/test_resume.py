@@ -48,10 +48,10 @@ def test_the_failed_step_and_what_it_held_back_run_again():
 def test_only_running_runs_or_unknown_steps_are_refused():
     s = RunState.create("r1", LINE, {})
     s.plan()
-    with pytest.raises(ValueError, match="只有失败或取消的运行"):
+    with pytest.raises(ValueError, match="only a failed or cancelled run"):
         s.reopen()
     s = failed_at_b()
-    with pytest.raises(ValueError, match="没有可以重新执行的步骤：a"):
+    with pytest.raises(ValueError, match="no step can be re-run: a"):
         s.reopen({"a"})  # a succeeded
     assert s.status == "failed" and s.resumes == 0  # nothing changed
 

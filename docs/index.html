@@ -137,7 +137,6 @@
   <span class="spacer"></span>
   <a class="xlink" href="workflows/index.html">Flow manual →</a>
   <a class="xlink" href="https://github.com/leweii/myorch">GitHub</a>
-  <a class="xlink" id="other-lang" href="zh/index.html">中文</a>
   <div class="seg" role="radiogroup" aria-label="Theme">
     <button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button><button data-theme-pick="auto">System</button>
   </div>
@@ -161,7 +160,6 @@
 </aside>
 <main>
 <section class="chapter" id="ch-index"><h1 id="index--myorch-docs">myorch docs</h1>
-<p>中文版：<a href="zh/index.html#ch-index">docs/README.md</a></p>
 <p>myorch is a flow-driven agent platform. Flows are written in YAML, for example "requirements analysis → implementation → multi-reviewer review → risk approval → push the branch". Temporal handles scheduling, retries and waiting for people. Each step runs in its own OpenShell sandbox, and the sandbox holds no real credentials. Project-specific information (repository, identity, check scripts, knowledge) lives in the project pack, so one flow can be used for many projects. People interact with myorch in the local console (<code>myorch ui</code>) or in Slack direct messages. A local Claude Code session can receive run results through a channel and then start follow-up flows. The whole set of services runs with docker compose (<a class="code" href="https://github.com/leweii/myorch/tree/main/deploy"><code>deploy/</code></a>).</p>
 <h2 id="index--directories-four-places">Directories: four places</h2>
 <table>
@@ -375,14 +373,14 @@ uv run myorch approve &lt;run_id&gt; &lt;step&gt;    # approve
 </table>
 <h2 id="index--other-documents">Other documents</h2>
 <ul>
-<li><a href="https://github.com/leweii/myorch/blob/main/docs/en/ARCHITECTURE.md">ARCHITECTURE.md</a>: the full design document. This directory covers "how to use it"; ARCHITECTURE.md covers "why". When the two conflict, the code is right; then fix the docs.</li>
+<li><a href="https://github.com/leweii/myorch/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>: the full design document. This directory covers "how to use it"; ARCHITECTURE.md covers "why". When the two conflict, the code is right; then fix the docs.</li>
 <li><a href="https://github.com/leweii/myorch/blob/main/PLAN.md">PLAN.md</a>: the implementation plan and the measured results for each item.</li>
-<li><a href="workflows/index.html#ch-index">Flow manual</a> (web version <a class="code" href="https://leweii.github.io/myorch/workflows/"><code>docs/workflows/index.html</code></a>, Chinese <a class="code" href="https://leweii.github.io/myorch/zh/workflows/"><code>docs/zh/workflows/index.html</code></a>): what each flow does, its inputs, step graph, what each step does, and when it needs you. The text is in <code>docs/en/flows/&lt;flow&gt;.md</code> (Chinese originals in <code>flows/&lt;flow&gt;.md</code>); regenerate after changing it: <code>uv run --with markdown python docs/workflows/build.py</code>.</li>
+<li><a href="workflows/index.html#ch-index">Flow manual</a> (web version <a class="code" href="https://leweii.github.io/myorch/workflows/"><code>docs/workflows/index.html</code></a>): what each flow does, its inputs, step graph, what each step does, and when it needs you. The text is in <code>flows/&lt;flow&gt;.md</code>; regenerate after changing it: <code>uv run --with markdown python docs/workflows/build.py</code>.</li>
 <li><code>myorch-knowledge/README.md</code>: the description of the project pack directory.</li>
 <li><a href="https://github.com/leweii/myorch/blob/main/deploy/README.md">deploy/README.md</a>: docker compose installation, the install script for new machines, the credentials file, Slack, the Claude Code channel, publishing origin/main, ports, known limitations.</li>
 <li><a class="code" href="https://github.com/leweii/myorch/tree/main/docs/notes"><code>docs/notes/</code></a>: records of individual designs, for example the channel layer, the delivery interface, the research on moving the gateway into Docker, the Slack adapter, the Claude Code channel.</li>
-<li><a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>: the web version of this directory and the docs' home page (single page, navigation on the left); the Chinese one is <a class="code" href="https://leweii.github.io/myorch/zh/"><code>docs/zh/index.html</code></a>. The English sources are in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/en"><code>docs/en/</code></a> (rules in <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/en/TRANSLATING.md"><code>docs/en/TRANSLATING.md</code></a>); change them together with the Chinese. Regenerate after changing any chapter: <code>uv run --with markdown python docs/build-html.py</code>.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/README.md"><code>docs/en/README.md</code></a></p></section>
+<li><a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>: the web version of this directory and the docs' home page (single page, navigation on the left). Regenerate after changing any chapter: <code>uv run --with markdown python docs/build-html.py</code>.</li>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/README.md"><code>docs/README.md</code></a></p></section>
 <section class="chapter" id="ch-01-overview"><h1 id="01-overview--1-overview-directories-and-core-concepts">1. Overview: directories and core concepts</h1>
 <h2 id="01-overview--in-one-sentence">In one sentence</h2>
 <p>You write a <strong>flow</strong>, and start a <strong>run</strong> of it on a <strong>project</strong>. Each <strong>step</strong> in the run executes in a new sandbox. A step can be an agent (claude-code) or a shell script. Steps hand files to each other through a shared <strong>workspace</strong>. When there is a question or an approval, the run stops and waits for a person. You reply in the console, in Slack, or on the command line.</p>
@@ -533,7 +531,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="df"><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c "><b>① myorch/</b><span>flows/ · profiles/ · tools/</span></div><div class="c "><b>② myorch-knowledge/</b><span>&lt;project&gt;/project.yaml · prompts/ · guide/ · checks.sh · sources/ · _templates/</span></div><div class="c "><b>Knowledge source content</b><span>local directory (under ~/orca/kb) or git repository</span></div></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="down "><i></i><span>expanded at start · myorch init installs tools/</span></div><div class="down "><i></i><span>project sync (versioned snapshots)</span></div><div class="down "><i></i><span>synced automatically when a run starts</span></div></div><div class="frame "><div class="t">④ volume myorch-artifacts · all a sandbox can see</div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c blue"><b>runs/&lt;run&gt;/</b><span>workspace: code, docs/, .myorch/flow.yaml, each step's artifacts and logs<br>mounted read-write at /sandbox/workspace</span></div><div class="c data"><b>projects/&lt;project&gt;/&lt;version&gt;/</b><span>project pack snapshot<br>mounted read-only at workspace/project</span></div><div class="c data"><b>knowledge/&lt;name&gt;/&lt;version&gt;/</b><span>knowledge source snapshot<br>mounted read-only at workspace/knowledge/&lt;name&gt;</span></div><div class="c data"><b>shared/&lt;project&gt;/&lt;name&gt;/</b><span>caches across runs (build cache, sweep cursor)<br>mounted read-write only for steps that ask</span></div><div class="c data"><b>tools/</b><span>helper commands<br>mounted read-only at /sandbox/bin</span></div><div class="c data"><b>jobs/&lt;key&gt;/</b><span>one-off jobs (knowledge source sync etc.)</span></div></div></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="down dash"><i></i><span>write back: project-apply commits → new snapshot</span></div><div class="down dash"><i></i><span>worker writes events and live output</span></div><div class="down g"><i></i><span>push the branch after approval, no PR</span></div></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c "><b>② myorch-knowledge/</b><span>proposals adopted by learn · onboard · postmortem, knowledge sources registered in the console; all git commits</span></div><div class="c "><b>③ myorch-data/</b><span>temporal.db (ended runs kept 24 hours) · events.db · evals/ · learn/ · ui/ · slack/<br>the console reads the run list and conversations here</span></div><div class="c "><b>The project's GitHub repository</b><span>pushes only this run's branch</span></div></div><div class="note">At run start, the mandate pins the versions of the project pack and knowledge sources. ①②③ are on the host; sandboxes cannot see them.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/storage-relations.html">diagrams/en/storage-relations.html</a>.</p>
+<p>Diagram file: <a href="diagrams/storage-relations.html">diagrams/storage-relations.html</a>.</p>
 <p>Data flow in one run:</p>
 <ol>
 <li><strong>Start</strong>: the console, Slack, the Claude Code channel, the CLI or a schedule reads the flow file from ① and <code>project.yaml</code> and <code>prompts/</code> from ②, tailors the flow to the project (<code>if:</code>), and fills in <code>{{project.x}}</code>. The local directory and git repository knowledge sources the run mounts are first synced into snapshots in ④. Then the run is submitted to Temporal.</li>
@@ -740,7 +738,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <tr>
 <td><code>local-repos.yaml</code></td>
 <td>You</td>
-<td>Locations of local clones; new runs copy code from here (has no effect in compose, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#已知限制">deploy/README.md</a>)</td>
+<td>Locations of local clones; new runs copy code from here (has no effect in compose, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#known-limitations">deploy/README.md</a>)</td>
 </tr>
 <tr>
 <td><code>reviews/&lt;run_id&gt;.html</code></td>
@@ -755,7 +753,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 </tbody>
 </table>
 <h3 id="01-overview--what-to-do-after-changing-something">What to do after changing something</h3>
-<p><code>dc</code> is short for <code>docker compose -f deploy/compose.yaml</code>. <code>dc up -d --build</code> interrupts steps that are executing. To publish commits on origin/main, use <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a>; it waits for executing steps to finish before restarting (see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#发布-originmain">deploy/README.md</a>).</p>
+<p><code>dc</code> is short for <code>docker compose -f deploy/compose.yaml</code>. <code>dc up -d --build</code> interrupts steps that are executing. To publish commits on origin/main, use <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a>; it waits for executing steps to finish before restarting (see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#release-originmain">deploy/README.md</a>).</p>
 <table>
 <thead>
 <tr>
@@ -931,7 +929,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <tr>
 <td><strong>Approval</strong> (<code>waiting_approval</code>)</td>
 <td>The flow requires someone to let this step through before it executes. The number of approvers can be computed by the risk verdict</td>
-<td>The <strong>Approve</strong> (批准) and <strong>Reject</strong> (驳回) buttons in the console. When the flow allows it, there is also <strong>Request changes</strong> (提修改意见): the run goes back to an earlier loop and makes changes according to your comments. On the command line: <code>myorch approve / reject / changes &lt;run&gt; &lt;step&gt;</code></td>
+<td>The <strong>Approve</strong> and <strong>Reject</strong> buttons in the console. When the flow allows it, there is also <strong>Request changes</strong>: the run goes back to an earlier loop and makes changes according to your comments. On the command line: <code>myorch approve / reject / changes &lt;run&gt; &lt;step&gt;</code></td>
 </tr>
 </tbody>
 </table>
@@ -1029,10 +1027,10 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 .dg .data b,.df .data b{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:500}
 .dg .red,.df .red{background:var(--d-danger-soft);box-shadow:0 0 0 1.5px var(--d-danger)}
 </style>
-<div class="df"><div class="c blue"><b>Start: console “+ New run” (＋ 新运行) · Slack /myorch · Claude Code tools · <code>myorch run</code> · <code>myorch schedule</code></b><span>Client: read the flow → pick parameters by presets → trim by project (if:) → expand fragments → fill in project values → check → sync knowledge sources · label the issue → submit the fully expanded YAML</span></div><div class="down "><i></i><span>start_run</span></div><div class="c "><b>Temporal starts FlowWorkflow (run_id = workflow ID, e.g. development-38b24c5b)</b><span>init_run: creates runs/&lt;run_id&gt;/ on the volume, writes the flow snapshot and the mandate. If a local clone is registered, first copies the repository into repo/</span></div><div class="down "><i></i><span></span></div><div class="frame "><div class="t">Loop: RunState.plan() finds the instances that can run now and handles each</div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c "><b>Run an instance</b><span>create directories → start sandbox → run harness → read manifest → delete sandbox</span></div><div class="c "><b>Host action</b><span>the worker runs it directly, no sandbox</span></div><div class="c you"><b>Approval needed → waiting_approval</b><span>Approve, reject, or request changes (back to the loop before). Reminders and timeouts can be set</span></div><div class="c you"><b>Agent asks → waiting_input</b><span>The sandbox is deleted. After you reply, a new sandbox resumes the same session</span></div><div class="c you"><b>Loop runs out of rounds, until still not met</b><span>Reflects first, then asks you: one more round, accept, or stop</span></div><div class="c you"><b>Step fails with on_failed: ask</b><span>Asks you: start over, continue the session with a hint, skip, or stop</span></div></div><div class="note">On every state change the worker writes new events to myorch-data/events.db. Outlined boxes are where you are needed.</div></div><div class="down "><i></i><span></span></div><div class="c "><b>Ended</b><span>succeeded · failed · rejected · cancelled. A failed or cancelled run can be resumed with the same run_id (myorch resume, or the console's “Re-run failed steps” (重新执行失败的步骤))</span></div></div>
+<div class="df"><div class="c blue"><b>Start: console “+ New run” · Slack /myorch · Claude Code tools · <code>myorch run</code> · <code>myorch schedule</code></b><span>Client: read the flow → pick parameters by presets → trim by project (if:) → expand fragments → fill in project values → check → sync knowledge sources · label the issue → submit the fully expanded YAML</span></div><div class="down "><i></i><span>start_run</span></div><div class="c "><b>Temporal starts FlowWorkflow (run_id = workflow ID, e.g. development-38b24c5b)</b><span>init_run: creates runs/&lt;run_id&gt;/ on the volume, writes the flow snapshot and the mandate. If a local clone is registered, first copies the repository into repo/</span></div><div class="down "><i></i><span></span></div><div class="frame "><div class="t">Loop: RunState.plan() finds the instances that can run now and handles each</div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c "><b>Run an instance</b><span>create directories → start sandbox → run harness → read manifest → delete sandbox</span></div><div class="c "><b>Host action</b><span>the worker runs it directly, no sandbox</span></div><div class="c you"><b>Approval needed → waiting_approval</b><span>Approve, reject, or request changes (back to the loop before). Reminders and timeouts can be set</span></div><div class="c you"><b>Agent asks → waiting_input</b><span>The sandbox is deleted. After you reply, a new sandbox resumes the same session</span></div><div class="c you"><b>Loop runs out of rounds, until still not met</b><span>Reflects first, then asks you: one more round, accept, or stop</span></div><div class="c you"><b>Step fails with on_failed: ask</b><span>Asks you: start over, continue the session with a hint, skip, or stop</span></div></div><div class="note">On every state change the worker writes new events to myorch-data/events.db. Outlined boxes are where you are needed.</div></div><div class="down "><i></i><span></span></div><div class="c "><b>Ended</b><span>succeeded · failed · rejected · cancelled. A failed or cancelled run can be resumed with the same run_id (myorch resume, or the console's “Re-run failed steps”)</span></div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/run-lifecycle.html">diagrams/en/run-lifecycle.html</a>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/01-overview.md"><code>docs/en/01-overview.md</code></a></p></section>
+<p>Diagram file: <a href="diagrams/run-lifecycle.html">diagrams/run-lifecycle.html</a>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/01-overview.md"><code>docs/01-overview.md</code></a></p></section>
 <section class="chapter" id="ch-02-services"><h1 id="02-services--2-services-and-dependencies">2. Services and dependencies</h1>
 <p>For installation steps, see <a href="#ch-04-setup">4. Setup</a>.</p>
 <h2 id="02-services--service-list">Service list</h2>
@@ -1253,7 +1251,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="dg" style="width:1140px;height:905px"><div class="sec " style="left:20px;top:20px;width:440px;height:110px"><div class="t" style="">People</div></div><div class="card " style="left:40px;top:52px;width:115px;height:58px"><b>You</b><span>browser</span></div><div class="card " style="left:170px;top:52px;width:115px;height:58px"><b>Claude Code</b><span>local MCP adapter</span></div><div class="card " style="left:300px;top:52px;width:120px;height:58px"><b>You</b><span>terminal</span></div><div class="sec " style="left:720px;top:20px;width:400px;height:110px"><div class="t" style="">Third parties · sandbox egress</div></div><div class="card " style="left:735px;top:52px;width:120px;height:58px"><b>GitHub</b><span>read PRs · push branches</span></div><div class="card " style="left:865px;top:52px;width:120px;height:58px"><b>Jira</b><span>issues</span></div><div class="card " style="left:995px;top:52px;width:115px;height:58px"><b>Claude API</b><span>Anthropic</span></div><div class="sec " style="left:720px;top:190px;width:190px;height:125px"><div class="t" style="">Third party · direct</div></div><div class="card " style="left:735px;top:228px;width:160px;height:64px"><b>Slack</b><span>DMs · questions · approvals</span></div><div class="sec " style="left:20px;top:190px;width:690px;height:125px"><div class="t" style="">Entry</div></div><div class="card blue" style="left:40px;top:228px;width:200px;height:64px"><b>Console (myorch serve)</b><span>127.0.0.1:8800 · channel layer</span><span>Slack adapter · Watchdog</span></div><div class="card " style="left:260px;top:228px;width:200px;height:64px"><b>myorch CLI</b><span>uv run myorch &lt;command&gt;</span><span>reads events via the console</span></div><div class="card " style="left:40px;top:385px;width:260px;height:72px"><b>Temporal dev server</b><span>gRPC :7233 · UI :8233</span></div><div class="card " style="left:440px;top:385px;width:260px;height:72px"><b>myorch worker</b><span>runs steps · writes the event log</span></div><div class="card green" style="left:440px;top:540px;width:260px;height:92px"><b>OpenShell</b><span>gateway + one sandbox per step</span><span>work credentials live only here</span></div><div class="lbl " style="left:105px;top:150px">HTTP</div><div class="lbl " style="left:235px;top:150px">HTTP</div><div class="lbl " style="left:368px;top:150px">CLI</div><div class="lbl " style="left:180px;top:340px">gRPC: start · reply · approve · status</div><div class="lbl c" style="left:371px;top:398px">gRPC: tasks</div><div class="lbl " style="left:580px;top:488px">openshell CLI: create/delete sandbox</div><div class="lbl g" style="left:935px;top:330px">policy-allowed egress<br>supervisor injects<br>real credentials</div><div class="lbl " style="left:470px;top:336px">Slack adapter: Socket Mode, outbound</div><div class="sec " style="left:20px;top:680px;width:1100px;height:175px"><div class="t" style="">Local data · who reads and writes: see the table below</div></div><div class="card data" style="left:40px;top:714px;width:340px;height:58px"><b>myorch-data/temporal.db</b><span>Temporal reads and writes</span></div><div class="card data" style="left:400px;top:714px;width:340px;height:58px"><b>myorch-data/events.db</b><span>worker writes · console reads (host CLI via console)</span></div><div class="card data" style="left:760px;top:714px;width:340px;height:58px"><b>myorch-data/ui/</b><span>console reads and writes</span></div><div class="card data" style="left:40px;top:782px;width:340px;height:58px"><b>myorch-knowledge/</b><span>entry points read · project-apply and console write</span></div><div class="card data" style="left:400px;top:782px;width:340px;height:58px"><b>volume myorch-artifacts</b><span>sandboxes and helper containers read and write</span></div><div class="lbl " style="left:84px;top:876px">call</div><div class="lbl " style="left:204px;top:876px">policy-allowed egress</div><svg width="1140" height="905" viewBox="0 0 1140 905"><defs><marker id="ov-call" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-faint)"/></marker><marker id="ov-paused" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker><marker id="ov-egress" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-accent)"/></marker><marker id="ov-data" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker></defs><path d="M97 110 L97 226" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M227 110 L227 226" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M360 110 L360 226" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M170 315 L170 383" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M440 421 L302 421" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M570 457 L570 538" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M700 586 L925 586 L925 132" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#ov-egress)"/><path d="M225 292 L225 330 L815 330 L815 294" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M30 885 L76 885" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#ov-call)"/><path d="M150 885 L196 885" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#ov-egress)"/></svg></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/services-overview.html">diagrams/en/services-overview.html</a>.</p>
+<p>Diagram file: <a href="diagrams/services-overview.html">diagrams/services-overview.html</a>.</p>
 <p>The console, the CLI and channels in the "Entry points" area call the same set of Python functions (<a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/engines/temporal/client.py"><code>engines/temporal/client.py</code></a>, <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/storage/docker_volume.py"><code>storage/docker_volume.py</code></a>), so they share one set of lines in the diagram.</p>
 <ul>
 <li>The console and the CLI only call Temporal; they never call the worker directly. The worker takes tasks from the Temporal task queue <code>myorch</code> on its own.</li>
@@ -1353,7 +1351,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="dg" style="width:1140px;height:1130px"><div class="sec " style="left:20px;top:20px;width:540px;height:110px"><div class="t" style="">People</div></div><div class="card you" style="left:60px;top:52px;width:190px;height:58px"><b>You</b><span>browser</span></div><div class="card you" style="left:290px;top:52px;width:240px;height:58px"><b>You</b><span>terminal · docker compose exec</span></div><div class="sec " style="left:600px;top:20px;width:520px;height:110px"><div class="t" style="">Files on the host</div></div><div class="card data" style="left:615px;top:52px;width:240px;height:58px"><b>deploy/secrets/</b><span>providers.yaml → providers<br>slack.env → ui · not in git or images</span></div><div class="card data" style="left:870px;top:52px;width:235px;height:58px"><b>Data and knowledge</b><span>myorch-data/ · myorch-knowledge/<br>channels.yaml · ~/orca/kb (bind mount)</span></div><div class="sec " style="left:20px;top:170px;width:1100px;height:360px"><div class="t" style="">docker compose · network default · services reach each other by service name</div></div><div class="card blue" style="left:40px;top:220px;width:230px;height:66px"><b>ui</b><span>console · channel layer · Slack · Watchdog</span></div><div class="sec dash" style="left:340px;top:205px;width:770px;height:115px"><div class="t" style="">One-shot services · exit when done</div></div><div class="card " style="left:360px;top:245px;width:200px;height:60px"><b>init</b><span>myorch init: volume, tools<br>runs on every up</span></div><div class="card " style="left:580px;top:245px;width:220px;height:60px"><b>providers</b><span>reads credential files → gateway</span></div><div class="card " style="left:820px;top:245px;width:260px;height:60px"><b>gateway-init</b><span>creates the sandbox signing key (Ed25519) if missing</span></div><div class="card " style="left:40px;top:400px;width:230px;height:66px"><b>temporal</b><span>gRPC :7233 · UI :8233</span></div><div class="card blue" style="left:360px;top:400px;width:230px;height:66px"><b>worker</b><span>myorch worker · runs steps</span></div><div class="card green" style="left:820px;top:400px;width:260px;height:80px"><b>gateway</b><span>official OpenShell image · :17671</span><span>credentials · policy · sandbox records</span></div><div class="sec " style="left:20px;top:600px;width:1100px;height:330px"><div class="t" style="">Host Docker · via /var/run/docker.sock mounted into containers</div></div><div class="card " style="left:40px;top:640px;width:230px;height:66px"><b>Docker daemon</b><span>/var/run/docker.sock</span></div><div class="card " style="left:40px;top:750px;width:230px;height:60px"><b>helper containers</b><span>--network none · read/write volume</span></div><div class="card data" style="left:40px;top:850px;width:230px;height:54px"><b>volume myorch-artifacts</b><span>workspaces of all runs</span></div><div class="box" style="left:330px;top:630px;width:520px;height:170px;border:1px dashed var(--d-line2)"></div><div class="lbl " style="left:345px;top:638px"><b>sandbox</b> · two containers per step instance</div><div class="card blue" style="left:350px;top:670px;width:200px;height:100px"><b>supervisor container</b><span>bridge network</span><span>policy · swaps in real credentials</span></div><div class="card dark" style="left:620px;top:670px;width:210px;height:100px"><b>workload container</b><span>agent or script · network none</span></div><div class="card data" style="left:880px;top:640px;width:200px;height:56px"><b>volume gateway-state</b><span>signing key · gateway database</span></div><div class="card " style="left:330px;top:975px;width:520px;height:54px"><b>Third parties</b><span>GitHub · api.anthropic.com, etc. · policy-allowed hosts</span></div><div class="lbl " style="left:163px;top:140px">HTTP 127.0.0.1:8800</div><div class="lbl " style="left:318px;top:140px">myorch commands<br>openshell commands</div><div class="lbl " style="left:698px;top:140px">read-only mount /secrets</div><div class="lbl " style="left:163px;top:330px">gRPC temporal:7233<br>start · reply · approve</div><div class="lbl c" style="left:316px;top:440px">gRPC: tasks</div><div class="lbl " style="left:698px;top:330px">openshell CLI: profiles, providers</div><div class="lbl c" style="left:704px;top:410px">openshell CLI: create/delete sandbox</div><div class="lbl c gr" style="left:704px;top:440px">http://gateway:17671</div><div class="lbl " style="left:1050px;top:572px">key</div><div class="lbl " style="left:166px;top:545px">docker CLI: helper containers<br>(ui, init too)</div><div class="lbl " style="left:848px;top:540px">docker API: creates<br>two containers</div><div class="lbl " style="left:988px;top:556px">read/write</div><div class="lbl " style="left:350px;top:850px">mounts a subpath</div><div class="lbl g" style="left:530px;top:520px">calls host.docker.internal:17671<br>via the port published on the host</div><div class="lbl c g" style="left:586px;top:726px">Unix<br>socket</div><div class="lbl g" style="left:460px;top:900px">policy-allowed egress · real credentials swapped in</div><div class="lbl " style="left:94px;top:1046px">call</div><div class="lbl " style="left:214px;top:1046px">egress request</div><div class="lbl " style="left:374px;top:1046px">data read/write</div><div class="note" style="left:40px;top:1080px">Connections not drawn: ui connects out to Slack (Socket Mode, outbound, no open port);<br>the local Claude Code session connects to ui at 127.0.0.1:8800; <code>uv run myorch</code> on the host connects to temporal at 127.0.0.1:7233 and reads events via ui.</div><svg width="1140" height="1130" viewBox="0 0 1140 1130"><defs><marker id="dc-call" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-faint)"/></marker><marker id="dc-paused" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker><marker id="dc-egress" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-accent)"/></marker><marker id="dc-data" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker></defs><path d="M155 110 L155 218" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M310 110 L310 415 L358 415" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M690 110 L690 243" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/><path d="M155 286 L155 398" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M360 433 L272 433" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M690 305 L690 360 L860 360 L860 398" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M590 433 L818 433" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M1080 275 L1108 275 L1108 668 L1082 668" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/><path d="M380 466 L380 570 L300 570 L300 673 L272 673" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M155 706 L155 748" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M155 810 L155 848" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/><path d="M840 480 L840 628" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M980 480 L980 638" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/><path d="M340 800 L340 877 L272 877" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/><path d="M520 668 L520 560 L780 560 L780 470 L818 470" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M620 720 L552 720" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#dc-egress)"/><path d="M450 770 L450 973" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#dc-egress)"/><path d="M40 1055 L86 1055" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#dc-call)"/><path d="M160 1055 L206 1055" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#dc-egress)"/><path d="M320 1055 L366 1055" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#dc-data)"/></svg></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/compose-services.html">diagrams/en/compose-services.html</a>.</p>
+<p>Diagram file: <a href="diagrams/compose-services.html">diagrams/compose-services.html</a>.</p>
 <ul>
 <li>You deal with only two places: the console in a browser, and <code>myorch</code> commands in a terminal (<code>uv run myorch</code> on the host, or <code>docker compose exec worker myorch</code>).</li>
 <li>The services in compose are on the same network and reach each other by service name: the console and the worker connect to <code>temporal:7233</code>; the worker, the console and <code>providers</code> connect to <code>http://gateway:17671</code>.</li>
@@ -1454,7 +1452,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="dg" style="width:1140px;height:590px"><div class="card " style="left:880px;top:14px;width:230px;height:50px"><b>Third parties</b><span>GitHub · Jira · Claude API, etc.</span></div><div class="sec " style="left:20px;top:90px;width:380px;height:420px"><div class="t" style="right:14px;left:auto">OpenShell gateway (control plane)</div></div><div class="card blue" style="left:45px;top:130px;width:330px;height:76px"><b>API server</b><span>auth · sandbox lifecycle · issues JWTs</span></div><div class="card " style="left:45px;top:250px;width:330px;height:76px"><b>Persistent state</b><span>sandboxes · policies · providers (real credentials)</span></div><div class="card green" style="left:45px;top:380px;width:330px;height:92px"><b>compute driver: docker</b><span>creates two containers and the socket between them</span><span>builds the boundary, judges no requests</span></div><div class="sec dash" style="left:440px;top:90px;width:680px;height:380px"><div class="t" style="">sandbox (one per step instance)</div></div><div class="card blue" style="left:465px;top:135px;width:270px;height:300px"><b>supervisor container</b><span>trusted side · bridge network</span><hr><ul><li>policy decisions</li><li>placeholders → real credentials</li><li>DNS and proxy · TLS re-signing</li><li>keeps the gateway session (JWT)</li></ul></div><div class="box" style="left:780px;top:135px;width:320px;height:300px;border:1.5px dashed var(--d-danger);background:var(--d-danger-soft)"></div><div class="lbl " style="left:795px;top:144px"><b>workload container</b> · untrusted · network none</div><div class="card dark" style="left:805px;top:178px;width:270px;height:76px"><b>harness process</b><span>claude -p or bash · untrusted</span></div><div class="note" style="left:812px;top:264px">· Landlock limits the file system<br>· env vars hold only credential placeholders<br>· seccomp blocks TCP and DNS<br>· the run's workspace is under /sandbox/</div><div class="card green" style="left:800px;top:372px;width:280px;height:52px"><b>No egress at all</b><span>only a Unix socket to the supervisor</span></div><div class="lbl " style="left:100px;top:36px">openshell CLI: create, delete sandboxes (myorch worker)<br>import providers (compose's providers service)</div><div class="lbl " style="left:218px;top:218px">read/write</div><div class="lbl c" style="left:407px;top:402px">creates</div><div class="lbl c" style="left:421px;top:136px">gets policy<br>+ credentials</div><div class="lbl c g" style="left:771px;top:222px">Unix<br>socket</div><div class="lbl g" style="left:712px;top:44px">policy-allowed egress<br>placeholders swapped<br>for real credentials</div><div class="lbl " style="left:94px;top:536px">call</div><div class="lbl " style="left:94px;top:562px">path of egress requests</div><div class="lbl " style="left:254px;top:536px">data read/write</div><svg width="1140" height="590" viewBox="0 0 1140 590"><defs><marker id="os-call" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-faint)"/></marker><marker id="os-paused" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker><marker id="os-egress" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-accent)"/></marker><marker id="os-data" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="12" markerHeight="12" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" style="fill:var(--d-ghost)"/></marker></defs><path d="M90 20 L90 128" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#os-call)"/><path d="M210 206 L210 248" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#os-data)"/><path d="M45 168 L30 168 L30 426 L43 426" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#os-call)"/><path d="M375 426 L438 426" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#os-call)"/><path d="M465 175 L377 175" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#os-call)"/><path d="M805 216 L737 216" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#os-egress)"/><path d="M700 135 L700 39 L878 39" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#os-egress)"/><path d="M40 545 L86 545" fill="none" style="stroke:var(--d-faint);stroke-width:1.5;" marker-end="url(#os-call)"/><path d="M40 571 L86 571" fill="none" style="stroke:var(--d-accent);stroke-width:3;" marker-end="url(#os-egress)"/><path d="M200 545 L246 545" fill="none" style="stroke:var(--d-ghost);stroke-width:1.5;stroke-dasharray:5 4;" marker-end="url(#os-data)"/></svg></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/openshell-internals.html">diagrams/en/openshell-internals.html</a>. Based on the <a href="https://docs.nvidia.com/openshell/about/architecture">OpenShell architecture docs</a>.</p>
+<p>Diagram file: <a href="diagrams/openshell-internals.html">diagrams/openshell-internals.html</a>. Based on the <a href="https://docs.nvidia.com/openshell/about/architecture">OpenShell architecture docs</a>.</p>
 <ul>
 <li>The gateway is the control plane: the long-running <code>gateway</code> service in compose. It stores the providers' real credentials, the policies and the sandbox records, and issues JWTs. It creates sandboxes through the docker driver.</li>
 <li>Each step instance's sandbox is two containers on Docker, visible in <code>docker ps</code>. The name is made of the flow, the step and a short hash, for example <code>dev-deve-3f2a9</code> (develop in development). The supervisor container's name ends in <code>-supervisor</code> and uses the <code>bridge</code> network. The workload container's network is <code>none</code>.</li>
@@ -1554,7 +1552,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="df"><div class="row" style=""><div class="col" style="flex:3 1 0"><div class="row" style=""><div class="c "><b>gateway-init</b><span>creates the key if missing, then exits</span></div><div class="arr ">on success<i></i></div><div class="c green"><b>gateway</b><span>long-running</span></div><div class="arr ">once started<i></i></div><div class="c "><b>providers</b><span>imports credentials, then exits</span></div></div><div style="height:10px"></div><div class="row" style=""><div class="c "><b>init</b><span>myorch init, runs on every up, then exits</span></div><div style="width:14px"></div><div class="c "><b>temporal</b><span>long-running</span></div></div></div><div class="arr ">when all are met<i></i></div><div class="col" style="flex:1 1 0"><div class="c blue"><b>worker</b><span>needs init, providers succeeded<br>temporal, gateway started</span></div><div style="height:8px"></div><div class="c "><b>ui</b><span>needs init succeeded, temporal started</span></div></div></div><div class="note">compose orders the services by depends_on. If providers fails, worker does not start. The console does not wait for gateway or providers.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/compose-startup.html">diagrams/en/compose-startup.html</a>.</p>
+<p>Diagram file: <a href="diagrams/compose-startup.html">diagrams/compose-startup.html</a>.</p>
 <p>compose orders services by <code>depends_on</code>. When <code>providers</code> fails, the worker does not start. The console does not wait for the gateway or <code>providers</code>.</p>
 <h2 id="02-services--which-services-each-command-depends-on">Which services each command depends on</h2>
 <p>For how to use the commands themselves, see <a href="#ch-05-cli">5. CLI reference</a>. The "Console" column refers to commands executed on the host: they read the event log through the console. When executed inside a container, they read the file directly and do not need the console.</p>
@@ -1835,9 +1833,9 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 </tbody>
 </table>
 <p>The worker writes <code>events.db</code> into the data directory (<code>--data</code> or <code>MYORCH_DATA</code>; <code>/data</code> in compose).</p>
-<p><code>events.db</code> is opened only by processes inside containers. Processes on the host (for example <code>uv run myorch run</code>) read it through the console's <code>GET /channel/events.json</code>; when the console is not running they report an error and do not fall back to reading the file directly. The reason: processes on the host do not share SQLite's locks with the containers, and when such a process closes its connection it deletes <code>events.db-shm</code>, after which every query in the containers fails with <code>disk I/O error</code> (seen on 2026-11-09; for the fix see <a href="#ch-11-troubleshooting">11. Troubleshooting</a>). <code>MYORCH_EVENTS_DIRECT=1</code> forces reading the file directly; use it only when no container has the file open.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/02-services.md"><code>docs/en/02-services.md</code></a></p></section>
+<p><code>events.db</code> is opened only by processes inside containers. Processes on the host (for example <code>uv run myorch run</code>) read it through the console's <code>GET /channel/events.json</code>; when the console is not running they report an error and do not fall back to reading the file directly. The reason: processes on the host do not share SQLite's locks with the containers, and when such a process closes its connection it deletes <code>events.db-shm</code>, after which every query in the containers fails with <code>disk I/O error</code> (seen on 2026-11-09; for the fix see <a href="#ch-11-troubleshooting">11. Troubleshooting</a>). <code>MYORCH_EVENTS_DIRECT=1</code> forces reading the file directly; use it only when no container has the file open.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/02-services.md"><code>docs/02-services.md</code></a></p></section>
 <section class="chapter" id="ch-03-architecture"><h1 id="03-architecture--3-architecture">3. Architecture</h1>
-<p>For how services start and what depends on what, see <a href="#ch-02-services">2. Services and dependencies</a>. For the full design rationale, see <a href="https://github.com/leweii/myorch/blob/main/docs/en/ARCHITECTURE.md">ARCHITECTURE.md</a>.</p>
+<p>For how services start and what depends on what, see <a href="#ch-02-services">2. Services and dependencies</a>. For the full design rationale, see <a href="https://github.com/leweii/myorch/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>.</p>
 <h2 id="03-architecture--tech-stack">Tech stack</h2>
 <table>
 <thead>
@@ -1976,7 +1974,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="df"><div class="band "><div class="tag">Entry points<small>local processes</small></div><div class="body"><div class="chips"><span class="chip ">cli.py</span><span class="chip ">ui/</span><span class="chip ">channels/</span><span class="chip ">watchdog.py</span><span class="chip ">review_page.py</span></div>Read flows and project packs, send commands through the Temporal client, read events and workspaces.</div></div><div class="down "><i></i><span>call</span></div><div class="band "><div class="tag">L4 flow engine<small>replaceable</small></div><div class="body"><div class="chips"><span class="chip ">engines/temporal/</span></div>The only place that imports temporalio. FlowWorkflow calls RunState.plan() over and over; activities only forward. ScheduledLaunch starts scheduled runs.</div></div><div class="down "><i></i><span>call</span></div><div class="band hl"><div class="tag">L3 core library<small>engine-independent</small></div><div class="body"><div class="chips"><span class="chip ">runner/</span><span class="chip ">→</span><span class="chip ">storage/</span><span class="chip ">→</span><span class="chip ">core/</span></div><ul><li>core: schema, scheduling, expressions, prompts, manifests, events; by convention no IO</li><li>storage: the volume's directories and files, the event log</li><li>runner: step → profile + harness → openshell calls; host actions</li><li>Domain modules beside them (project, knowledge, evals, takeaways, trail, runs, localrepo, flowfile) depend only on core and are outside the layer contract</li></ul></div></div><div class="down "><i></i><span>openshell CLI · docker CLI</span></div><div class="band "><div class="tag">L2 OpenShell<small>isolation and credentials</small></div><div class="body"><div class="chips"><span class="chip ">gateway</span><span class="chip ">supervisor</span></div><ul><li>gateway: credentials, policies, sandbox lifecycle</li><li>supervisor: trusted container outside the sandbox; enforces policy, injects credentials</li></ul></div></div><div class="down "><i></i><span></span></div><div class="band "><div class="tag">L1 Docker<small>compute and storage</small></div><div class="body"><div class="chips"><span class="chip ">two containers per sandbox</span><span class="chip ">helper containers</span><span class="chip ">volume myorch-artifacts</span></div>Sandbox containers, helper containers that read and write the volume, the workspaces of all runs.</div></div><div class="note"><code>uv run lint-imports</code> checks two rules: engines → runner → storage → core may only depend downward; core, storage and runner may not import temporalio.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/layers.html">diagrams/en/layers.html</a>.</p>
+<p>Diagram file: <a href="diagrams/layers.html">diagrams/layers.html</a>.</p>
 <p>Dependency direction: <code>engines → runner → storage → core</code>. <code>uv run lint-imports</code> checks two rules in <a class="code" href="https://github.com/leweii/myorch/blob/main/pyproject.toml"><code>pyproject.toml</code></a>:</p>
 <ul>
 <li>These four layers may only depend downward.</li>
@@ -2079,7 +2077,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 <div class="df"><div class="row" style=""><div class="c "><b>Console · Slack · Claude Code</b><span>channels/relay.py</span></div><div class="arr ">commands<i></i></div><div class="c "><b>Temporal client</b><span>engines/temporal/client.py<br>start · signal · cancel · resume</span></div><div class="arr ">gRPC<i></i></div><div class="c "><b>Temporal</b><span>durable state · retries · waiting for signals · Schedules</span></div><div class="arr bi">drives<i></i></div><div class="c blue"><b>FlowWorkflow</b><span>engines/temporal/workflow.py<br>RunState (core/run.py) decides what runs next</span></div></div><div class="down "><i></i><span>calls activities (engines/temporal/activities.py, only converts arguments)</span></div><div class="frame "><div class="t">activities · all in the worker</div><div class="grid" style="grid-template-columns:repeat(4,1fr);"><div class="col" style=""><div class="c "><b>init_run · seed_repo · write_run_file<br>prepare_step · collect_manifest</b></div><div class="down "><i></i><span></span></div><div class="c "><b>DockerVolumeStore</b><span>storage/docker_volume.py</span></div><div class="down "><i></i><span>docker run</span></div><div class="c "><b>helper containers</b><span>--network none</span></div><div class="down dash"><i></i><span>read/write</span></div><div class="c data"><b>volume</b><span>myorch-artifacts</span></div></div><div class="col" style=""><div class="c blue"><b>run_step · cleanup_step</b></div><div class="down "><i></i><span></span></div><div class="c "><b>StepRunner</b><span>runner/runner.py<br>profile → image, policy,<br>provider, mounts · harness → command line</span></div><div class="down "><i></i><span>openshell CLI</span></div><div class="c green"><b>OpenShell gateway</b><span>creates, inspects, deletes sandboxes</span></div><div class="down "><i></i><span></span></div><div class="c "><b>sandbox</b><span>supervisor container + workload container</span></div></div><div class="col" style=""><div class="c "><b>run_action</b></div><div class="down "><i></i><span></span></div><div class="c "><b>ActionRunner</b><span>runner/actions.py · no sandbox</span></div><div class="down "><i></i><span></span></div><div class="c "><b>5 host actions</b><span>project-apply · postmortem-replay<br>run-trail · takeaway-redact · takeaways-learned</span></div><div class="down dash"><i></i><span>write</span></div><div class="c data"><b>myorch-knowledge/ · myorch-data/ · run workspaces</b><span>manifest written to out/</span></div></div><div class="col" style=""><div class="c "><b>publish_events</b></div><div class="down "><i></i><span></span></div><div class="c "><b>EventLog</b><span>storage/events.py</span></div><div class="down dash"><i></i><span>write</span></div><div class="c data"><b>myorch-data/events.db</b><span>event table · live output table (written by StepRunner)</span></div></div></div></div><div class="note">cleanup_step is called only when run_step raises; normally run_step deletes its sandbox itself. The worker also runs ScheduledLaunch for scheduled starts.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/components.html">diagrams/en/components.html</a>.</p>
+<p>Diagram file: <a href="diagrams/components.html">diagrams/components.html</a>.</p>
 <h2 id="03-architecture--responsibility-boundaries">Responsibility boundaries</h2>
 <table>
 <thead>
@@ -2284,7 +2282,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="c blue"><b>plan() → [develop]</b><span>RunState picks an instance that can run</span></div><div class="down "><i></i><span></span></div><div class="frame "><div class="t">FlowWorkflow calls the activities in order</div><div class="steps"><div class="num">1</div><div class="name">prepare_step</div><div class="desc">Creates the directories on the volume, chown 1000. A new attempt (turn 1) clears out/; later turns delete only the old manifest and question. The session directory and logs/ are kept.</div><div class="num">2</div><div class="name">run_step</div><div class="desc">StepRunner: first deletes any leftover sandbox with the same name. profile → image, policy, provider; builds the mounts, assembles the prompt, <code>openshell sandbox create</code>, named <code>&lt;flow&gt;-&lt;step&gt;-&lt;hash&gt;</code>. Polls until it ends, with regular heartbeats. Afterwards saves the supervisor log, then deletes the sandbox.</div><div class="num">3</div><div class="name">collect_manifest</div><div class="desc">Reads manifest.json and question.json, and writes a fallback when one is missing. The workflow then turns results into questions according to escalate_when.</div></div></div><div class="down "><i></i><span></span></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c "><b>Done</b><span>Back to plan() for the next instances that can run. One sandbox per instance, never reused</span></div><div class="c you"><b>needs_input → waiting_input</b><span>After you reply, turn+1: a new sandbox resumes the same session</span></div><div class="c red"><b>Failed</b><span>Retries with a new attempt up to limits.retries. After that, on_failed decides</span></div></div><div class="note">A step with <code>action:</code> calls a single run_action (at most 2 tries). If run_step raises (worker crash, heartbeat timeout), cleanup_step makes sure the sandbox is deleted. Whenever the state has new events, the background publish_events writes them to events.db.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/step-execution.html">diagrams/en/step-execution.html</a>.</p>
+<p>Diagram file: <a href="diagrams/step-execution.html">diagrams/step-execution.html</a>.</p>
 <ul>
 <li>One sandbox per instance, never reused. Once the sandbox is created, its policy is locked.</li>
 <li>The sandbox name is <code>&lt;flow&gt;-&lt;step&gt;-&lt;hash5&gt;</code>, for example <code>dev-deve-3f2a9</code> for the develop step of development. The hash is computed from the run, the step, the attempt and the turn. Flows are shared, so the name contains no project. OpenShell limits names to 19 characters, so the full ids are put on labels (<code>myorch.run</code>, <code>myorch.step</code>, <code>myorch.attempt</code>, <code>myorch.turn</code>, <code>myorch.model</code>, and the project <code>myorch.project</code>).</li>
@@ -2383,7 +2381,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="c "><b>An attempt failed</b><span>attempt N of a step</span></div><div class="down "><i></i><span></span></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div class="c "><b>Retries left (limits.retries)</b><span>Automatic retry: new attempt, new sandbox. After a platform interruption (timeout, lost activity, sandbox failure) it resumes the original session and first has the agent look at the repository's current state. No retry once the run is cancelled</span></div><div class="col" style=""><div class="c "><b>Retries used up: on_failed decides</b></div><div style="height:8px"></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c red"><b>fail (default)</b><span>The step fails, later steps are blocked, the run fails</span></div><div class="c "><b>skip</b><span>Treated as skipped; the run goes on</span></div><div class="c you"><b>ask</b><span>Asks you: 1 start over · write a hint to continue the original session · 2 skip · 3 stop</span></div></div></div></div><div class="down "><i></i><span>the run has ended</span></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div class="c blue"><b>Failed or cancelled → resume</b><span><code>myorch resume</code> or the console button. Same run_id; a new Temporal execution carries the original RunState. Failed, cancelled and blocked steps are reset; succeeded steps and approvals are kept, rejections stay rejected. Only for runs Temporal still holds (ended within 24 hours)</span></div><div class="c "><b>Ended → continue (a run input such as from_run)</b><span>New run_id and workspace, same project, same role. carry inputs and tags come along; what people said is written to docs/previous/conversation.md. development continues on the same branch</span></div></div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/run-continuation.html">diagrams/en/run-continuation.html</a>.</p>
+<p>Diagram file: <a href="diagrams/run-continuation.html">diagrams/run-continuation.html</a>.</p>
 <table>
 <thead>
 <tr>
@@ -2404,7 +2402,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <td>Ask a person after failure</td>
 <td><code>on_failed: ask</code></td>
 <td>Same run, waits for your choice</td>
-<td>Choosing <strong>Start over</strong> (重新开始): new attempt, new session. Writing a hint: the next turn of the same attempt, resuming the original session</td>
+<td>Choosing <strong>Start over</strong>: new attempt, new session. Writing a hint: the next turn of the same attempt, resuming the original session</td>
 </tr>
 <tr>
 <td>Resume (<code>myorch resume</code>, the console button)</td>
@@ -2513,7 +2511,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="c stage you"><div><b>deploy/secrets/providers.yaml</b><span>file on the host · not in git</span></div><div style="font-size:12.5px;color:var(--d-text)">The compose providers service (deploy/provision.py) reads it and passes each value to the gateway as <code>--credential KEY</code> through the subprocess's environment. No value appears on a command line.</div><span class="badge n">real tokens</span></div><div class="down "><i></i><span>on every docker compose up</span></div><div class="c stage green"><div><b>OpenShell gateway</b><span>control plane</span></div><div style="font-size:12.5px;color:var(--d-text)">Stores the real tokens.</div><span class="badge k">has real tokens</span></div><div class="down "><i></i><span>when a sandbox is created</span></div><div class="c stage "><div><b>myorch worker</b><span>also the console and CLI</span></div><div style="font-size:12.5px;color:var(--d-text)">Passes only provider names, e.g. claude, github-mdm.</div><span class="badge n">names only</span></div><div class="down "><i></i><span></span></div><div class="c stage red"><div><b>workload container</b><span>agent process</span></div><div style="font-size:12.5px;color:var(--d-text)">Env vars hold only placeholders. The container has no network. seccomp intercepts requests and hands them to the supervisor over a Unix socket.</div><span class="badge x">placeholders only</span></div><div class="down g"><i></i><span>Unix socket</span></div><div class="c stage blue"><div><b>supervisor container</b><span>trusted side</span></div><div style="font-size:12.5px;color:var(--d-text)">Checks that policy allows this host and path → replaces placeholders with real tokens → opens the connection and forwards.</div><span class="badge k">has real tokens</span></div><div class="down g"><i></i><span>policy-allowed egress</span></div><div class="c "><b>Request target</b><span>policy-allowed hosts</span></div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/credential-flow.html">diagrams/en/credential-flow.html</a>.</p>
+<p>Diagram file: <a href="diagrams/credential-flow.html">diagrams/credential-flow.html</a>.</p>
 <p>The worker, the console, the CLI and the agent never get real tokens. The console process also starts sandboxes (cloning git knowledge sources, Watchdog judgments, see <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/runner/jobs.py"><code>runner/jobs.py</code></a>), and it too passes only provider names.</p>
 <p>In docker compose, each of the two kinds of credentials has one file, both in <code>deploy/secrets/</code> (not in git, not in images):</p>
 <table>
@@ -2737,7 +2735,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="row" style=""><div class="col" style="flex:1 1 0"><div class="frame "><div class="t">worker</div><div class="c "><b>FlowWorkflow</b><span>publish_events → event table</span></div><div class="down "><i></i><span></span></div><div class="c "><b>StepRunner</b><span>follows the agent's log (helper container tail -F) → live output table</span></div></div><div class="down dash"><i></i><span>write</span></div><div class="c data"><b>myorch-data/events.db</b><span>SQLite WAL · event table · live output table</span></div></div><div class="arr ">read<i></i></div><div class="col" style="flex:1.3 1 0"><div class="frame "><div class="t">myorch serve (ui container)</div><div class="c blue"><b>channels/relay.py</b><span>events · commands · content</span></div><div style="height:8px"></div><div class="grid" style="grid-template-columns:1fr 1fr;"><div class="c "><b>Watchdog</b><span>reads events, sends reminders</span></div><div class="c "><b>Slack adapter</b><span>in-process follow · Socket Mode, outbound</span></div></div><div style="height:8px"></div><div class="c "><b>channels/http.py · /channel</b><span>SSE /events /output · JSON /events.json /runs · POST commands</span></div></div></div><div class="arr bi">HTTP · SSE<i></i></div><div class="col" style="flex:1 1 0"><div class="c you"><b>Browser console</b><span>SSE + /api</span></div><div style="height:8px"></div><div class="c "><b>Claude Code channel</b><span>separate process started by the session · approve, reject, request changes return 403</span></div><div style="height:8px"></div><div class="c "><b>Host CLI</b><span>GET /channel/events.json, never opens the file directly</span></div><div style="height:8px"></div><div class="c "><b>Slack DM threads</b><span>progress · questions · approval buttons</span></div></div></div><div class="down dash"><i></i><span>Commands: relay identifies the person via channels.yaml → engines/temporal/client.py → start, signal, cancel, resume</span></div><div class="c "><b>FlowWorkflow (Temporal)</b><span>Content (files, diffs, logs) goes separately: relay → DockerVolumeStore's helper container → runs/&lt;id&gt;/</span></div><div class="note">Events are sent only at the start, when a person is needed and at the end, plus detail events for drawing run state. Live output has its own table.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/channel-layer.html">diagrams/en/channel-layer.html</a>.</p>
+<p>Diagram file: <a href="diagrams/channel-layer.html">diagrams/channel-layer.html</a>.</p>
 <p>The channel layer relays between myorch and the platforms people use; it keeps no run state of its own. The relay layer is <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/channels/relay.py"><code>channels/relay.py</code></a>, with three directions:</p>
 <table>
 <thead>
@@ -2861,7 +2859,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="c you"><b>browser</b><span>http://127.0.0.1:8800/</span></div><div class="down "><i></i><span>HTTP (pages, /api, images /api/runs/&lt;id&gt;/raw) · SSE (/channel/events, /channel/output)</span></div><div class="c blue"><b>myorch serve</b><span>ui/app.py: pages and /api · channels/http.py: /channel · Host must be local · POST needs X-Myorch-UI</span></div><div class="down "><i></i><span></span></div><div class="c "><b>ui/service.py</b><span>The console's read and write logic. ui/runview.py builds run state from events. No agent in the console</span></div><div class="down "><i></i><span>call</span></div><div class="c green"><b>channel relay layer</b><span>channels/relay.py: events · commands · content</span></div><div class="down "><i></i><span></span></div><div class="grid" style="grid-template-columns:1fr 1fr 1fr;"><div class="c data"><b>events.db</b><span>events + live output</span></div><div class="c "><b>Temporal client</b><span>start · reply · approve · cancel · resume</span></div><div class="c data"><b>Run workspace</b><span>files · diffs · logs (helper container)</span></div></div><div class="note">Watchdog and the Slack adapter run in the same process. The CLI on the host also reads events through here (/channel/events.json). For old runs without detailed events, the console falls back to a Temporal query for now.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/console.html">diagrams/en/console.html</a>.</p>
+<p>Diagram file: <a href="diagrams/console.html">diagrams/console.html</a>.</p>
 <ul>
 <li>The console is the web adapter of the channel layer. It neither calls Temporal directly nor reads the volume directly; all reads and writes go through <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/channels/relay.py"><code>channels/relay.py</code></a>. The run state is built from events by <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/ui/runview.py"><code>ui/runview.py</code></a>, and the browser receives new events through SSE (<code>/channel/events</code>). Old runs without detailed events fall back to a Temporal query for now.</li>
 <li>There is no agent in the console. A run's tab is its conversation. The first message you write is the request, and its original text is written to <code>docs/external/request.md</code>. Later messages are sent unchanged to the step that is asking.</li>
@@ -3000,9 +2998,9 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <div class="df"><div class="frame "><div class="t">macOS · single machine · docker compose (deploy/compose.yaml)</div><div class="grid" style="grid-template-columns:repeat(3,1fr);"><div class="c "><b>temporal</b><span>container · 127.0.0.1:7233 / 8233<br>data in myorch-data/temporal.db</span></div><div class="c green"><b>gateway</b><span>official OpenShell image · 127.0.0.1:17671<br>credentials, policies, sandbox records</span></div><div class="c "><b>worker</b><span>container · runs all steps<br>starts sandboxes and helper containers via docker.sock</span></div><div class="c blue"><b>ui (myorch serve)</b><span>container · 127.0.0.1:8800<br>console + channel layer + Watchdog + Slack adapter</span></div><div class="c "><b>Docker Desktop</b><span>a pair of sandbox containers per step<br>helper containers · volume myorch-artifacts</span></div><div class="c "><b>One-shot services</b><span>gateway-init · init · providers<br>run and exit on every up</span></div></div></div><div class="down dash"><i></i><span>Events are pushed to Claude Code. It connects to ui's HTTP API to read events and call tools (the session starts it)</span></div><div class="c you"><b>Claude Code channel</b><span>channels/claude_code.py · pushes notifications, provides tools · cannot approve</span></div><div class="note">The Slack adapter connects out to Slack (Socket Mode), so the machine opens no ports. Single machine only. Team use (server-side event store, login, per-project permissions) is not built yet.</div></div>
 </div>
 
-<p>Diagram file: <a href="diagrams/en/deployment.html">diagrams/en/deployment.html</a>.</p>
+<p>Diagram file: <a href="diagrams/deployment.html">diagrams/deployment.html</a>.</p>
 <p>The everyday setup runs with docker compose (<a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/compose.yaml"><code>deploy/compose.yaml</code></a>). Sandboxes are still containers on the host's Docker, at the same level as the compose services: the gateway and the worker operate the host's Docker through <code>/var/run/docker.sock</code> mounted into their containers. For how the services call each other, see <a href="#02-services--services-in-docker-compose">2. Services and dependencies · Services in docker compose</a>.</p>
-<p>Only a single machine is supported. Team use (server-side event storage, a web UI with login, per-project permissions) and Kubernetes are not done yet.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/03-architecture.md"><code>docs/en/03-architecture.md</code></a></p></section>
+<p>Only a single machine is supported. Team use (server-side event storage, a web UI with login, per-project permissions) and Kubernetes are not done yet.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/03-architecture.md"><code>docs/03-architecture.md</code></a></p></section>
 <section class="chapter" id="ch-04-setup"><h1 id="04-setup--4-setup">4. Setup</h1>
 <p>Since 2026-11-05 the everyday environment is docker compose: Temporal, the OpenShell gateway, the worker and the console all run in containers. Run every command from the <code>myorch/</code> directory. For how the services relate, see <a href="#ch-02-services">2. Services and dependencies</a>. For the detailed compose steps, credentials files, Slack, the Claude Code channel, ports and known limits, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md">deploy/README.md</a>.</p>
 <h2 id="04-setup--41-required-software">4.1 Required software</h2>
@@ -3099,7 +3097,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 </tbody>
 </table>
 <h2 id="04-setup--42-one-time-installation">4.2 One-time installation</h2>
-<p><strong>On a new Mac, use the install script <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/bootstrap-mac.sh"><code>deploy/bootstrap-mac.sh</code></a>.</strong> The steps are in <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#新机器">deploy/README.md, "New machine" (新机器)</a>. The script can be run again and again; it skips the steps that are already done. It does the following:</p>
+<p><strong>On a new Mac, use the install script <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/bootstrap-mac.sh"><code>deploy/bootstrap-mac.sh</code></a>.</strong> The steps are in <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#new-machine">deploy/README.md, "New machine"</a>. The script can be run again and again; it skips the steps that are already done. It does the following:</p>
 <ol>
 <li>Checks git, Docker Desktop and gh (logged in).</li>
 <li>Puts three directories under the same parent directory (default <code>~/orca/projects/</code>, change it with <code>MYORCH_ROOT</code>): clones myorch and myorch-knowledge, and creates <code>myorch-data</code>. For what each one is for, see <a href="#01-overview--directories-and-storage">1. Overview · Directories and storage</a>.</li>
@@ -3109,7 +3107,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <li>Syncs all project packs (<code>myorch project sync</code>).</li>
 <li>Smoke test: <code>docker compose -f deploy/compose.yaml exec worker myorch run deploy/smoke.yaml --wait</code>. Two script steps; no model is called.</li>
 </ol>
-<p>Manual installation has the same steps as the script. The commands for each step are in <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#安装">deploy/README.md, "Installation" (安装)</a>.</p>
+<p>Manual installation has the same steps as the script. The commands for each step are in <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#installation">deploy/README.md, "Installation"</a>.</p>
 <p>After installation, install the dependencies for the CLI on the host too:</p>
 <pre><code class="language-sh">uv sync
 uv run myorch list      # connects to the Temporal in compose and lists the recent runs
@@ -3122,7 +3120,7 @@ uv run myorch list                                   # recent runs, and which on
 <ul>
 <li>Console: http://127.0.0.1:8800/ . Temporal UI: http://127.0.0.1:8233/ .</li>
 <li>Temporal keeps finished runs for only 24 hours (the dev server default, checked on 2026-11-10 with <code>temporal operator namespace describe default</code>). For older runs, the console reads the state and the conversation from the event log.</li>
-<li>After changing <a class="code" href="https://github.com/leweii/myorch/tree/main/src"><code>src/</code></a> or <a class="code" href="https://github.com/leweii/myorch/tree/main/flows"><code>flows/</code></a>: <code>docker compose -f deploy/compose.yaml up -d --build</code>. This interrupts the steps that are running. To release the commits on origin/main, use <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a>; it waits for the running steps to finish before it restarts (see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#发布-originmain">deploy/README.md</a>). For what to do after other changes, see <a href="#01-overview--what-to-do-after-changing-something">1. Overview · What to do after a change</a>.</li>
+<li>After changing <a class="code" href="https://github.com/leweii/myorch/tree/main/src"><code>src/</code></a> or <a class="code" href="https://github.com/leweii/myorch/tree/main/flows"><code>flows/</code></a>: <code>docker compose -f deploy/compose.yaml up -d --build</code>. This interrupts the steps that are running. To release the commits on origin/main, use <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a>; it waits for the running steps to finish before it restarts (see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#release-originmain">deploy/README.md</a>). For what to do after other changes, see <a href="#01-overview--what-to-do-after-changing-something">1. Overview · What to do after a change</a>.</li>
 </ul>
 <p>Check that the services are up:</p>
 <pre><code class="language-sh">docker compose -f deploy/compose.yaml ps -a                          # gateway-init, init, providers are exited (0)
@@ -3141,7 +3139,7 @@ providers:
     credentials:
       GITHUB_TOKEN: &quot;...&quot;
 </code></pre>
-<p>For each project in <code>github_profiles</code>, the <code>providers</code> service runs <code>myorch project github-profile &lt;project&gt;</code> and imports the generated profile into the gateway (updating it if it exists). Then it creates the provider or updates its token. For the file format, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#安装">deploy/README.md, "Installation" (安装)</a>.</p>
+<p>For each project in <code>github_profiles</code>, the <code>providers</code> service runs <code>myorch project github-profile &lt;project&gt;</code> and imports the generated profile into the gateway (updating it if it exists). Then it creates the provider or updates its token. For the file format, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md#installation">deploy/README.md, "Installation"</a>.</p>
 <p>Current providers:</p>
 <table>
 <thead>
@@ -3225,7 +3223,7 @@ uv run lint-imports    # checks the layer dependencies
 <li>Commands that need OpenShell (for example <code>myorch knowledge check</code>, <code>openshell provider list</code>) run in the container: <code>docker compose -f deploy/compose.yaml exec worker &lt;command&gt;</code>. The host has no gateway configuration.</li>
 <li>The console and the CLI in the container act as <code>MYORCH_USER</code> from <code>deploy/.env</code> (the host's <code>$USER</code> when it is not set), not as root.</li>
 <li>Paths, ports, volume names and other settings are in <code>deploy/.env</code> (template <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/.env.example"><code>deploy/.env.example</code></a>). The defaults suit a new machine.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/04-setup.md"><code>docs/en/04-setup.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/04-setup.md"><code>docs/04-setup.md</code></a></p></section>
 <section class="chapter" id="ch-05-cli"><h1 id="05-cli--5-cli-reference">5. CLI reference</h1>
 <p>Every command has the form <code>uv run myorch &lt;command&gt;</code> and runs from the <code>myorch/</code> directory. The output of <code>uv run myorch &lt;command&gt; -h</code> is the authority on arguments. For which services each command needs, see <a href="#02-services--which-services-each-command-depends-on">2. Services and dependencies</a>.</p>
 <h2 id="05-cli--global-arguments">Global arguments</h2>
@@ -3430,7 +3428,7 @@ uv run lint-imports    # checks the layer dependencies
 <tbody>
 <tr>
 <td>Activity bar (far left)</td>
-<td>Switches the side bar: <strong>Runs</strong> (运行), <strong>Waiting on you</strong> (等你处理, with a count), <strong>Flow definitions</strong> (流程定义). Clicking the current icon again folds the side bar. The theme is at the bottom</td>
+<td>Switches the side bar: <strong>Runs</strong>, <strong>Waiting on you</strong> (with a count), <strong>Flow definitions</strong>. Clicking the current icon again folds the side bar. The theme is at the bottom</td>
 </tr>
 <tr>
 <td>Side bar: Runs</td>
@@ -3446,15 +3444,15 @@ uv run lint-imports    # checks the layer dependencies
 </tr>
 <tr>
 <td>Editor tabs</td>
-<td>A run's conversation: the request, each step's progress and digest, questions, replies, approvals, the end, with the input box below. Its header has <strong>Changes</strong> (改动), <strong>Docs</strong> (文档) and <strong>Flow definition</strong> (流程定义). A step: error, question, digest, outputs, artifacts and the last turn's log, the knowledge record, read as soon as it opens. <strong>Changes</strong>: the diff against base, the review conclusion, the risk verdict. <strong>Docs</strong>: the workspace's <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>; images (for example ticket screenshots) are shown directly. Files, a new run and flow definitions get a tab each too. A single click in the tree opens a preview tab (italic) that the next single click replaces; a double click, or typing in it, keeps it. Tabs survive a reload, and the address names the active tab (<code>#run=…&amp;step=…</code>), so it can be shared</td>
+<td>A run's conversation: the request, each step's progress and digest, questions, replies, approvals, the end, with the input box below. Its header has <strong>Changes</strong>, <strong>Docs</strong> and <strong>Flow definition</strong>. A step: error, question, digest, outputs, artifacts and the last turn's log, the knowledge record, read as soon as it opens. <strong>Changes</strong>: the diff against base, the review conclusion, the risk verdict. <strong>Docs</strong>: the workspace's <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a>; images (for example ticket screenshots) are shown directly. Files, a new run and flow definitions get a tab each too. A single click in the tree opens a preview tab (italic) that the next single click replaces; a double click, or typing in it, keeps it. Tabs survive a reload, and the address names the active tab (<code>#run=…&amp;step=…</code>), so it can be shared</td>
 </tr>
 <tr>
 <td>New run</td>
-<td>A tab: first pick the project, then the task (this project's flows), then fill in the fields, the first message and the knowledge sources; the steps it will run are on the right. Rarely used fields (<code>more: true</code> in the spec) fold under <strong>More options</strong> (更多选项). ⌘+Enter or <strong>Start</strong> (启动). The first message is written verbatim to the run's <code>docs/external/request.md</code>; <code>task</code> takes its first line</td>
+<td>A tab: first pick the project, then the task (this project's flows), then fill in the fields, the first message and the knowledge sources; the steps it will run are on the right. Rarely used fields (<code>more: true</code> in the spec) fold under <strong>More options</strong>. ⌘+Enter or <strong>Start</strong>. The first message is written verbatim to the run's <code>docs/external/request.md</code>; <code>task</code> takes its first line</td>
 </tr>
 <tr>
 <td>Bottom panel</td>
-<td>Live output. It comes up when you open a step that is running, or click a step's <strong>Live output</strong> (实时输出). One tab per step; drag it taller, maximise or fold it. Output is kept 7 days, so finished steps can be read back; <strong>Full log</strong> (完整日志) opens the last turn's log file</td>
+<td>Live output. It comes up when you open a step that is running, or click a step's <strong>Live output</strong>. One tab per step; drag it taller, maximise or fold it. Output is kept 7 days, so finished steps can be read back; <strong>Full log</strong> opens the last turn's log file</td>
 </tr>
 <tr>
 <td>Status bar</td>
@@ -3477,19 +3475,19 @@ uv run lint-imports    # checks the layer dependencies
 </tr>
 <tr>
 <td>Waiting for approval</td>
-<td><strong>Approve</strong> (批准), <strong>Reject</strong> (驳回). If the approval has <code>changes</code> configured, there is also <strong>Request changes</strong> (提修改意见): write the feedback in the input box, and the run goes back to the review loop to make changes. The input box content also serves as the approval note</td>
+<td><strong>Approve</strong>, <strong>Reject</strong>. If the approval has <code>changes</code> configured, there is also <strong>Request changes</strong>: write the feedback in the input box, and the run goes back to the review loop to make changes. The input box content also serves as the approval note</td>
 </tr>
 <tr>
 <td>Running</td>
-<td>Cannot send. Shows the step that is running. <strong>Cancel this run</strong> (取消这个运行) is at the bottom right</td>
+<td>Cannot send. Shows the step that is running. <strong>Cancel this run</strong> is at the bottom right</td>
 </tr>
 <tr>
 <td>Failed or cancelled</td>
-<td>Cannot send. <strong>Re-run failed steps</strong> (重新执行失败的步骤) is at the bottom right; it is the same as <a href="#05-cli--resume"><code>resume</code></a></td>
+<td>Cannot send. <strong>Re-run failed steps</strong> is at the bottom right; it is the same as <a href="#05-cli--resume"><code>resume</code></a></td>
 </tr>
 <tr>
 <td>Finished</td>
-<td>Cannot send. development-type flows have <strong>Continue on this branch</strong> (在这个分支上接着改): it starts a new run with <code>from_run</code> set to this run (see <a href="#05-cli--run"><code>run</code></a>). To continue other flows, start a new run</td>
+<td>Cannot send. development-type flows have <strong>Continue on this branch</strong>: it starts a new run with <code>from_run</code> set to this run (see <a href="#05-cli--run"><code>run</code></a>). To continue other flows, start a new run</td>
 </tr>
 </tbody>
 </table>
@@ -3576,7 +3574,7 @@ uv run lint-imports    # checks the layer dependencies
 <li>If the flow has <code>projects:</code>, checks that <code>--project</code> is in it.</li>
 <li>If the flow has a <code>runs</code> input (learn, postmortem) and it is not given, or is given as <code>auto</code>, picks the runs automatically; see "learn and postmortem" below.</li>
 <li>If there is an input with <code>type: run</code> (for example development's <code>from_run</code>), checks that run; see "Continuing from a run" below.</li>
-<li>Checks the required inputs (a missing one fails with <code>请先填：&lt;field name&gt;</code>, "fill in first") and the inputs the project requires.</li>
+<li>Checks the required inputs (a missing one fails with <code>Fill in first: &lt;field name&gt;</code>) and the inputs the project requires.</li>
 <li>Syncs and picks the snapshots of the knowledge sources: <code>dir</code> knowledge sources are synced every time (nothing is copied when nothing changed); <code>git</code> knowledge sources are synced again only when the latest snapshot is more than 1 hour old. If a sync fails, the previous snapshot is used.</li>
 <li>Reads the flow file → picks parameters with presets → shapes it for the project (<code>if:</code>, project values filled into <code>with:</code>) → expands <code>use:</code> fragments → fills in project values (including the clauses from <code>prompts/</code>) → checks.</li>
 </ol>
@@ -3592,7 +3590,7 @@ uv run myorch run flows/review.yaml --project blog -i pr=13 -i depth=quick
 <li>That run must have finished, belong to the same project, and have the development role. Otherwise the command reports an error.</li>
 <li>The new run continues on that run's branch. If <code>ticket</code> and <code>incident</code> are not given, it takes that run's.</li>
 <li>What people said to that run (questions and answers, change requests, approval notes) is written to the new run's <code>docs/previous/conversation.md</code>.</li>
-<li><strong>Continue on this branch</strong> (在这个分支上接着改) in the console does the same thing.</li>
+<li><strong>Continue on this branch</strong> in the console does the same thing.</li>
 </ul>
 <p><strong>learn and postmortem.</strong> When <code>runs</code> is not given, or with <code>-i runs=auto</code>:</p>
 <ul>
@@ -3657,11 +3655,11 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;name&gt;
 <p>Recent runs, one per line: time, project, flow, state, run_id, tags, last column. <code>myorch runs</code> is the same command.</p>
 <pre><code>11-10 11:19  mdm       development COMPLETED  development-b3538c83               MD-18633
 11-10 10:30  mdm       eval-validate-checks FAILED     eval-validate-checks-dbd70585      MD-18633
-11-10 09:02  mdm       development RUNNING    development-1f29e33a               MD-18700     等你处理: human-review
+11-10 09:02  mdm       development RUNNING    development-1f29e33a               MD-18700     waiting on you: human-review
 </code></pre>
 <ul>
 <li>The state is Temporal's state: <code>RUNNING</code>, <code>COMPLETED</code>, <code>FAILED</code>, <code>CANCELED</code> and so on. Temporal keeps runs for only 24 hours after they finish; older ones show <code>UNKNOWN</code>. The console's list fills in their state from the event log.</li>
-<li>Last column: while a run is running, the steps waiting on you (等你处理: questions, approvals, loops that ran out of rounds). Otherwise the source link; for runs before 2026-11-06 it may be the PR the run opened (myorch does not open PRs now).</li>
+<li>Last column: while a run is running, the steps waiting on you (<code>waiting on you:</code> questions, approvals, loops that ran out of rounds). Otherwise the source link; for runs before 2026-11-06 it may be the PR the run opened (myorch does not open PRs now).</li>
 <li><code>--flow</code> takes the full flow name, for example <code>development</code>. It matches the name exactly only; for runs before 2026-11-10, use the old name (<code>ck-development</code>).</li>
 <li><code>--label MD-18700</code>: lists only runs with this tag (case-insensitive; <code>18700</code> alone also works), or runs whose run_id contains it (<code>--label 1f29e33a</code>). It searches all runs first, then takes <code>--limit</code> of them. When given several times, all must match.</li>
 </ul>
@@ -3679,17 +3677,17 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;name&gt;
 </code></pre>
 <p>The full state of one run: the mandate (initiator, time, flow and project pack versions), the approval records and change requests, the state of each step and loop, digests, outputs, errors, the model used. When the run is waiting on you, <code>status</code> prints the command to run:</p>
 <pre><code>run development-1f29e33a  flow=development  status=running
-  mandate: 发起人 jakobhe · 2026-11-10T01:02:11+00:00 · flow 2367c7f4 · project mdm@c4f0a3d1
+  mandate: initiator jakobhe · 2026-11-10T01:02:11+00:00 · flow 2367c7f4 · project mdm@c4f0a3d1
   ...
   ⏸ human-review         waiting_approval
-      还需要 1 人批准 → myorch approve development-1f29e33a human-review
-      要修改 → myorch changes development-1f29e33a human-review &quot;&lt;修改意见&gt;&quot;
+      1 more approval(s) needed → myorch approve development-1f29e33a human-review
+      to request changes → myorch changes development-1f29e33a human-review &quot;&lt;requested changes&gt;&quot;
 </code></pre>
 <pre><code>  ? develop              waiting_input     [opus-5-5]
       question: Should the old API stay compatible?
         1. Keep it compatible
         2. Drop compatibility
-      → myorch reply development-1f29e33a develop &quot;&lt;回复&gt;&quot;
+      → myorch reply development-1f29e33a develop &quot;&lt;reply&gt;&quot;
 </code></pre>
 <p>State icons:</p>
 <table>
@@ -3756,7 +3754,7 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;name&gt;
 <li>The risk verdict</li>
 <li>The implementation notes</li>
 </ol>
-<p>While the run waits for approval, the top of the page says what is still missing and gives the approve / reject commands. The page is written to <code>myorch-data/reviews/&lt;run_id&gt;.html</code>, and the command prints this path. <code>--no-open</code> only writes and does not open; it is required in the container. The console's <strong>Changes</strong> (改动) tab shows the same content.</p>
+<p>While the run waits for approval, the top of the page says what is still missing and gives the approve / reject commands. The page is written to <code>myorch-data/reviews/&lt;run_id&gt;.html</code>, and the command prints this path. <code>--no-open</code> only writes and does not open; it is required in the container. The console's <strong>Changes</strong> tab shows the same content.</p>
 <h3 id="05-cli--logs"><code>logs</code></h3>
 <pre><code class="language-sh">uv run myorch logs &lt;run_id&gt; &lt;instance&gt; [--bytes 20000]
 </code></pre>
@@ -3862,7 +3860,7 @@ uv run myorch reject  &lt;run_id&gt; &lt;step&gt; [--as &lt;name&gt;]
 <ul>
 <li>The change request is written to the approval record and handed to the steps in the loop to make the changes. The later steps (including this approval) run again, and the approval comes back after the changes.</li>
 <li>The change request cannot be empty. A step without <code>changes</code> configured reports an error; it can only be approved or rejected.</li>
-<li>The <strong>Request changes</strong> (提修改意见) button in the console and the button of the same name in Slack do the same thing.</li>
+<li>The <strong>Request changes</strong> button in the console and the button of the same name in Slack do the same thing.</li>
 </ul>
 <h3 id="05-cli--cancel"><code>cancel</code></h3>
 <pre><code class="language-sh">uv run myorch cancel &lt;run_id&gt;
@@ -3878,7 +3876,7 @@ uv run myorch reject  &lt;run_id&gt; &lt;step&gt; [--as &lt;name&gt;]
 <li><code>--step</code> re-runs only the given steps. It takes an instance ID (<code>review.r1.x2</code>) or a step ID (<code>review</code>, i.e. all of its failed copies). Can be given several times.</li>
 <li>A rejected approval is not reopened. A run that has not finished is refused. Runs that Temporal has already deleted (finished more than 24 hours ago) cannot be resumed.</li>
 <li><code>--as</code> is recorded in the <code>run_resumed</code> event; defaults to the local user name.</li>
-<li>You can also do this in the console. For a failed or cancelled run, the <strong>Re-run failed steps</strong> (重新执行失败的步骤) button is at the end of the conversation and at the bottom right of the input box. A failed step's detail page has a <strong>Re-run from this step</strong> (从这一步重新执行) button.</li>
+<li>You can also do this in the console. For a failed or cancelled run, the <strong>Re-run failed steps</strong> button is at the end of the conversation and at the bottom right of the input box. A failed step's detail page has a <strong>Re-run from this step</strong> button.</li>
 </ul>
 <p>The run writes a <code>run_resumed</code> event (who, which steps), and a new <code>run_finished</code> when it ends.</p>
 <hr />
@@ -3924,7 +3922,7 @@ uv run myorch eval run [--depth quick --depth standard] [--case &lt;id&gt; ...] 
 uv run myorch eval report [--batch &lt;B&gt;]                       # how many each configuration caught, missed and over-reported
 </code></pre>
 <ol>
-<li><code>collect</code> finds candidate cases. In the console under <strong>Flows → Eval set</strong> (流程 → 评测集), tick the findings that really hold to confirm a case.</li>
+<li><code>collect</code> finds candidate cases. In the console under <strong>Flows → Eval set</strong>, tick the findings that really hold to confirm a case.</li>
 <li><code>run</code> starts one replay run for each confirmed case and each <code>--depth</code> (<code>quick</code>, <code>standard</code>, <code>deep</code>; default <code>standard</code>). <code>--case</code> runs only the given cases. Prints the batch number.</li>
 <li><code>report</code> summarizes. <code>--batch</code> shows only that batch; it can also be the ID of a postmortem run, to show only its two replays.</li>
 </ol>
@@ -3993,7 +3991,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 </tr>
 </tbody>
 </table>
-<p>OpenShell limits names to 19 characters, so the names are abbreviated. The full run and step are in the sandbox labels <code>myorch.run</code>, <code>myorch.step</code>, <code>myorch.attempt</code>, <code>myorch.turn</code>. The container name in Docker is <code>openshell-default--&lt;name&gt;-&lt;uuid&gt;</code>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/05-cli.md"><code>docs/en/05-cli.md</code></a></p></section>
+<p>OpenShell limits names to 19 characters, so the names are abbreviated. The full run and step are in the sandbox labels <code>myorch.run</code>, <code>myorch.step</code>, <code>myorch.attempt</code>, <code>myorch.turn</code>. The container name in Docker is <code>openshell-default--&lt;name&gt;-&lt;uuid&gt;</code>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/05-cli.md"><code>docs/05-cli.md</code></a></p></section>
 <section class="chapter" id="ch-06-flows"><h1 id="06-flows--6-flows">6. Flows</h1>
 <p>Each flow is described in the separate <strong>Flow manual</strong>: <a href="workflows/index.html#ch-index">workflows/README.md</a>. It has one chapter per flow: what it does, its inputs, the step graph, what each step does, and when it needs you. The step graphs and input tables are generated from <code>flows/*.yaml</code>. The text is in <code>flows/&lt;flow&gt;.md</code>. The manual's home page covers roles, which flow to use when, how to start a run and step in, and how to continue on the same branch.</p>
 <p>This chapter only lists the flows.</p>
@@ -4010,43 +4008,43 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <tbody>
 <tr>
 <td><code>development</code></td>
-<td>Development (开发)</td>
+<td>Development</td>
 <td>From requirement to pushed branch: requirements, implementation, review, approval, push the branch. Does not open a PR</td>
 <td><code>development.yaml</code></td>
 </tr>
 <tr>
 <td><code>review</code></td>
-<td>Review PR (评审 PR)</td>
+<td>Review PR</td>
 <td>Reviews an existing PR. The verdict is shown in the console</td>
 <td><code>review.yaml</code></td>
 </tr>
 <tr>
 <td><code>postmortem</code></td>
-<td>Postmortem (复盘)</td>
+<td>Postmortem</td>
 <td>Finds which change introduced a missed problem and which layer should have caught it, improves the knowledge, generates eval cases</td>
 <td><code>postmortem.yaml</code></td>
 </tr>
 <tr>
 <td><code>sweep</code></td>
-<td>Find bugs (找 bug)</td>
+<td>Find bugs</td>
 <td>Finds bugs in existing code, one batch of files at a time. Produces only a daily report</td>
 <td><code>sweep.yaml</code></td>
 </tr>
 <tr>
 <td><code>learn</code></td>
-<td>Learn (学习)</td>
+<td>Learn</td>
 <td>Distills knowledge from past runs and writes it back to the project pack</td>
 <td><code>learn.yaml</code></td>
 </tr>
 <tr>
 <td><code>eval</code></td>
-<td>Eval (评测)</td>
+<td>Eval</td>
 <td>Replays eval cases and scores the reviewers</td>
 <td><code>eval.yaml</code></td>
 </tr>
 <tr>
 <td><code>onboard</code></td>
-<td>Onboard project (接入项目)</td>
+<td>Onboard project</td>
 <td>Analyzes the repository and proposes changes to the project pack</td>
 <td><code>onboard.yaml</code></td>
 </tr>
@@ -4057,9 +4055,9 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <li>The differences between projects live in the project pack. You do not choose them when you start a run. <code>flows.development</code> in <code>project.yaml</code> sets the review strength, what happens when the loop runs out of rounds, and whether there is a takeaway and an <code>incident</code> input. <code>prompts/&lt;slot&gt;.md</code> holds project clauses that are inserted into prompts. Whether the project has Jira or an e2e image decides the ticket input, <code>fetch-ticket</code> and the end-to-end tests. The flows use <code>if:</code> to trim themselves per project. See <a href="#07-projects--project-settings-for-the-shared-flows-flows">7. Project packs · Project settings for the shared flows</a>.</li>
 <li>From 2026-11-03 to 2026-11-10 the software development flows were copied per project (<code>ck-</code>, <code>blog-</code>, <code>mo-</code>). After that they were merged back into one set. Old run IDs still carry the old names (e.g. <code>ck-development-1f29e33a</code>). They are still found by role, and you can still continue them.</li>
 <li><code>role:</code> at the top of a flow file sets its role. myorch identifies flows by role. <code>projects:</code> can restrict a flow to certain projects. None of the current flows set it.</li>
-<li>The <strong>Flow definitions</strong> side bar (流程定义) in the console lists all flow definitions and fragments, grouped by <code>projects:</code> (all are in the <strong>General</strong> group (通用) now). A flow opens in a tab, where you can pick a project and inputs to preview the expanded steps.</li>
+<li>The <strong>Flow definitions</strong> side bar in the console lists all flow definitions and fragments, grouped by <code>projects:</code> (all are in the <strong>General</strong> group now). A flow opens in a tab, where you can pick a project and inputs to preview the expanded steps.</li>
 <li>For the syntax of flow files, see <a href="#ch-08-flow-syntax">8. Flow syntax</a>. After changing a flow, regenerate the Flow manual: <code>uv run --with markdown python docs/workflows/build.py</code>.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/06-flows.md"><code>docs/en/06-flows.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/06-flows.md"><code>docs/06-flows.md</code></a></p></section>
 <section class="chapter" id="ch-07-projects"><h1 id="07-projects--7-project-packs">7. Project packs</h1>
 <p>Flows contain nothing project-specific. The repository, branch, check commands, risk rules and project knowledge all live in the project pack <code>../myorch-knowledge/&lt;name&gt;/</code>. <code>myorch-knowledge</code> is itself a git repository: every change that learn or onboard writes back is one commit.</p>
 <p>Flows are shared by all projects, one per role. See <a href="#ch-06-flows">6. Flows</a>. The differences in flow shape between projects are set in <code>flows:</code> in <code>project.yaml</code>. Project-specific prompt clauses go in <code>prompts/</code>. See "Project settings for the shared flows" and "Prompt slots". For the steps of each flow, see the <a href="workflows/index.html#ch-index">Flow manual</a>.</p>
@@ -4092,7 +4090,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <td>master</td>
 <td>core-ng</td>
 <td>the owner, <code>leweii</code></td>
-<td>Defaults, plus <code>takeaway: true</code>. Has Jira. prompts come from the template</td>
+<td>Defaults, plus <code>takeaway: true</code> and <code>open_pr: true</code>. Has Jira. prompts come from the template</td>
 <td>In use. Provider created, onboard completed once (2026-11-01). Reads Jira tickets</td>
 </tr>
 <tr>
@@ -4276,7 +4274,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <tr>
 <td><code>flows.development</code></td>
 <td></td>
-<td>How the shared development flow runs: <code>reviewers</code>, <code>max_rounds</code>, <code>security</code>, <code>on_exhausted</code>, <code>takeaway</code>, <code>incident</code>. See "Project settings for the shared flows"</td>
+<td>How the shared development flow runs: <code>reviewers</code>, <code>max_rounds</code>, <code>security</code>, <code>on_exhausted</code>, <code>takeaway</code>, <code>incident</code>, <code>open_pr</code>. See "Project settings for the shared flows"</td>
 </tr>
 <tr>
 <td><code>approvers</code></td>
@@ -4379,6 +4377,12 @@ jira: {url: &quot;https://&lt;site&gt;&quot;, key: MD, auth: basic, email: &lt;e
 <td><code>false</code></td>
 <td></td>
 <td>Shows the <code>incident</code> input: a run that went wrong (in any project), mounted read-only for develop. How to use it is written in the project's <code>prompts/develop.md</code></td>
+</tr>
+<tr>
+<td><code>open_pr</code></td>
+<td><code>false</code></td>
+<td></td>
+<td>After approval, <code>deliver</code> also opens the pull request with the project's GitHub provider (or reuses the branch's open one) and outputs <code>pr_url</code>. The console shows it in the run's conversation, and Slack and the run list show it too. The provider needs <code>POST /repos/&lt;repo&gt;/pulls</code> (<code>myorch project github-profile</code> allows it). Off: people open the PR themselves</td>
 </tr>
 </tbody>
 </table>
@@ -4507,9 +4511,9 @@ default: 0
 <p>development uses it: the <code>risk-rules</code> step takes the maximum of <code>default</code> and all matching rules. At least 1 person is needed when: the review still has unresolved Important issues, the checks failed, or some commits were not reviewed. The <code>classify-risk</code> agent judges independently once more (counting at most 2 people). The number of approvers is the larger of the two, capped at the size of the <code>approvers</code> list. blog has <code>default: 1</code>, so every change needs human approval. For each flow's specific rules, see the <a href="workflows/index.html#ch-index">Flow manual</a>.</p>
 <h2 id="07-projects--knowledge-sources">Knowledge sources</h2>
 <p>A knowledge source is read-only knowledge mounted into a run. It is not part of the project pack snapshot. It is synced and versioned separately. The final authority for the fields is the <code>Source</code> model in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/knowledge.py"><code>src/myorch/knowledge.py</code></a>.</p>
-<p>Registering: fill in the form in the console under <strong>Flows → Knowledge → + Register knowledge source</strong> (流程 → 知识库 → ＋ 登记知识源), or write the YAML by hand.
-- The form first runs <strong>Check</strong> (检查): it reports missing fields. For the folder type it also lists which files will be collected and any suspected secrets found by the scan.
-- <strong>Register</strong> (登记) writes it into <code>myorch-knowledge</code> and makes one git commit. A registered knowledge source can be changed with <strong>Edit</strong> (编辑) or removed with <strong>Unregister</strong> (删除登记) on its page. Unregistering does not delete existing snapshots.
+<p>Registering: fill in the form in the console under <strong>Flows → Knowledge → + Register knowledge source</strong>, or write the YAML by hand.
+- The form first runs <strong>Check</strong>: it reports missing fields. For the folder type it also lists which files will be collected and any suspected secrets found by the scan.
+- <strong>Register</strong> writes it into <code>myorch-knowledge</code> and makes one git commit. A registered knowledge source can be changed with <strong>Edit</strong> or removed with <strong>Unregister</strong> on its page. Unregistering does not delete existing snapshots.
 - Knowledge sources in templates are read-only in the console.
 - An Obsidian vault (a folder with <code>.obsidian/</code>) cannot be registered directly. Vaults contain secrets. Only register a folder you have curated.</p>
 <p>Where they are registered (with the same name, the project wins, then the template, then global):</p>
@@ -4582,7 +4586,7 @@ default: 0
 </ul>
 <p>Who gets them:</p>
 <ul>
-<li>The project's <code>knowledge</code> sets which ones are mounted by default. You can add or remove some when you start a run: on the command line with <code>myorch run … --kb a,-b</code> (<code>a</code> added, <code>-b</code> removed), in the console by ticking them in <strong>New run</strong> (新运行).</li>
+<li>The project's <code>knowledge</code> sets which ones are mounted by default. You can add or remove some when you start a run: on the command line with <code>myorch run … --kb a,-b</code> (<code>a</code> added, <code>-b</code> removed), in the console by ticking them in <strong>New run</strong>.</li>
 <li>By default they are mounted only in agent steps. An agent step with <code>knowledge: false</code> does not get them. A script step gets them only with <code>knowledge: true</code>. MCP knowledge sources are only given to agent steps.</li>
 <li>When a run starts, the mandate records the snapshot version of each knowledge source. If a knowledge source changes later, this run still sees the same content.</li>
 </ul>
@@ -4779,7 +4783,7 @@ index: Read tickets with getJiraIssue. Find related tickets with searchJiraIssue
 </style>
 <div class="df"><div class="row" style=""><div class="c data"><b>① Edit the project pack</b><span>myorch-knowledge/&lt;project&gt;/<br>edited by hand, git commit</span></div><div class="arr ">project sync<i></i></div><div class="c "><b>② Build a snapshot</b><span>Overlays the template and the project, adds project.json, risk-rules.json. Leaves out project.yaml, image/, providers/, sources</span></div><div class="arr "><i></i></div><div class="c data"><b>③ Snapshot in the volume</b><span>projects/&lt;project&gt;/&lt;content hash&gt;/, never modified<br>.version points to the latest. Keeps the latest 3 and those under 30 days old</span></div><div class="arr ">start<i></i></div><div class="c blue"><b>④ Run</b><span>the mandate records the version used<br>mounted read-only at /sandbox/workspace/project/ in every step</span></div></div><div class="down "><i></i><span>proposals from learn · onboard · postmortem, project pack proposals from development's review loop</span></div><div class="frame "><div class="t">Write back</div><div class="row" style=""><div class="c "><b>Agent makes proposals</b><span>each with evidence</span></div><div class="arr "><i></i></div><div class="c you"><b>You pick numbers</b><span>choose step</span></div><div class="arr "><i></i></div><div class="c green"><b>project-apply</b><span>host action: checks the scope of changes<br>writes back to myorch-knowledge, git commit</span></div><div class="arr "><i></i></div><div class="c "><b>Rebuild the snapshot</b><span>later steps of this run use the new version<br>so do future runs</span></div></div></div><div class="note"><code>{{project.x}}</code> is read fresh from project.yaml and prompts/ at start, not from the snapshot. The project.json that scripts read is in the snapshot and changes only after <code>project sync</code>.</div></div>
 </div>
-<p>Diagram file: <a href="diagrams/en/pack-lifecycle.html">diagrams/en/pack-lifecycle.html</a>.</p>
+<p>Diagram file: <a href="diagrams/pack-lifecycle.html">diagrams/pack-lifecycle.html</a>.</p>
 <p>The sandbox sees a snapshot, mounted read-only at <code>/sandbox/workspace/project/</code>. The snapshot differs from the project pack in these ways:</p>
 <ul>
 <li>There is no <code>project.yaml</code>. The merged configuration (the values of <code>{{project.x}}</code>) is in <code>project.json</code>. Scripts that need the project configuration read <code>project.json</code> or the environment variables <code>MYORCH_PROJECT_*</code>.</li>
@@ -4791,7 +4795,7 @@ index: Read tickets with getJiraIssue. Find related tickets with searchJiraIssue
 <li>A new run uses the latest version, and the mandate records the version. Every step of the run mounts this version, so a sync does not change a run in progress.</li>
 <li>Exception: after a run writes back to the project pack with <code>project-apply</code>, its later steps mount the new version. Other runs are not affected.</li>
 <li>The latest 3 versions are kept, plus versions written within the last 30 days. The latest version is always kept.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/07-projects.md"><code>docs/en/07-projects.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/07-projects.md"><code>docs/07-projects.md</code></a></p></section>
 <section class="chapter" id="ch-08-flow-syntax"><h1 id="08-flow-syntax--8-writing-flows-yaml-syntax">8. Writing flows: YAML syntax</h1>
 <p>This chapter covers how to write flow files. For the steps of each flow, see the <a href="workflows/index.html#ch-index">Flow manual</a>. For the design reasons, see ARCHITECTURE.md §3.</p>
 <p>After changing a flow, first look at the expanded result with <code>uv run myorch expand &lt;flow&gt; --project &lt;p&gt;</code>, then try it with a small requirement. The final authority for the fields is the pydantic models in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/flow.py"><code>src/myorch/core/flow.py</code></a>.</p>
@@ -4883,9 +4887,9 @@ index: Read tickets with getJiraIssue. Find related tickets with searchJiraIssue
 .dg .data b,.df .data b{font-family:"SF Mono",ui-monospace,Menlo,Consolas,monospace;font-size:13px;font-weight:500}
 .dg .red,.df .red{background:var(--d-danger-soft);box-shadow:0 0 0 1.5px var(--d-danger)}
 </style>
-<div class="df"><div class="c data"><b>flows/&lt;flow&gt;.yaml</b><span>The console, CLI, Slack and scheduled starts all use the same expansion (core/fragment.py expand_flow · flowfile.read_flow_file)</span></div><div class="down "><i></i><span></span></div><div class="frame "><div class="t">Expanded on the client at start; on an error the run does not start</div><div class="steps"><div class="num">1</div><div class="name">presets</div><div class="desc">The input named by <code>presets.by</code> picks a parameter set; without it, the values in defaults apply. Replaces only <code>{{preset.x}}</code> in <code>steps</code>.</div><div class="num">2</div><div class="name">trim by project</div><div class="desc"><code>if:</code> on the flow's own steps and on <code>use:</code> is evaluated against <code>project</code>; if false, the step is removed and the steps that depend on it inherit its <code>needs</code>. An input whose <code>if:</code> is false becomes hidden and keeps its default. <code>{{project.x}}</code> in <code>with:</code> is filled in first and passed to the fragment with its type.</div><div class="num">3</div><div class="name">use: fragments</div><div class="desc">Reads <code>flows/lib/*.yaml</code>, checks <code>with</code> against <code>params</code>, replaces <code>{{params.x}}</code>, drops unwanted steps by the fragment's <code>if:</code> (params only) and trims <code>needs</code>. Fragment IDs come from the <code>id</code> of the <code>use</code> entry.</div><div class="num">4</div><div class="name">project values</div><div class="desc"><code>{{project.x}}</code> is read from the project pack's <code>project.yaml</code> (template overlaid); <code>{{project.prompts.&lt;slot&gt;}}</code> is the text of <code>prompts/&lt;slot&gt;.md</code>. Both are read fresh at start. A flow that uses project values or <code>if:</code> without <code>--project</code> is an error.</div><div class="num">5</div><div class="name">check</div><div class="desc">Flow model validation: IDs, needs graph, expressions, field ranges.</div></div></div><div class="down "><i></i><span>submit the fully expanded YAML</span></div><div class="c blue"><b>Temporal starts FlowWorkflow</b><span>Variables rendered at run time wait until each step runs: {{inputs}} · {{steps}} · {{run}} · {{loop}} · {{replica}} · {{approvals}}</span></div><div class="note">To see the result first: <code>uv run myorch expand flows/&lt;flow&gt;.yaml --project &lt;project&gt;</code>. The console's Flows page (流程) shows the same result.</div></div>
+<div class="df"><div class="c data"><b>flows/&lt;flow&gt;.yaml</b><span>The console, CLI, Slack and scheduled starts all use the same expansion (core/fragment.py expand_flow · flowfile.read_flow_file)</span></div><div class="down "><i></i><span></span></div><div class="frame "><div class="t">Expanded on the client at start; on an error the run does not start</div><div class="steps"><div class="num">1</div><div class="name">presets</div><div class="desc">The input named by <code>presets.by</code> picks a parameter set; without it, the values in defaults apply. Replaces only <code>{{preset.x}}</code> in <code>steps</code>.</div><div class="num">2</div><div class="name">trim by project</div><div class="desc"><code>if:</code> on the flow's own steps and on <code>use:</code> is evaluated against <code>project</code>; if false, the step is removed and the steps that depend on it inherit its <code>needs</code>. An input whose <code>if:</code> is false becomes hidden and keeps its default. <code>{{project.x}}</code> in <code>with:</code> is filled in first and passed to the fragment with its type.</div><div class="num">3</div><div class="name">use: fragments</div><div class="desc">Reads <code>flows/lib/*.yaml</code>, checks <code>with</code> against <code>params</code>, replaces <code>{{params.x}}</code>, drops unwanted steps by the fragment's <code>if:</code> (params only) and trims <code>needs</code>. Fragment IDs come from the <code>id</code> of the <code>use</code> entry.</div><div class="num">4</div><div class="name">project values</div><div class="desc"><code>{{project.x}}</code> is read from the project pack's <code>project.yaml</code> (template overlaid); <code>{{project.prompts.&lt;slot&gt;}}</code> is the text of <code>prompts/&lt;slot&gt;.md</code>. Both are read fresh at start. A flow that uses project values or <code>if:</code> without <code>--project</code> is an error.</div><div class="num">5</div><div class="name">check</div><div class="desc">Flow model validation: IDs, needs graph, expressions, field ranges.</div></div></div><div class="down "><i></i><span>submit the fully expanded YAML</span></div><div class="c blue"><b>Temporal starts FlowWorkflow</b><span>Variables rendered at run time wait until each step runs: {{inputs}} · {{steps}} · {{run}} · {{loop}} · {{replica}} · {{approvals}}</span></div><div class="note">To see the result first: <code>uv run myorch expand flows/&lt;flow&gt;.yaml --project &lt;project&gt;</code>. The console's Flows page shows the same result.</div></div>
 </div>
-<p>Diagram file: <a href="diagrams/en/flow-expansion.html">diagrams/en/flow-expansion.html</a>.</p>
+<p>Diagram file: <a href="diagrams/flow-expansion.html">diagrams/flow-expansion.html</a>.</p>
 <p>When a run starts (the same for the CLI, the console, Slack and scheduled jobs), <code>flowfile.read_flow_file</code> processes the flow file in this order:</p>
 <ol>
 <li><strong>presets</strong>: picks a set of values by the input named in <code>presets.by</code>, replaces <code>{{preset.x}}</code> in <code>steps</code>, then removes <code>presets</code>.</li>
@@ -4942,7 +4946,7 @@ steps: [...]                      # steps and loops
   depth:
     type: select
     options: [{value: quick, label: &quot;quick: 1 reviewer&quot;}, standard]   # strings, or {value, label}
-    more: true                    # the console folds it under More options (更多选项): a rarely used input. A required one is shown as usual
+    more: true                    # the console folds it under More options: a rarely used input. A required one is shown as usual
   task:
     type: message                 # not drawn as a field: the first message fills it, and the original text is also saved to docs/external/request.md
     from_message: first_line      # first_line: only the first line (at most 120 characters). Default text: the whole text
@@ -5325,7 +5329,7 @@ steps: [...]                      # steps and loops
 </style>
 <div class="df"><div class="c "><b>The loop's needs are all met</b><span>when false → the whole loop is skipped</span></div><div class="down "><i></i><span>round 1</span></div><div class="frame "><div class="t">Round N (core/run.py _advance_loop)</div><div class="steps"><div class="num">1</div><div class="name">run the body</div><div class="desc">Runs by needs; instance IDs are <code>x.rN</code>, parallel replicas <code>x.rN.xK</code>.</div><div class="num">2</div><div class="name">all done?</div><div class="desc">A step failed, was rejected or is blocked → the loop fails.</div><div class="num">3</div><div class="name">until</div><div class="desc">Evaluated on this round's outputs. True → the loop succeeds and the run moves on.</div><div class="num">4</div><div class="name">rounds left?</div><div class="desc">N &lt; max_rounds → next round. The next round sees the previous round's manifests (e.g. fix reads verify's verdict).</div></div></div><div class="down "><i></i><span>Out of rounds and until still false: on_exhausted decides</span></div><div class="grid" style="grid-template-columns:1fr 1fr 1.4fr;"><div class="c "><b>accept</b><span>Accept the current result; the loop succeeds</span></div><div class="c red"><b>fail</b><span>The loop fails, the run fails</span></div><div class="c you"><b>ask (default)</b><span>reflect runs first and gives advice, then asks you: 1 one more round · 2 accept · 3 stop. No reply in 24 hours counts as failure</span></div></div><div class="note">An approval step's <code>changes</code> can reopen the loop: after you request changes, the loop runs up to <code>rounds</code> more rounds, and the steps after it are reset and run again.</div></div>
 </div>
-<p>Diagram file: <a href="diagrams/en/loop-round.html">diagrams/en/loop-round.html</a>.</p>
+<p>Diagram file: <a href="diagrams/loop-round.html">diagrams/loop-round.html</a>.</p>
 <p>How a round runs:</p>
 <ol>
 <li>When all of the loop's <code>needs</code> are done and <code>when</code> is true, round 1 starts.</li>
@@ -5408,18 +5412,18 @@ item:                             # one step (has id) or one loop (has loop). Th
 <tr>
 <td><code>choose-proposals</code></td>
 <td>A single step (script, can ask questions): lists the proposals in <code>&lt;dir&gt;/proposals.json</code> for you to pick by number, writes <code>&lt;dir&gt;/accepted.json</code>, outputs <code>accepted</code></td>
-<td><code>dir</code> (required), <code>what</code> (<code>修改建议</code>, "proposed changes")</td>
+<td><code>dir</code> (required), <code>what</code> (default <code>change proposals</code>)</td>
 <td>learn, postmortem, onboard</td>
 </tr>
 <tr>
 <td><code>deliver</code></td>
-<td>A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note <code>docs/delivery.md</code>, outputs <code>delivery</code>. Refuses to push when the branch changed after approval or the current branch is the base branch. Does not call platform APIs and does not open a PR</td>
-<td><code>approved</code> (required: the approved commit)</td>
+<td>A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note <code>docs/delivery.md</code>, outputs <code>delivery</code>. Refuses to push when the branch changed after approval or the current branch is the base branch. With <code>open_pr</code>, also opens (or reuses) the pull request and outputs <code>pr_url</code>; otherwise calls no platform API</td>
+<td><code>approved</code> (required: the approved commit), <code>open_pr</code> (default <code>false</code>; development passes the project's <code>flows.development.open_pr</code>)</td>
 <td>development</td>
 </tr>
 </tbody>
 </table>
-<p>The <strong>Fragments</strong> group (片段) in the console's <strong>Flow definitions</strong> side bar (流程定义) lists all fragments, their parameters and the flows that use them.</p>
+<p>The <strong>Fragments</strong> group in the console's <strong>Flow definitions</strong> side bar lists all fragments, their parameters and the flows that use them.</p>
 <h2 id="08-flow-syntax--per-project-trimming-if">Per-project trimming: <code>if:</code></h2>
 <p>One set of flows serves all projects. When a flow's shape varies by project, write <code>if:</code> in the flow. The expression is evaluated on <code>project</code> (the project configuration merged with its template, the same values as <code>{{project.x}}</code>). It is evaluated at submission, before fragments are expanded (<code>apply_project_if</code> in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/fragment.py"><code>core/fragment.py</code></a>), and is not visible at run time.</p>
 <p>Where <code>if:</code> can be written:</p>
@@ -5689,7 +5693,7 @@ steps:
 </code></pre>
 <p>and then ends its turn. After you reply, a new sandbox continues the same session with <code>--resume</code>. The wait is <code>limits.input_timeout</code>. On timeout the step fails.</p>
 <p><code>escalate_when</code>: when the agent ends without asking and this expression is true, the platform asks for it. The question is taken from <code>outputs.question</code> or <code>outputs.design_question</code>, or the summary if neither exists. The options are taken from <code>outputs.options</code> or <code>outputs.design_options</code>.</p>
-<p>With <code>interaction: never</code> (default), <code>myorch-ask</code> refuses to run, and the prompt tells the agent to make its own assumptions and write them in notes. If the agent still asks, the step fails without retries.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/08-flow-syntax.md"><code>docs/en/08-flow-syntax.md</code></a></p></section>
+<p>With <code>interaction: never</code> (default), <code>myorch-ask</code> refuses to run, and the prompt tells the agent to make its own assumptions and write them in notes. If the agent still asks, the step fails without retries.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/08-flow-syntax.md"><code>docs/08-flow-syntax.md</code></a></p></section>
 <section class="chapter" id="ch-09-principles"><h1 id="09-principles--9-design-principles">9. Design principles</h1>
 <p>When you make a trade-off, come back here first. The concrete rules for daily use are in <a href="#ch-10-conventions">10. Conventions</a>.</p>
 <h2 id="09-principles--summary">Summary</h2>
@@ -5834,11 +5838,11 @@ steps:
 <li>An agent's approval does not count. Approval comes only from people: the buttons in the console or Slack, or the CLI.</li>
 </ul>
 <h2 id="09-principles--9-changes-stay-on-this-machine-until-approved">9. Changes stay on this machine until approved</h2>
-<p>Before approval, changes are not pushed and no draft PR is opened. People review changes on the console's <strong>Changes</strong> (改动) page or with <code>myorch review &lt;run&gt;</code>.</p>
+<p>Before approval, changes are not pushed and no draft PR is opened. People review changes on the console's <strong>Changes</strong> page or with <code>myorch review &lt;run&gt;</code>.</p>
 <p>Pushing to a public repository makes it public. Before approval nothing leaves a trace outside, and rejected changes never appear on GitHub.</p>
 <p>The project pack's <code>review</code> has a single value, <code>local</code>. The <code>deliver</code> fragment runs only after approval. It only pushes the branch: it calls no platform API and opens no PR. People open PRs and merge.</p>
 <h2 id="09-principles--10-people-see-one-and-the-same-run">10. People see one and the same run</h2>
-<p>People interact in the local console: start, reply, approve, review changes. Since 2026-11-05 they can also start, reply and approve in Slack direct messages (the user asked for it). Both sides are platform adapters on the channel layer and show the same run. When you answer a question on one side, the question on the other side is marked <strong>Replied</strong> (已回复). Approvals work the same way.</p>
+<p>People interact in the local console: start, reply, approve, review changes. Since 2026-11-05 they can also start, reply and approve in Slack direct messages (the user asked for it). Both sides are platform adapters on the channel layer and show the same run. When you answer a question on one side, the question on the other side is marked <strong>Replied</strong>. Approvals work the same way.</p>
 <p>When interaction is spread over GitHub, terminals and web pages, people have to hunt for "where is something waiting for me". So every entry point is only a view of the same run state and keeps no state of its own. Things that need a person (questions, approvals) send notifications, so people do not have to look for them.</p>
 <p>No agent relays between people and the run: what you write goes to the run unchanged, and write operations are buttons. The final decision stays with people, and untrusted content cannot change a button.</p>
 <p>A local Claude Code session can also connect (the Claude Code channel). It is an independent actor, not an intermediary between people and the run: it can read logs, start flows and answer questions, but it cannot approve. Only people approve, in the console or Slack, and the channel interface also rejects approvals sent by an agent.</p>
@@ -5849,7 +5853,7 @@ steps:
 <li>Ask one concrete question at a time, give structured options, and do not bury it in a long report.</li>
 <li>Stop by impact, not by amount of work. Carry a local change through until it can be reviewed. When a design decision is needed, stop with one clear question.</li>
 <li>Speak only when someone must act or the result is useful. Send no message when all is well.</li>
-<li>The console's <strong>Waiting on you</strong> list (等你处理) lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.</li>
+<li>The console's <strong>Waiting on you</strong> list lists only what needs you: questions, approvals, loops that ran out of rounds, and Watchdog alerts.</li>
 </ul>
 <h2 id="09-principles--12-external-actions-are-idempotent">12. External actions are idempotent</h2>
 <p>A step that pushes code, writes the project pack or starts runs first checks whether the action was already done. Temporal retries failed activities, and a retry must not do the action a second time.</p>
@@ -5891,7 +5895,7 @@ steps:
 <li>A long-running intake workflow polling GitHub: removed 2026-11-02. The flow engine should not handle communication; see <a href="https://github.com/leweii/myorch/blob/main/docs/notes/2026-11-02-channels-design.md">notes/2026-11-02-channels-design.md</a>.</li>
 <li>myorch opening a PR after approval: removed 2026-11-06. Opening PRs is a job for people; <code>deliver</code> only pushes the branch.</li>
 <li>A dispatcher agent in the console: removed after it was built. It added a layer between you and the agents in the run, retold things in its own words (often shortened), and could also fail to work well with the agents in the run.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/09-principles.md"><code>docs/en/09-principles.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/09-principles.md"><code>docs/09-principles.md</code></a></p></section>
 <section class="chapter" id="ch-10-conventions"><h1 id="10-conventions--10-conventions">10. Conventions</h1>
 <p>When in doubt, go back to <a href="#ch-09-principles">9. Design principles</a>.</p>
 <h2 id="10-conventions--101-daily-use">10.1 Daily use</h2>
@@ -5900,8 +5904,8 @@ steps:
 <li><strong>Run <code>expand</code> before you start a run.</strong> After changing a flow, a fragment or a project pack, run <code>uv run myorch expand &lt;flow&gt; --project &lt;p&gt;</code> to see the expanded result and catch errors before submitting.</li>
 <li><strong>Run <code>sync</code> when the project pack changes.</strong> A run uses the snapshot on the volume, not the <code>myorch-knowledge</code> directory itself. The mandate records which version was used.</li>
 <li><strong>One run, one task.</strong> Write development requests concretely with a small scope, and split large requests into several runs. Only with a small scope is the review accurate and the approval meaningful.</li>
-<li><strong>Each time you come back, check the Waiting on you list first</strong> (等你处理). Look at <strong>Waiting on you</strong> in the console's activity bar on the left (it shows a count), or run <code>uv run myorch list</code>. Waiting too long fails on a timeout; questions default to 24 hours.</li>
-<li><strong>Look at the evidence before approving.</strong> Look at the console's <strong>Changes</strong> (改动) page, or <code>myorch review &lt;run&gt;</code>: the diff, the review verdict, the risk verdict, the implementation notes. An approval is bound to a commit. If the code changes after approval, the delivery step (<code>deliver</code>) refuses to push, and the run must be redone.</li>
+<li><strong>Each time you come back, check the Waiting on you list first</strong>. Look at <strong>Waiting on you</strong> in the console's activity bar on the left (it shows a count), or run <code>uv run myorch list</code>. Waiting too long fails on a timeout; questions default to 24 hours.</li>
+<li><strong>Look at the evidence before approving.</strong> Look at the console's <strong>Changes</strong> page, or <code>myorch review &lt;run&gt;</code>: the diff, the review verdict, the risk verdict, the implementation notes. An approval is bound to a commit. If the code changes after approval, the delivery step (<code>deliver</code>) refuses to push, and the run must be redone.</li>
 <li><strong>People always open PRs and merge.</strong> myorch only pushes the approved commit to the run's own branch; it never opens a PR and never merges. When the current branch is the base branch, the delivery step refuses to push. For the blog, pushing to master puts it live.</li>
 <li><strong>Cancel when you are not satisfied.</strong> Cancel in the console or with <code>myorch cancel &lt;run&gt;</code>. myorch deletes its sandbox so it does not keep running for nothing.</li>
 <li><strong>To improve an agent's judgment, use learn; do not edit prompts by hand.</strong> learn's proposals come with evidence. Adopted proposals land in <code>myorch-knowledge</code> as one commit whose message lists every proposal, so it can be reverted. Change <a class="code" href="https://github.com/leweii/myorch/tree/main/flows"><code>flows/</code></a> only for problems in flow structure.</li>
@@ -5956,19 +5960,14 @@ steps:
 </thead>
 <tbody>
 <tr>
-<td><a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a> (the Chinese originals)</td>
+<td><a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a></td>
 <td>How to use the platform: services, architecture, setup, commands, the flow list, project packs, flow syntax, principles, conventions, troubleshooting</td>
 <td>When adding a command or a flow, changing a service or a setup step, or hitting a new pitfall</td>
 </tr>
 <tr>
-<td><a class="code" href="https://github.com/leweii/myorch/tree/main/docs/en"><code>docs/en/</code></a></td>
-<td>The English docs: they mirror the Chinese docs, the Flow manual and <code>ARCHITECTURE.md</code> file by file. Rules, glossary and link rules in <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/en/TRANSLATING.md"><code>docs/en/TRANSLATING.md</code></a>. The English web version is the home page (<a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>); the Chinese one is in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/zh"><code>docs/zh/</code></a></td>
-<td>Together with the Chinese original, in the same change</td>
-</tr>
-<tr>
 <td><a class="code" href="https://github.com/leweii/myorch/tree/main/docs/workflows"><code>docs/workflows/</code></a></td>
 <td>Flow manual: a home page (<code>README.md</code>, written by hand) and one chapter per flow. Step graphs, inputs and step information are generated from <code>flows/*.yaml</code>; the text comes from <code>flows/&lt;name&gt;.md</code></td>
-<td>After changing a flow, a fragment, a flow's <code>.md</code> or the home page, run <code>uv run --with markdown python docs/workflows/build.py</code> to regenerate <a class="code" href="https://leweii.github.io/myorch/workflows/"><code>docs/workflows/index.html</code></a> (English) and <a class="code" href="https://leweii.github.io/myorch/zh/workflows/"><code>docs/zh/workflows/index.html</code></a> (Chinese). The English for the flows' Chinese texts (input labels and hints, fragment descriptions) is in <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/workflows/en.py"><code>docs/workflows/en.py</code></a></td>
+<td>After changing a flow, a fragment, a flow's <code>.md</code> or the home page, run <code>uv run --with markdown python docs/workflows/build.py</code> to regenerate <a class="code" href="https://leweii.github.io/myorch/workflows/"><code>docs/workflows/index.html</code></a></td>
 </tr>
 <tr>
 <td><code>ARCHITECTURE.md</code></td>
@@ -5982,7 +5981,7 @@ steps:
 </tr>
 <tr>
 <td><code>flows/&lt;name&gt;.md</code></td>
-<td>What each step of a flow does and why. It is the text of that flow's chapter in the Flow manual. The English is in <code>docs/en/flows/&lt;name&gt;.md</code></td>
+<td>What each step of a flow does and why. It is the text of that flow's chapter in the Flow manual</td>
 <td>When changing that flow</td>
 </tr>
 <tr>
@@ -5999,21 +5998,20 @@ steps:
 </table>
 <ul>
 <li><strong>Write each thing out in full in one place only, and link to it from elsewhere.</strong> <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a> explains how; ARCHITECTURE.md explains why.</li>
-<li><strong>Change the Chinese and the English docs together.</strong> The English docs live in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/en"><code>docs/en/</code></a>; follow the rules in <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/en/TRANSLATING.md"><code>docs/en/TRANSLATING.md</code></a>.</li>
 <li><strong>When a command or an argument changes, update <a href="#ch-05-cli">5. CLI reference</a>.</strong> <code>uv run myorch &lt;cmd&gt; -h</code> is the final authority.</li>
 <li><strong>When services or their dependencies change, update <a href="#ch-02-services">2. Services and dependencies</a>.</strong></li>
-<li><strong>Write as fact only what was measured.</strong> Mark anything not measured as "to be verified" (待验证 in the Chinese docs).</li>
-<li><strong>Write the Chinese docs in plain, concise Chinese and the English docs in plain, concise English.</strong> Short sentences, one fact per sentence, a clear subject. Use a table where a table works. Keep terms consistent.</li>
+<li><strong>Write as fact only what was measured.</strong> Mark anything not measured as "to be verified".</li>
+<li><strong>Write the docs in plain, concise English.</strong> Short sentences, one fact per sentence, a clear subject. Use a table where a table works. Keep terms consistent.</li>
 <li><strong>A flow's steps are written only in the Flow manual.</strong> Chapters in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs"><code>docs/</code></a> do not repeat each flow's steps; they link to the <a href="workflows/index.html#ch-index">Flow manual</a>.</li>
 <li><strong>Docs and code link both ways.</strong> A path written as code in the docs that exists in the repo (<a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/run.py"><code>src/myorch/core/run.py</code></a>, <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/run.py"><code>core/run.py</code></a>, <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/compose.yaml"><code>deploy/compose.yaml</code></a>) becomes a link to the file on GitHub, and so do the entries of directory trees such as the code map. <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/build-html.py"><code>docs/build-html.py</code></a> also writes a <code>README.md</code> into every code directory the docs mention, listing the sections that describe its files (GitHub shows it below the file list); the Flow manual writes <a class="code" href="https://github.com/leweii/myorch/blob/main/flows/README.md"><code>flows/README.md</code></a>. Every package docstring and the last line of every flow file's header comment carry <code>Docs: https://leweii.github.io/myorch/#&lt;section&gt;</code>; <a class="code" href="https://github.com/leweii/myorch/blob/main/tests/test_doc_links.py"><code>tests/test_doc_links.py</code></a> checks that the sections exist. When you add a module, add it to the <a href="#03-architecture--code-map">code map</a>.</li>
-<li><strong>Regenerate the web version after changes.</strong> <code>uv run --with markdown python docs/build-html.py</code> writes <a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a> (English, the home page) and <a class="code" href="https://leweii.github.io/myorch/zh/"><code>docs/zh/index.html</code></a> (Chinese).</li>
-<li><strong>Draw every diagram in HTML, never as ASCII art.</strong> Diagrams are in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/diagrams"><code>docs/diagrams/</code></a>, all generated by <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/diagrams/gen.py"><code>docs/diagrams/gen.py</code></a>. To change a diagram, change <code>gen.py</code>, run <code>python3 docs/diagrams/gen.py docs/diagrams</code>, then regenerate the web version. Each Chinese text in the diagrams has its English in <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/diagrams/en.py"><code>docs/diagrams/en.py</code></a>; the English diagrams go to <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/diagrams/en"><code>docs/diagrams/en/</code></a>. When you change a text in a diagram, add its English to <code>en.py</code>, or <code>gen.py</code> stops and lists the missing texts.</li>
+<li><strong>Regenerate the web version after changes.</strong> <code>uv run --with markdown python docs/build-html.py</code> writes <a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>, the home page.</li>
+<li><strong>Draw every diagram in HTML, never as ASCII art.</strong> Diagrams are in <a class="code" href="https://github.com/leweii/myorch/tree/main/docs/diagrams"><code>docs/diagrams/</code></a>, all generated by <a class="code" href="https://github.com/leweii/myorch/blob/main/docs/diagrams/gen.py"><code>docs/diagrams/gen.py</code></a>. To change a diagram, change <code>gen.py</code>, run <code>python3 docs/diagrams/gen.py docs/diagrams</code>, then regenerate the web version.</li>
 <li>Diagrams with crossing lines (the overview, the OpenShell internals) are drawn in pixel coordinates. The web page scales them to the content width.</li>
 <li>Other diagrams use an adaptive layout (cards, arrows, group boxes) and need no scaling.</li>
 <li>In a chapter, a line <code>&lt;!-- diagram: file-name.html --&gt;</code> sets where the diagram goes, and the next line holds the link to the diagram file.</li>
 <li>Directory trees and terminal output are not diagrams; keep them as text.</li>
 <li>Diagrams, the docs web pages and the console share one set of tokens (neutral grays, five levels of text color, one accent color, following the design principles of <a href="https://github.com/benjitaylor/skills/tree/main/stageshow">Stageshow</a>): hierarchy comes from font size, weight, white space and background, not from borders. Color only shows state (green done, red failed or untrusted, amber waiting on you, blue running or outbound). Colors come from the page's theme variables and work in both light and dark mode.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/10-conventions.md"><code>docs/en/10-conventions.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/10-conventions.md"><code>docs/10-conventions.md</code></a></p></section>
 <section class="chapter" id="ch-11-troubleshooting"><h1 id="11-troubleshooting--11-troubleshooting">11. Troubleshooting</h1>
 <p><code>dc</code> is short for <code>docker compose -f deploy/compose.yaml</code>, run in the <code>myorch/</code> directory. On the host, <code>openshell</code> connects by default to the brew gateway (which is stopped), so run <code>openshell</code> commands in a container (<code>dc exec worker openshell ...</code>).</p>
 <h2 id="11-troubleshooting--where-to-look-first">Where to look first</h2>
@@ -6035,7 +6033,7 @@ steps:
 </tr>
 <tr>
 <td>What an agent or script printed</td>
-<td>A step's <strong>Log (last turn)</strong> (日志（最后一轮）) and the live output in the bottom panel, or <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
+<td>A step's <strong>Log (last turn)</strong> and the live output in the bottom panel, or <code>uv run myorch logs &lt;run&gt; &lt;instance&gt;</code></td>
 </tr>
 <tr>
 <td>Artifacts, manifests</td>
@@ -6063,11 +6061,11 @@ steps:
 </tr>
 <tr>
 <td>Which session a retry after a platform interruption continues</td>
-<td>The <code>continues the session</code> line in the worker log (<code>dc logs worker</code>). The retry's prompt starts by saying that the previous attempt was interrupted by the platform (上一次执行被平台中断了)</td>
+<td>The <code>continues the session</code> line in the worker log (<code>dc logs worker</code>). The retry's prompt has a <code>## This is a retry</code> section that says the platform interrupted the previous attempt</td>
 </tr>
 <tr>
 <td>After change requests re-run a step, the log numbers do not match</td>
-<td>The re-run's attempts continue the earlier numbering (<code>attempts_before</code>), while the console's "attempt N" (第 N 次尝试) counts again from 1. To find the newest, take the largest attempt in the file names</td>
+<td>The re-run's attempts continue the earlier numbering (<code>attempts_before</code>), while the console's "attempt N" counts again from 1. To find the newest, take the largest attempt in the file names</td>
 </tr>
 <tr>
 <td>Network blocked, DNS, credentials not injected</td>
@@ -6149,7 +6147,7 @@ steps:
 </thead>
 <tbody>
 <tr>
-<td>A command on the host reports <code>读不到事件日志：控制台（http://127.0.0.1:8800）没有响应</code> (cannot read the event log: the console at http://127.0.0.1:8800 is not responding)</td>
+<td>A command on the host reports <code>cannot read the event log: the console (http://127.0.0.1:8800) does not answer</code></td>
 <td>Processes on the host read events through the console and do not open <code>events.db</code> directly. Commands that use the event log: <code>run</code> with <code>from_run</code> or with another run's id in an input, the learn flow, <code>eval report</code>. Start the console first; if the console is at another address, set <code>MYORCH_URL</code>. Or run the command in a container (<code>dc exec worker myorch ...</code>)</td>
 </tr>
 <tr>
@@ -6192,11 +6190,11 @@ steps:
 <td>It builds the image from a clean checkout of origin/main. Changes that are not committed and pushed do not get into the image</td>
 </tr>
 <tr>
-<td><a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a> says the last release failed the smoke test and was rolled back (上次发布冒烟失败、已回滚)</td>
+<td><a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a> says <code>... failed the smoke test last time and was rolled back</code></td>
 <td>The commit is recorded in <code>deploy/.failed</code>. It is not released again until origin/main has a new commit. To see why the smoke test failed: <code>dc exec worker myorch run deploy/smoke.yaml --wait</code></td>
 </tr>
 <tr>
-<td><a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a> says runs were still going after waiting ...s, so nothing was released (等了 ...s 仍然有运行在跑，没有发布)</td>
+<td><a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/update.sh"><code>deploy/update.sh</code></a> says <code>waited ...s and runs are still in the way; not deployed</code></td>
 <td>Steps kept running (or, when workflow code changed, there were unfinished runs). Wait for them to end, or raise <code>WAIT_MAX</code></td>
 </tr>
 <tr>
@@ -6219,7 +6217,7 @@ steps:
 </thead>
 <tbody>
 <tr>
-<td>The bot replies that your Slack account (<code>U...</code>) is not registered (你的 Slack 账号（<code>U...</code>）没有登记)</td>
+<td>The bot replies <code>Your Slack account (U...) is not registered, so myorch does not act on it</code></td>
 <td>Write the member ID from the reply (it starts with <code>U</code>) into <code>channels.yaml</code>: <code>jakobhe: {github: leweii, slack: U...}</code>, then <code>dc up -d --force-recreate ui worker</code></td>
 </tr>
 <tr>
@@ -6235,16 +6233,16 @@ steps:
 <td>The initiator has no registered <code>slack</code> account; this run does not go to Slack</td>
 </tr>
 <tr>
-<td>After clicking start in the start dialog, the dialog stays open and says to fill in this task's fields first, then click start (先填这个任务的字段，再点启动)</td>
+<td>After clicking <strong>Start</strong> in the start dialog, the dialog stays open and says <code>Fill in this task's fields, then click Start.</code></td>
 <td>You submitted too fast, before the dialog had drawn this task's fields. Fill in the fields, then click start again</td>
 </tr>
 <tr>
-<td>The start dialog reports that it did not start (没有启动：...)</td>
+<td>The start dialog reports <code>Not started: ...</code></td>
 <td>What follows is the reason, the same as the CLI's submission errors; see "Submission errors" below</td>
 </tr>
 <tr>
-<td>You reply in the thread and the bot says this run is not waiting for a reply now (这个运行现在没有在等回复)</td>
-<td>The run is not asking a question. To continue on a finished run's branch, click <strong>Continue on this branch</strong> (在这个分支上接着改) in the console</td>
+<td>You reply in the thread and the bot says <code>This run is not waiting for a reply now.</code></td>
+<td>The run is not asking a question. To continue on a finished run's branch, click <strong>Continue on this branch</strong> in the console</td>
 </tr>
 <tr>
 <td>Slack runs on two machines and events arrive only sometimes</td>
@@ -6298,11 +6296,11 @@ steps:
 <td><code>-i</code> must be followed by <code>name=value</code></td>
 </tr>
 <tr>
-<td><code>流程 X 只给项目 ... 用，--project 要写其中一个</code> (flow X is only for projects ...; --project must name one of them)</td>
+<td><code>Flow X is only for projects ...; --project must be one of them</code></td>
 <td>The flow file's <code>projects:</code> limits the projects. Add the right <code>--project</code></td>
 </tr>
 <tr>
-<td><code>请先填：&lt;字段名&gt;</code> (fill in first: <code>&lt;field name&gt;</code>)</td>
+<td><code>Fill in first: &lt;field name&gt;</code></td>
 <td>A required input of the flow is missing. For example, mdm's development needs <code>-i ticket=18700</code></td>
 </tr>
 <tr>
@@ -6338,23 +6336,23 @@ steps:
 <td>When learn or postmortem picks runs automatically, it must know the project. Give <code>--project</code></td>
 </tr>
 <tr>
-<td><code>project X: 上次 learn ... 之后没有新的已结束的 development / review run</code> (no new finished development / review run since the last learn ...)</td>
+<td><code>project X: no new finished development / review runs, since the last learn ...</code></td>
 <td>There are no new runs to learn from. Or pick runs by hand with <code>-i runs=&lt;id&gt;,&lt;id&gt;</code></td>
 </tr>
 <tr>
-<td><code>没有这个运行：&lt;id&gt;</code> (no such run: <code>&lt;id&gt;</code>)</td>
+<td><code>No such run: &lt;id&gt;</code></td>
 <td>The run in <code>from_run</code> does not exist; check the run id</td>
 </tr>
 <tr>
-<td><code>&lt;id&gt; 不是 development 运行，不能接着它做</code> (<code>&lt;id&gt;</code> is not a development run, cannot continue from it)</td>
+<td><code>&lt;id&gt; is not a development run; cannot continue from it</code></td>
 <td><code>from_run</code> can only name a run of the same role (development)</td>
 </tr>
 <tr>
-<td><code>&lt;id&gt; 属于项目 A，不是 B</code> (<code>&lt;id&gt;</code> belongs to project A, not B)</td>
+<td><code>&lt;id&gt; belongs to project A, not B</code></td>
 <td>The <code>from_run</code> run must belong to the same project as <code>--project</code></td>
 </tr>
 <tr>
-<td><code>&lt;id&gt; 还没有结束。等它结束，或者先取消它</code> (<code>&lt;id&gt;</code> has not ended yet; wait for it to end, or cancel it first)</td>
+<td><code>&lt;id&gt; has not finished yet. Wait for it to finish, or cancel it first</code></td>
 <td>The run you continue from must have ended</td>
 </tr>
 </tbody>
@@ -6369,47 +6367,47 @@ steps:
 </thead>
 <tbody>
 <tr>
-<td><code>知识源 X 没有登记，或者项目 P 不能用它</code> (knowledge source X is not registered, or project P cannot use it)</td>
+<td><code>Knowledge source X is not registered, or project P cannot use it</code></td>
 <td>The name is misspelled, or it is a project's knowledge source and <code>--project</code> is missing. See what exists with <code>myorch knowledge list --project P</code></td>
 </tr>
 <tr>
-<td><code>知识源 X 没有快照（同步没有成功）</code> (knowledge source X has no snapshot (sync did not succeed))</td>
+<td><code>Knowledge source X has no snapshot (sync did not succeed)</code></td>
 <td>The automatic sync at run start failed. The <code>myorch knowledge sync ...</code> command given in the run's error shows why</td>
 </tr>
 <tr>
-<td><code>知识源 X 里有疑似密钥，没有同步</code> (knowledge source X contains suspected secrets, not synced)</td>
+<td><code>Knowledge source X contains what looks like secrets and was not synced</code></td>
 <td>Delete the listed content. Once you have confirmed a false positive, add "file:line" to <code>allow_findings</code> in the registration file</td>
 </tr>
 <tr>
-<td><code>目录不存在：&lt;路径&gt;</code> (directory does not exist: <code>&lt;path&gt;</code>)</td>
+<td><code>Folder does not exist: &lt;path&gt;</code></td>
 <td>The <code>path</code> of a <code>dir</code> knowledge source is wrong, or it does not exist on this machine</td>
 </tr>
 <tr>
-<td><code>控制台和 worker 只能读宿主机 ... 下的目录</code> (the console and worker can only read directories under ... on the host)</td>
+<td><code>The console and the worker can only read folders under ... on the host</code></td>
 <td>The containers mount <code>MYORCH_KB_ROOT</code> (default <code>~/orca/kb</code>) read-only. Put the folder under it, or start the run from the command line on the host. In the container, <code>~</code> refers to the host's home</td>
 </tr>
 <tr>
-<td><code>... 是一个 Obsidian vault（有 .obsidian/），不能直接挂</code> (... is an Obsidian vault (has .obsidian/), cannot be mounted directly)</td>
+<td><code>... is an Obsidian vault (it has .obsidian/) and cannot be mounted as is</code></td>
 <td>Vaults often contain secrets. Mount a folder you have curated</td>
 </tr>
 <tr>
-<td><code>路径 ... 里的环境变量没有设置</code> (an environment variable in path ... is not set)</td>
+<td><code>Environment variables in path ... are not set: ...</code></td>
 <td><code>path</code> uses an environment variable that is not set</td>
 </tr>
 <tr>
-<td><code>git 知识源 X 需要一个带 git 和 python3 的镜像</code> (git knowledge source X needs an image with git and python3)</td>
+<td><code>Git knowledge source X needs an image with git and python3</code></td>
 <td>Write <code>image</code> in the registration file, or name a project with <code>--project</code> (its image is used)</td>
 </tr>
 <tr>
-<td>At run start a notice says <code>知识源 X 同步失败，用上一次的快照</code> (sync of knowledge source X failed, using the previous snapshot)</td>
+<td>At run start a notice says <code>Knowledge source X failed to sync; using the last snapshot ...</code></td>
 <td>The git knowledge source could not be cloned this time; the run starts as usual. When run on the host, the cause is most likely that <code>openshell</code> cannot reach the gateway; run it in a container instead</td>
 </tr>
 <tr>
-<td><code>knowledge check</code> reports <code>X 是 dir，只有 mcp 知识源能检查连接</code> (X is dir; only mcp knowledge sources can check the connection)</td>
+<td><code>knowledge check</code> reports <code>X is dir. Only mcp knowledge sources can check a connection</code></td>
 <td>Check <code>dir</code> and <code>git</code> with <code>myorch knowledge sync</code></td>
 </tr>
 <tr>
-<td><code>knowledge check</code> says it needs to know which image to use (要知道用哪个镜像)</td>
+<td><code>knowledge check</code> says <code>Which image to use? Add --project &lt;project&gt; or --image &lt;image&gt;</code></td>
 <td>Add <code>--project &lt;project&gt;</code> or <code>--image &lt;image&gt;</code></td>
 </tr>
 </tbody>
@@ -6487,11 +6485,11 @@ steps:
 <td>A fine-grained token can only access repositories owned by its owner. When the bot is a collaborator, use a classic token</td>
 </tr>
 <tr>
-<td><code>deliver</code> exit code 3: HEAD changed after approval (HEAD 在审批之后变了)</td>
+<td><code>deliver</code> exit code 3: <code>HEAD changed after approval</code></td>
 <td>The branch got more commits after approval. Start the run again and approve again</td>
 </tr>
 <tr>
-<td><code>deliver</code> exit code 3: the current branch is the base branch (当前分支是 base 分支)</td>
+<td><code>deliver</code> exit code 3: <code>The current branch is the base branch ...</code></td>
 <td>myorch never pushes the base branch. Check the flow's branch settings</td>
 </tr>
 </tbody>
@@ -6506,7 +6504,7 @@ steps:
 </thead>
 <tbody>
 <tr>
-<td>Approved, but the step still waits, and <code>status</code> says initiator X must be one of the approvers (发起人 X 必须是审批人之一)</td>
+<td>Approved, but the step still waits, and <code>status</code> says <code>the initiator X must be one of the approvers</code></td>
 <td>The approval requires the initiator to approve too (<code>require_initiator</code>, on by default). Have the initiator approve once. On the CLI, give the right name with <code>--as</code></td>
 </tr>
 <tr>
@@ -6514,27 +6512,27 @@ steps:
 <td>This step is not waiting for an approval or an answer. Use <code>status</code> to see its current state and the step IDs</td>
 </tr>
 <tr>
-<td><code>changes</code> says change requests are not accepted (no approval.changes configured) (不接受修改意见（没有配置 approval.changes）)</td>
+<td><code>changes</code> says <code>... does not accept change requests (approval.changes is not configured)</code></td>
 <td>This approval can only be approved or rejected</td>
 </tr>
 <tr>
-<td><code>resume</code> says the run has not ended yet (运行还没有结束)</td>
+<td><code>resume</code> says <code>The run has not ended yet</code></td>
 <td>A run that is still running cannot be resumed. When a step is waiting on you, reply or approve directly</td>
 </tr>
 <tr>
-<td><code>resume</code> says only failed or cancelled runs can be resumed (只有失败或取消的运行可以接着执行) or that there is no step to re-run (没有可以重新执行的步骤)</td>
+<td><code>resume</code> says <code>only a failed or cancelled run can be resumed</code> or <code>no step can be re-run</code></td>
 <td>The run succeeded or was rejected, or the step given with <code>--step</code> did not fail. A rejected approval does not reopen</td>
 </tr>
 <tr>
-<td>Waiting for an answer failed on a timeout (<code>等待用户回复超时</code>, timed out waiting for the user's reply)</td>
-<td><code>input_timeout</code> defaults to 24 hours. Each time you come back, check the <strong>Waiting on you</strong> list (等你处理) first</td>
+<td>Waiting for an answer failed on a timeout (<code>timed out waiting for the user's reply</code>)</td>
+<td><code>input_timeout</code> defaults to 24 hours. Each time you come back, check the <strong>Waiting on you</strong> list first</td>
 </tr>
 <tr>
-<td>An approval failed on a timeout (<code>审批超时：... 内没有人处理</code>, approval timed out: nobody handled it within ...)</td>
+<td>An approval failed on a timeout (<code>approval timed out: nobody handled it within ...</code>)</td>
 <td>The approval has a <code>timeout</code> (7 days for development). When nobody handles it in time, the run fails and nothing is delivered. Start it again if you still want it</td>
 </tr>
 <tr>
-<td>The Waiting on you list shows <strong>No new output</strong> (没有新输出), <strong>Going in circles</strong> (原地打转), <strong>Stuck</strong> (卡住了) or <strong>Off task</strong> (偏离了任务)</td>
+<td>The Waiting on you list shows <code>no new output</code>, <code>going in circles</code>, <code>stuck</code> or <code>off track</code></td>
 <td>The watchdog judged that this step may not be making progress. myorch does not act on its own: read the log and decide to cancel, wait, or reply when it asks a question</td>
 </tr>
 </tbody>
@@ -6581,7 +6579,7 @@ steps:
 <td>With fewer than 5 commits, <code>git rev-list --skip=5</code> is empty. It now falls back to the empty tree (all history)</td>
 </tr>
 <tr>
-<td>learn's <code>project-apply</code> reports that the proposals could not be applied cleanly and the knowledge base was not changed (建议无法干净地应用，知识库未改动)</td>
+<td>learn's <code>project-apply</code> reports <code>the proposals do not apply cleanly; knowledge unchanged</code></td>
 <td>The adopted proposals conflict with the current content of <code>myorch-knowledge</code>. The knowledge base was not changed. Run learn again</td>
 </tr>
 <tr>
@@ -6594,9 +6592,9 @@ steps:
 <p>When a step failed for an external reason (timeout, token permissions, network) and you do not want to redo the whole run:</p>
 <ol>
 <li>Remove the cause (e.g. replace the token, change the provider profile).</li>
-<li>Run <code>uv run myorch resume &lt;run&gt;</code>, or click <strong>Re-run failed steps</strong> (重新执行失败的步骤) in the console. Steps that already succeeded keep their results; see <a href="#05-cli--resume">5. CLI reference · resume</a>.</li>
+<li>Run <code>uv run myorch resume &lt;run&gt;</code>, or click <strong>Re-run failed steps</strong> in the console. Steps that already succeeded keep their results; see <a href="#05-cli--resume">5. CLI reference · resume</a>.</li>
 </ol>
-<p>A flow can give a step <code>on_failed: ask</code>: on failure the run stops and asks you. In the console, choose <strong>Start over</strong> (重新开始), <strong>Skip</strong> (跳过) or <strong>Stop</strong> (终止), or run <code>myorch reply &lt;run&gt; &lt;step&gt; 1/2/3</code>.</p>
+<p>A flow can give a step <code>on_failed: ask</code>: on failure the run stops and asks you. In the console, choose <strong>Start over</strong>, <strong>Skip</strong> or <strong>Stop</strong>, or run <code>myorch reply &lt;run&gt; &lt;step&gt; 1/2/3</code>.</p>
 <h2 id="11-troubleshooting--console-500-disk-io-error">Console 500: disk I/O error</h2>
 <p><strong>Symptom</strong>: the console returns 500, and <code>dc logs ui</code> shows <code>sqlite3.OperationalError: disk I/O error</code>.</p>
 <p><strong>Cause</strong>: the event log <code>myorch-data/events.db</code> is SQLite in WAL mode, and the worker and the console open it in containers. If a process on the host also opens this file directly, its locks and shared memory are not shared with the containers. When it closes, it thinks it is the last connection, deletes <code>events.db-shm</code> and empties <code>events.db-wal</code>. After that, every read and write in the containers reports <code>disk I/O error</code>, and events are no longer recorded (this happened on 2026-11-09).</p>
@@ -6607,7 +6605,7 @@ steps:
 <li>The exceptions are <code>worker</code>, <code>ui</code> and <code>serve</code>: they open the file directly. While compose runs, do not start these three commands on the host.</li>
 <li>The same holds for your own scripts: use the interface, and do not open the file with <code>sqlite3</code> on the host. For a read-only look, copy it and open the copy.</li>
 <li>Do not set <code>MYORCH_EVENTS_DIRECT=1</code> on the host; it makes commands open the file directly.</li>
-</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/en/11-troubleshooting.md"><code>docs/en/11-troubleshooting.md</code></a></p></section>
+</ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/11-troubleshooting.md"><code>docs/11-troubleshooting.md</code></a></p></section>
 </main>
 <script>
   const links = [...document.querySelectorAll('aside a')];
@@ -6666,12 +6664,6 @@ steps:
       apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
     }));
   })();
-  // The other language: chapter ids (#ch-…) are the same in both, heading ids are not; keep the chapter.
-  document.getElementById('other-lang').addEventListener('click', e => {
-    let ch = null;
-    for (const s of document.querySelectorAll('section.chapter')) { if (s.getBoundingClientRect().top < 120) ch = s; }
-    if (ch) e.currentTarget.href = e.currentTarget.getAttribute('href').split('#')[0] + '#' + ch.id;
-  });
   document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
 </script>
 </body>

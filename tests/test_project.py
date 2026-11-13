@@ -34,7 +34,7 @@ def root(tmp_path: Path) -> Path:
     (t / "guide" / "shared.md").write_text("template version")
     (t / "checks.sh").write_text("template checks")
     (t / "risk-rules.yaml").write_text(yaml.safe_dump({"default": 0, "rules": [{"paths": ["**/*-migration/**"], "approvers": 2}]}))
-    (t / "security.md").write_text("通用安全重点")
+    (t / "security.md").write_text("General security focus")
     (t / "image").mkdir()
     (t / "image" / "Dockerfile").write_text("FROM x")
     p = root / "mdm"
@@ -46,7 +46,7 @@ def root(tmp_path: Path) -> Path:
     }))
     (p / "guide" / "shared.md").write_text("project version")
     (p / "risk-rules.yaml").write_text(yaml.safe_dump({"rules": [{"paths": ["backend/protos/**"], "approvers": 2}]}))
-    (p / "security.md").write_text("mdm 特有的安全重点")
+    (p / "security.md").write_text("Security focus specific to mdm")
     return root
 
 
@@ -69,7 +69,7 @@ def test_snapshot_overlays_files_and_concatenates_rules(root):
     rules = json.loads(files["risk-rules.json"])["rules"]
     assert [r["paths"][0] for r in rules] == ["**/*-migration/**", "backend/protos/**"]
     assert json.loads(files["risk-rules.json"])["default"] == 0  # the project sets none: the template's
-    assert files["security.md"].startswith("通用安全重点") and "mdm 特有" in files["security.md"]
+    assert files["security.md"].startswith("General security focus") and "specific to mdm" in files["security.md"]
     assert json.loads(files["project.json"])["repo"] == "example-org/master-data-management"
     assert version.startswith("sha256:")
 
@@ -158,37 +158,37 @@ def test_review_page_shows_request_diff_findings_and_risk():
         ".myorch/mandate.json": json.dumps({"initiator": "leweii", "flow": {"name": "development"}, "project": {"name": "mdm"},
                                             "source": "https://github.com/o/r/issues/2", "request": {"task": "t"}}),
         ".myorch/steps/analyze-requirement/out/manifest.json": json.dumps({"outputs": {"title": "Reject blank id"}}),
-        ".myorch/steps/risk-rules/out/manifest.json": json.dumps({"summary": "medium，需要 1 人审批"}),
-        "docs/requirements.md": "## 目标\n- 空 id 报错",
+        ".myorch/steps/risk-rules/out/manifest.json": json.dumps({"summary": "medium, needs 1 approval"}),
+        "docs/requirements.md": "## Goal\n- blank id is an error",
         "docs/review/round-1/verified.json": json.dumps([{"severity": "Nit", "file": "A.java", "line": 3, "title": "<b>x</b>", "status": "new"}]),
         "docs/ci/round-1/result.json": json.dumps({"passed": True, "environment": ["T.conf()"]}),
         "git/diff": " A.java | 1 +\n\ndiff --git a/A.java b/A.java\n@@ -1 +1,2 @@\n+if (id == null) throw\n-old",
         "git/log": "805ef7d Jakob He Reject blank id",
     }
-    page = build("development-1", files, waiting="human-review：还需要 1 人批准", approve_hint="<p>cmd</p>")
-    assert "<h1>Reject blank id</h1>" in page and "<h2>目标</h2>" in page
+    page = build("development-1", files, waiting="human-review: 1 more approval(s) needed", approve_hint="<p>cmd</p>")
+    assert "<h1>Reject blank id</h1>" in page and "<h2>Goal</h2>" in page
     assert '<span class="add">+if (id == null) throw</span>' in page and '<span class="del">-old</span>' in page
     assert "&lt;b&gt;x&lt;/b&gt;" in page  # agent-written text is escaped
-    assert "环境失败（不计入）：T.conf()" in page and "还需要 1 人批准" in page and "issues/2" in page
-    assert "端到端测试" not in page  # no e2e results: no section
-    files["docs/e2e/round-1/smoke/result.json"] = json.dumps({"passed": False, "failed": ["上一轮的用例XYZ"]})
-    files["docs/e2e/round-2/smoke/result.json"] = json.dumps({"passed": False, "failed": ["首页<列出>文章"]})
-    files["docs/e2e/round-2/smoke/report.md"] = "| 首页列出文章 | FAIL |"
+    assert "environment failures (not counted): T.conf()" in page and "1 more approval(s) needed" in page and "issues/2" in page
+    assert "End-to-end tests" not in page  # no e2e results: no section
+    files["docs/e2e/round-1/smoke/result.json"] = json.dumps({"passed": False, "failed": ["previous round case XYZ"]})
+    files["docs/e2e/round-2/smoke/result.json"] = json.dumps({"passed": False, "failed": ["home page <lists> posts"]})
+    files["docs/e2e/round-2/smoke/report.md"] = "| home page lists posts | FAIL |"
     files["docs/e2e/round-2/acceptance/result.json"] = json.dumps({"passed": True, "failed": []})
-    files["docs/e2e/round-2/acceptance.md"] = "| 默认主题 | 通过 |"
+    files["docs/e2e/round-2/acceptance.md"] = "| default theme | passed |"
     page = build("development-1", files)
-    assert "端到端测试（2 轮）" in page and "冒烟用例，第 2 轮" in page and "未通过：首页&lt;列出&gt;文章" in page
-    assert "验收用例，第 2 轮：<span class=\"ok\">通过" in page and "验收标准对照" in page and "上一轮的用例XYZ" not in page
+    assert "End-to-end tests (2 rounds)" in page and "Smoke cases, round 2" in page and "failed: home page &lt;lists&gt; posts" in page
+    assert "Acceptance cases, round 2: <span class=\"ok\">passed" in page and "Acceptance criteria check" in page and "previous round case XYZ" not in page
 
 
 def test_prompt_slots_come_from_template_then_project(root):
     (root / "_templates" / "core-ng" / "prompts").mkdir()
-    (root / "_templates" / "core-ng" / "prompts" / "review.md").write_text("## core-ng\n- 接口模块\n")
+    (root / "_templates" / "core-ng" / "prompts" / "review.md").write_text("## core-ng\n- interface modules\n")
     (root / "mdm" / "prompts").mkdir()
-    (root / "mdm" / "prompts" / "review.md").write_text("## mdm\n- 主数据\n")
+    (root / "mdm" / "prompts" / "review.md").write_text("## mdm\n- master data\n")
     (root / "mdm" / "prompts" / "develop.md").write_text("  \n")  # blank: nothing
     p = load_project(root, "mdm")
-    assert p.prompts["review"] == "## core-ng\n- 接口模块\n\n## mdm\n- 主数据"
+    assert p.prompts["review"] == "## core-ng\n- interface modules\n\n## mdm\n- master data"
     assert p.prompts["develop"] == "" and set(p.prompts) == {"develop", "review", "verify", "fix", "risk"}
     assert p.public()["prompts"]["review"].startswith("## core-ng")
     (root / "mdm" / "prompts" / "reviw.md").write_text("typo")

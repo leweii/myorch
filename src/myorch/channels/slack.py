@@ -66,7 +66,7 @@ def root_message(e: dict[str, Any], console: str) -> tuple[str, list[dict[str, A
     task = (d.get("inputs") or {}).get("task", "")
     head = f"*{d.get('flow', '')}*" + (f" · {d['project']}" if d.get("project") else "") + f" · `{e['run_id']}`"
     blocks = [section(head + (f"\n{task}" if task else "")),
-              {"type": "actions", "elements": [button("在控制台打开", "open_console", e["run_id"],
+              {"type": "actions", "elements": [button("Open in console", "open_console", e["run_id"],
                                                      url=f"{console}#run={e['run_id']}")]}]
     return f"{d.get('flow', '')} {e['run_id']}", blocks
 
@@ -78,25 +78,25 @@ def progress_message(steps: dict[str, dict[str, Any]], loops: dict[str, dict[str
         summary = (s.get("summary") or "").strip().splitlines()[0][:140] if s.get("summary") else ""
         lines.append(f"{mark} `{sid}`" + (f" {summary}" if summary else ""))
     for lid, lr in loops.items():
-        lines.append(f"🔁 `{lid}` 第 {lr.get('round', 0)}/{lr.get('max_rounds', '?')} 轮 · {lr.get('status', '')}")
-    text = "\n".join(lines) or "还没有步骤开始。"
-    return "进度", [section("*进度*\n" + text)]
+        lines.append(f"🔁 `{lid}` round {lr.get('round', 0)}/{lr.get('max_rounds', '?')} · {lr.get('status', '')}")
+    text = "\n".join(lines) or "No step has started yet."
+    return "Progress", [section("*Progress*\n" + text)]
 
 
 def question_message(e: dict[str, Any], answered: str | None = None) -> tuple[str, list[dict[str, Any]]]:
     d = e["data"]
     q = d.get("question", "")
-    blocks = [section(f"❓ *`{e['step']}` 在问你*\n{q}")]
+    blocks = [section(f"❓ *`{e['step']}` is asking you*\n{q}")]
     if answered is not None:
-        blocks.append(context(f"已回复：{clip(answered, 300)}"))
+        blocks.append(context(f"Answered: {clip(answered, 300)}"))
     else:
         opts = [o for o in d.get("options") or [] if str(o).strip()][:5]
         if opts:
             blocks.append({"type": "actions", "elements": [
                 button(f"{i + 1}. {o}"[:75], f"answer_{i}", json.dumps({"run": e["run_id"], "step": e["step"], "text": str(o)},
                                                                      ensure_ascii=False)) for i, o in enumerate(opts)]})
-        blocks.append(context("选一个选项，或者在这个线程里直接回复。"))
-    return f"{e['step']} 在问你：{clip(q, 150)}", blocks
+        blocks.append(context("Pick an option, or reply in this thread."))
+    return f"{e['step']} is asking you: {clip(q, 150)}", blocks
 
 
 def approval_message(e: dict[str, Any], risk: str, console: str, progress: dict[str, Any] | None = None,
@@ -106,11 +106,11 @@ def approval_message(e: dict[str, Any], risk: str, console: str, progress: dict[
     needed = (progress or {}).get("needed", d.get("needed", 1))
     approvers = (progress or {}).get("approvers") or []
     missing = (progress or {}).get("missing", d.get("missing", ""))
-    lines = [f"🖐 *等你审批* `{step}` · 风险 {d.get('risk', '?')} · 需要 {needed} 人"]
+    lines = [f"🖐 *Waiting for your approval* `{step}` · risk {d.get('risk', '?')} · {needed} approver(s) needed"]
     if approvers:
-        lines.append("已批准：" + "、".join(approvers))
+        lines.append("Approved by: " + ", ".join(approvers))
     if missing:
-        lines.append(f"还差：{missing}")
+        lines.append(f"Still needed: {missing}")
     blocks = [section("\n".join(lines))]
     if risk:
         blocks.append(section(clip(risk, 1500)))
@@ -119,32 +119,32 @@ def approval_message(e: dict[str, Any], risk: str, console: str, progress: dict[
         blocks.append(context(closed))
     else:
         blocks.append({"type": "actions", "elements": [
-            button("批准", "approve", value, "primary"),
-            button("要求修改", "request_changes", value),
-            button("驳回", "reject", value, "danger"),
-            button("在控制台看", "open_changes", rid, url=f"{console}#run={rid}"),
+            button("Approve", "approve", value, "primary"),
+            button("Request changes", "request_changes", value),
+            button("Reject", "reject", value, "danger"),
+            button("View in console", "open_changes", rid, url=f"{console}#run={rid}"),
         ]})
-    return f"等你审批：{rid}", blocks
+    return f"Waiting for your approval: {rid}", blocks
 
 
 def finished_message(e: dict[str, Any]) -> tuple[str, list[dict[str, Any]]]:
     d = e["data"]
     status = d.get("status", "")
-    lines = [f"{STATUS_MARK.get(status, '•')} *运行结束：{status}*"]
+    lines = [f"{STATUS_MARK.get(status, '•')} *Run finished: {status}*"]
     if d.get("stopped"):
-        lines.append(f"没有改动：{clip(d['stopped'], 600)}")
+        lines.append(f"No changes: {clip(d['stopped'], 600)}")
     if d.get("failure"):
         lines.append(clip(str(d["failure"]), 1200))
     if d.get("pr_url"):
-        lines.append(f"PR：{d['pr_url']}")
+        lines.append(f"PR: {d['pr_url']}")
     elif d.get("delivery"):
         dl = d["delivery"]
-        lines.append(f"已推送分支 `{dl.get('branch', '')}`（{str(dl.get('commit', ''))[:12]}），PR 请自己开。")
-    return f"{e['run_id']} 结束：{status}", [section("\n".join(lines))]
+        lines.append(f"Pushed branch `{dl.get('branch', '')}` ({str(dl.get('commit', ''))[:12]}). Open the PR yourself.")
+    return f"{e['run_id']} finished: {status}", [section("\n".join(lines))]
 
 
 def first_section(markdown: str, title: str) -> str:
-    """The text under the first heading that contains `title` (e.g. 结论 in docs/risk.md)."""
+    """The text under the first heading that contains `title` (e.g. Verdict in docs/risk.md)."""
     out, inside = [], False
     for line in (markdown or "").splitlines():
         if line.startswith("#"):
@@ -194,29 +194,29 @@ def catalog(config_dir: Path, kb_root: Path) -> list[dict[str, Any]]:
 
 def start_view(choices: list[dict[str, Any]], chosen: dict[str, Any] | None, runs: list[dict[str, Any]],
                error: str = "", project: str | None = None) -> dict[str, Any]:
-    """Project first, then that project's flows, then the chosen flow's fields. project "" is 无项目."""
+    """Project first, then that project's flows, then the chosen flow's fields. project "" is No project."""
     if chosen:
         project = chosen["project"]
     names = sorted({c["project"] for c in choices} - {""}) + ([""] if any(not c["project"] for c in choices) else [])
-    popts = [{"text": {"type": "plain_text", "text": (n or "无项目")[:75]}, "value": f"p:{n}"} for n in names][:100]
+    popts = [{"text": {"type": "plain_text", "text": (n or "No project")[:75]}, "value": f"p:{n}"} for n in names][:100]
     proj: dict[str, Any] = {"type": "static_select", "action_id": "project", "options": popts,
-                            "placeholder": {"type": "plain_text", "text": "选项目"}}
+                            "placeholder": {"type": "plain_text", "text": "Pick a project"}}
     pinitial = next((o for o in popts if project is not None and o["value"] == f"p:{project}"), None)
     if pinitial:
         proj["initial_option"] = pinitial
     blocks: list[dict[str, Any]] = [{"type": "input", "block_id": "project", "dispatch_action": True,
-                                     "label": {"type": "plain_text", "text": "项目"}, "element": proj}]
+                                     "label": {"type": "plain_text", "text": "Project"}, "element": proj}]
     if project is not None:
-        opts = [{"text": {"type": "plain_text", "text": f"{c['label']}（{c['flow']}）"[:75]},
+        opts = [{"text": {"type": "plain_text", "text": f"{c['label']} ({c['flow']})"[:75]},
                  "value": f"{c['project']}|{c['file']}"} for c in choices if c["project"] == project][:100]
         pick: dict[str, Any] = {"type": "static_select", "action_id": "pick", "options": opts,
-                                "placeholder": {"type": "plain_text", "text": "选任务"}}
+                                "placeholder": {"type": "plain_text", "text": "Pick a task"}}
         initial = next((o for o in opts if chosen and o["value"] == f"{chosen['project']}|{chosen['file']}"), None)
         if initial:
             pick["initial_option"] = initial
         # The block id carries the project, so Slack drops the old task when the project changes.
         blocks.append({"type": "input", "block_id": f"pick:{project}", "dispatch_action": True,
-                       "label": {"type": "plain_text", "text": "任务"}, "element": pick})
+                       "label": {"type": "plain_text", "text": "Task"}, "element": pick})
     if chosen:
         for name, s in chosen["specs"].items():
             t = s.get("type", "string")
@@ -249,8 +249,8 @@ def start_view(choices: list[dict[str, Any]], chosen: dict[str, Any] | None, run
                            "optional": not (s.get("required") or t == "message")})
     if error:
         blocks.append(context(f"⚠️ {error}"))
-    return {"type": "modal", "callback_id": "start", "title": {"type": "plain_text", "text": "新运行"},
-            "submit": {"type": "plain_text", "text": "启动"}, "close": {"type": "plain_text", "text": "取消"},
+    return {"type": "modal", "callback_id": "start", "title": {"type": "plain_text", "text": "New run"},
+            "submit": {"type": "plain_text", "text": "Start"}, "close": {"type": "plain_text", "text": "Cancel"},
             "private_metadata": json.dumps(({"project": project} if project is not None else {})
                                            | ({"chosen": f"{chosen['project']}|{chosen['file']}"} if chosen else {})),
             "blocks": blocks}
@@ -279,10 +279,10 @@ def form_values(view: dict[str, Any]) -> tuple[str, dict[str, str]]:
 
 
 def changes_view(run_id: str, step: str) -> dict[str, Any]:
-    return {"type": "modal", "callback_id": "request_changes", "title": {"type": "plain_text", "text": "要求修改"},
-            "submit": {"type": "plain_text", "text": "提交"}, "close": {"type": "plain_text", "text": "取消"},
+    return {"type": "modal", "callback_id": "request_changes", "title": {"type": "plain_text", "text": "Request changes"},
+            "submit": {"type": "plain_text", "text": "Submit"}, "close": {"type": "plain_text", "text": "Cancel"},
             "private_metadata": json.dumps({"run": run_id, "step": step}),
-            "blocks": [{"type": "input", "block_id": "text", "label": {"type": "plain_text", "text": "要改什么"},
+            "blocks": [{"type": "input", "block_id": "text", "label": {"type": "plain_text", "text": "What to change"},
                         "element": {"type": "plain_text_input", "action_id": "v", "multiline": True}}]}
 
 
@@ -409,7 +409,7 @@ class SlackAdapter:
                 text, blocks = question_message(q["event"], answered=e["data"].get("text", ""))
                 await self.web.chat_update(channel=r["channel"], ts=q["ts"], text=text, blocks=blocks)
         elif kind == "approval":
-            risk = first_section(await self.relay.read_file(rid, "docs/risk.md") or "", "结论")
+            risk = first_section(await self.relay.read_file(rid, "docs/risk.md") or "", "Verdict")
             text, blocks = approval_message(e, risk, self.console)
             ts = await self._post(rid, text, blocks, broadcast=True)
             r["approvals"][e["step"]] = {"ts": ts, "event": e, "risk": risk}
@@ -417,21 +417,21 @@ class SlackAdapter:
             a = r["approvals"].get(e["step"])
             if a:
                 d = e["data"]
-                closed = (f"已驳回：{d['rejected_by']}" if d.get("rejected_by")
-                          else "已批准：" + "、".join(d.get("approvers") or [])
+                closed = (f"Rejected by: {d['rejected_by']}" if d.get("rejected_by")
+                          else "Approved by: " + ", ".join(d.get("approvers") or [])
                           if len(d.get("approvers") or []) >= int(d.get("needed") or 1) else None)
                 text, blocks = approval_message(a["event"], a["risk"], self.console, d, closed)
                 await self.web.chat_update(channel=r["channel"], ts=a["ts"], text=text, blocks=blocks)
         elif kind == "approval_reminder":
-            await self._post(rid, "审批提醒", [section(f"⏰ `{e['step']}` 还在等审批（已等 {e['data'].get('waited', '')}）。")],
+            await self._post(rid, "Approval reminder", [section(f"⏰ `{e['step']}` is still waiting for approval (waited {e['data'].get('waited', '')}).")],
                              broadcast=True)
         elif kind == "changes_requested":
             d = e["data"]
-            await self._post(rid, "要求修改", [section(f"✏️ {d.get('by', '')} 要求修改：{clip(d.get('text', ''), 1500)}")])
+            await self._post(rid, "Changes requested", [section(f"✏️ {d.get('by', '')} requested changes: {clip(d.get('text', ''), 1500)}")])
         elif kind == "run_resumed":
-            await self._post(rid, "继续运行", [section("▶️ 运行从失败的步骤继续。")])
+            await self._post(rid, "Run resumed", [section("▶️ The run continues from the failed steps.")])
         elif kind == "pr_opened":
-            await self._post(rid, "PR", [section(f"🔗 PR：{e['data'].get('url', '')}")], broadcast=True)
+            await self._post(rid, "PR", [section(f"🔗 PR: {e['data'].get('url', '')}")], broadcast=True)
         elif kind == "run_finished":
             text, blocks = finished_message(e)
             await self._post(rid, text, blocks, broadcast=True)
@@ -481,8 +481,8 @@ class SlackAdapter:
     async def _refuse(self, user: str, channel: str | None = None) -> None:
         ch = channel or (await self.web.conversations_open(users=user))["channel"]["id"]
         await self.web.chat_postMessage(channel=ch, text=(
-            f"你的 Slack 账号（`{user}`）没有登记，myorch 不执行你的操作。"
-            f"要使用 myorch，请管理员在 channels.yaml 的 identities 里给你加上 `slack: {user}`。"))
+            f"Your Slack account (`{user}`) is not registered, so myorch does not act on it. "
+            f"To use myorch, ask an admin to add `slack: {user}` for you under identities in channels.yaml."))
 
     async def on_message(self, ev: dict[str, Any]) -> None:
         if ev.get("type") != "message" or ev.get("subtype") or ev.get("bot_id") or ev.get("channel_type") != "im":
@@ -495,14 +495,14 @@ class SlackAdapter:
         rid = next((rid for rid, r in self.state.data["runs"].items()
                     if thread and r["channel"] == channel and r["ts"] == thread), None)
         if rid is None:
-            await self.web.chat_postMessage(channel=channel, text="用 /myorch 发起一个运行。", blocks=[
-                section("用 `/myorch` 发起一个运行，或者点下面的按钮。运行开始以后，回复、审批都在它的线程里做。"),
-                {"type": "actions", "elements": [button("新运行", "open_start", "start", "primary")]}])
+            await self.web.chat_postMessage(channel=channel, text="Use /myorch to start a run.", blocks=[
+                section("Use `/myorch` to start a run, or click the button below. Once a run starts, reply and approve in its thread."),
+                {"type": "actions", "elements": [button("New run", "open_start", "start", "primary")]}])
             return
         pending = list(self.state.data["runs"][rid]["questions"])
         if not pending:
             await self.web.chat_postMessage(channel=channel, thread_ts=thread,
-                                            text="这个运行现在没有在等回复。要改已经完成的运行，在控制台里「接着改」。")
+                                            text="This run is not waiting for a reply now. To change a finished run, use Continue on this branch in the console.")
             return
         await self._reply(rid, pending[-1], text, user, channel, thread)
 
@@ -510,7 +510,7 @@ class SlackAdapter:
         try:
             await self.relay.reply(rid, step, text, via=VIA, account=user)
         except Exception as ex:
-            await self.web.chat_postMessage(channel=channel, thread_ts=thread, text=f"回复没有送达：{ex}")
+            await self.web.chat_postMessage(channel=channel, thread_ts=thread, text=f"Reply not delivered: {ex}")
 
     async def on_interactive(self, p: dict[str, Any]) -> dict[str, Any] | None:
         user = (p.get("user") or {}).get("id", "")
@@ -540,7 +540,7 @@ class SlackAdapter:
                 else:
                     await self.relay.reject(v["run"], v["step"], via=VIA, account=user)
             except Exception as ex:
-                await self.web.chat_postMessage(channel=channel, thread_ts=thread, text=f"操作没有送达：{ex}")
+                await self.web.chat_postMessage(channel=channel, thread_ts=thread, text=f"Action not delivered: {ex}")
         elif aid == "request_changes":
             v = json.loads(a["value"])
             await self.web.views_open(trigger_id=p["trigger_id"], view=changes_view(v["run"], v["step"]))
@@ -576,12 +576,12 @@ class SlackAdapter:
             if chosen is None:  # errors must name a block the form has
                 block = task_block(view)
                 return {"response_action": "errors",
-                        "errors": {block: "先选任务"} if block else {"project": "先选项目"}}
+                        "errors": {block: "Pick a task first"} if block else {"project": "Pick a project first"}}
             drawn = json.loads(view.get("private_metadata") or "{}").get("chosen")
             if drawn != pick and any(sp.get("type") != "hidden" for sp in chosen["specs"].values()):
                 # Submitted before the form showed this flow's fields: show them instead of starting.
                 return {"response_action": "update",
-                        "view": start_view(self._choices(), chosen, await self._runs(), error="先填这个任务的字段，再点启动。")}
+                        "view": start_view(self._choices(), chosen, await self._runs(), error="Fill in this task's fields, then click Start.")}
             message_name = next((n for n, s in chosen["specs"].items() if s.get("type") == "message"), None)
             message = inputs.pop(message_name, "") if message_name else ""
             try:
@@ -589,7 +589,7 @@ class SlackAdapter:
                                                 via=VIA, account=user, source="slack")
             except Exception as ex:
                 log.exception("slack: start %s for %s failed", chosen["file"], user)
-                return {"response_action": "errors", "errors": {task_block(view) or "pick": clip(f"没有启动：{ex}", 150)}}
+                return {"response_action": "errors", "errors": {task_block(view) or "pick": clip(f"Not started: {ex}", 150)}}
             log.info("slack: %s started %s", user, run_id)
             return None
         return None

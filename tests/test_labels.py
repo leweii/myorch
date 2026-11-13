@@ -25,7 +25,7 @@ def test_a_ticket_input_becomes_a_label_with_its_prefix():
 
 
 def test_jira_keys_in_plain_strings_count_but_not_free_text_or_run_ids():
-    labels = fi.input_labels(DECLARED, {"tickets": "MD-1,MD-2", "task": "像 MD-9 那样改",
+    labels = fi.input_labels(DECLARED, {"tickets": "MD-1,MD-2", "task": "change it like MD-9",
                                         "mode": "MD-1", "run": "ck-development-1f29e33a",
                                         "branch": "MD-18700-myorch-fix", "hash": "SHA-256 and UTF-8"})
     assert labels == ["MD-1", "MD-2", "MD-18700"]

@@ -80,7 +80,7 @@ def test_exhausted_loop_asks_and_more_rounds_extend():
     actions = s.plan()
     assert [a for a in actions if isinstance(a, AskLoop)] == [AskLoop(loop_id="review-fix")]
     assert s.loops["review-fix"].status == "waiting_input"
-    assert not s.resolve_loop("review-fix", "随便说点什么")  # not an option: still waiting
+    assert not s.resolve_loop("review-fix", "say something random")  # not an option: still waiting
     assert s.resolve_loop("review-fix", "1")  # one more round
     assert started(s.plan()) == ["review.r3.x1", "review.r3.x2"]
 
@@ -98,7 +98,7 @@ def test_failure_blocks_downstream_and_loop():
 def test_accept_and_reject_options():
     assert match_option("2", ["a", "b"]) == 1
     assert match_option("2. b", ["a", "b"]) == 1
-    assert match_option("终止流程", ["再跑一轮", "终止流程"]) == 1
+    assert match_option("Stop the flow", ["Run one more round", "Stop the flow"]) == 1
     assert match_option("nope", ["a", "b"]) is None
 
 
@@ -159,7 +159,7 @@ def test_approval_needs_initiator_and_records_subject():
     s.instances["human"].status = "running"
     finish(s, "implement", sha="abc123")
     assert s.approval_subject("human") == "abc123"
-    assert "发起人 alice" in s.approval_missing("human", {"bob"})
+    assert "initiator alice" in s.approval_missing("human", {"bob"})
     assert s.approval_missing("human", {"alice"}) is None
     s.approvals["human"] = ApprovalRecord(subject="abc123", approvers=["alice"])
     assert s.context(s.instances["ship"])["approvals"]["human"]["subject"] == "abc123"
@@ -182,11 +182,11 @@ def test_exhausted_loop_reflects_before_asking():
     actions = s.plan()
     assert started(actions) == ["reflect.r2"] and not [a for a in actions if isinstance(a, AskLoop)]
     assert s.loops["review-fix"].status == "running"
-    finish(s, "reflect.r2", recommendation="终止流程", reason="三轮都在修同一类问题，方案本身有问题")
+    finish(s, "reflect.r2", recommendation="Stop the flow", reason="All three rounds fixed the same kind of problem; the design itself is wrong")
     actions = s.plan()
     assert [a for a in actions if isinstance(a, AskLoop)] == [AskLoop(loop_id="review-fix")]
     q = s.loops["review-fix"].question.question
-    assert "反思建议：终止流程" in q and "方案本身有问题" in q
+    assert "Reflect proposal: Stop the flow" in q and "the design itself is wrong" in q
 
 
 def test_failed_reflection_still_asks():
@@ -199,7 +199,7 @@ def test_failed_reflection_still_asks():
     s.instances["reflect.r1"].status = "failed"
     s.plan()
     assert s.loops["review-fix"].status == "waiting_input"
-    assert "反思" not in s.loops["review-fix"].question.question
+    assert "Reflect" not in s.loops["review-fix"].question.question
 
 
 def test_failed_reflection_does_not_fail_an_accepted_run():
@@ -225,7 +225,7 @@ def test_initiator_aliases_count_as_the_initiator():
     s = RunState.create("r1", flow, {"task": "t"})
     s.mandate = Mandate(initiator="leweii", initiator_aliases=["jakobhe"], requested_at="t0", request={}, flow={"name": "d", "sha256": "x"})
     assert s.approval_missing("human", {"jakobhe"}) is None  # approving from the CLI as the same person
-    assert "发起人 leweii" in s.approval_missing("human", {"bob"})
+    assert "initiator leweii" in s.approval_missing("human", {"bob"})
 
 
 def test_failure_escalation_question_and_replies():
@@ -246,16 +246,16 @@ def test_failure_escalation_question_and_replies():
     inst.result = StepResult(step_id="implement", ok=False, exit_code=None, sandbox="x", error="timed out after 30m")
     assert failure_reason(inst) == "timed out after 30m"
     inst.result = StepResult(step_id="implement", ok=True, exit_code=0, sandbox="x")
-    inst.manifest = Manifest(step_id="implement", status="failed", summary="测试跑不过")
-    assert failure_reason(inst) == "测试跑不过"
+    inst.manifest = Manifest(step_id="implement", status="failed", summary="the tests do not pass")
+    assert failure_reason(inst) == "the tests do not pass"
 
     q = failure_question("r1", inst, agent=True)
-    assert "第 2 次尝试" in q.question and "测试跑不过" in q.question and "myorch logs r1 implement" in q.question
-    assert "提示" in q.question and len(q.options) == 3
-    assert "提示" not in failure_question("r1", inst, agent=False).question
+    assert "attempt 2" in q.question and "the tests do not pass" in q.question and "myorch logs r1 implement" in q.question
+    assert "hint" in q.question and len(q.options) == 3
+    assert "hint" not in failure_question("r1", inst, agent=False).question
 
     assert parse_failure_reply("1") == ("retry", "")
-    assert parse_failure_reply("2. 跳过这个步骤") == ("skip", "")
-    assert parse_failure_reply("终止流程") == ("abort", "")
-    assert parse_failure_reply("先别改 build.gradle，看看测试数据") == ("hint", "先别改 build.gradle，看看测试数据")
-    assert parse_failure_reply("跳过测试，直接提交")[0] == "hint"  # only an exact option text picks it
+    assert parse_failure_reply("2. Skip this step") == ("skip", "")
+    assert parse_failure_reply("Stop the flow") == ("abort", "")
+    assert parse_failure_reply("don't change build.gradle yet, look at the test data") == ("hint", "don't change build.gradle yet, look at the test data")
+    assert parse_failure_reply("Skip the tests and commit")[0] == "hint"  # only an exact option text picks it

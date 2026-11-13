@@ -16,9 +16,9 @@ from test_actions import FakeStore  # pytest puts tests/ on sys.path
 
 RUN = "postmortem-1a2b3c4d"
 TARGET = {"repo": "o/r", "base_ref": "main", "bad_sha": "b" * 40, "base_sha": "a" * 40, "fix_sha": "f" * 40,
-          "bad_subject": "add analytics", "requirement": "加统计"}
-FOUND = [{"severity": "Important", "title": "密码随 URL 片段发给第三方", "file": "_includes/ga.html", "line": 12,
-          "evidence": "page_location 带 #pw="}]
+          "bad_subject": "add analytics", "requirement": "add analytics"}
+FOUND = [{"severity": "Important", "title": "Password is sent to a third party in the URL fragment", "file": "_includes/ga.html", "line": 12,
+          "evidence": "page_location contains #pw="}]
 
 
 def act(tmp_path: Path, files: dict[str, str], phase: str):
@@ -55,7 +55,7 @@ def test_after_adds_the_findings_and_replays_only_when_proposals_were_adopted(tm
     out, launched = act(tmp_path, {"docs/postmortem/case.json": json.dumps(FOUND, ensure_ascii=False)}, "after")
     case = evals.load_case(tmp_path, RUN)
     assert (case["status"], case["findings"][0]["file"], launched) == ("pending", "_includes/ga.html", [])
-    assert "没有采纳建议" in out.manifest.summary
+    assert "no proposal adopted" in out.manifest.summary
     out, launched = act(tmp_path, {"docs/postmortem/case.json": json.dumps(FOUND, ensure_ascii=False),
                                    "docs/postmortem/accepted.json": json.dumps({"accepted": [1]})}, "after")
     assert [r["run_id"] for r in launched] == ["eval-1a2b3c4d-after"]

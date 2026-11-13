@@ -36,7 +36,7 @@ class FakeRelay:
         self.done = []
 
     async def read_file(self, run_id, rel):
-        return "# 风险说明\n\n## 结论\n中风险，1 人审批。\n\n## 影响范围\n只改文档。\n" if rel == "docs/risk.md" else None
+        return "# Risk\n\n## Verdict\nMedium risk, 1 approver.\n\n## Impact\nOnly docs change.\n" if rel == "docs/risk.md" else None
 
     async def reply(self, run_id, step, text, *, via, account):
         self.done.append(("reply", run_id, step, text, via, account))
@@ -80,14 +80,14 @@ def ev(kind, step="", **data):
 
 async def start_run(a, initiator="jakobhe"):
     await a.handle_event(ev("run_started", flow="blog-development", project="blog", initiator=initiator,
-                            inputs={"task": "给文章页加字数统计"}))
+                            inputs={"task": "Add a word count to the post page"}))
 
 
 async def test_a_run_of_a_registered_person_opens_a_thread_in_their_dms(adapter):
     await start_run(adapter)
     assert adapter.web.named("conversations_open") == [{"users": ME}]
     root = adapter.web.named("chat_postMessage")[0]
-    assert "给文章页加字数统计" in json.dumps(root["blocks"], ensure_ascii=False)
+    assert "Add a word count to the post page" in json.dumps(root["blocks"], ensure_ascii=False)
     assert adapter.state.run("blog-development-1")["ts"] == "1.2"
 
 
@@ -100,26 +100,26 @@ async def test_a_run_of_someone_without_a_slack_account_stays_out_of_slack(adapt
 async def test_progress_is_one_message_edited_in_place(adapter):
     await start_run(adapter)
     await adapter.handle_event(ev("step_started", "sync-master"))
-    await adapter.handle_event(ev("step_finished", "sync-master", status="succeeded", summary="同步到 master"))
+    await adapter.handle_event(ev("step_finished", "sync-master", status="succeeded", summary="Synced to master"))
     posts = [p for p in adapter.web.named("chat_postMessage") if p.get("thread_ts")]
     assert len(posts) == 1 and posts[0]["reply_broadcast"] is False
     update = adapter.web.named("chat_update")[-1]
-    assert "同步到 master" in json.dumps(update["blocks"], ensure_ascii=False)
+    assert "Synced to master" in json.dumps(update["blocks"], ensure_ascii=False)
 
 
 async def test_a_question_has_option_buttons_and_a_thread_reply_answers_it(adapter):
     await start_run(adapter)
-    await adapter.handle_event(ev("question", "analyze-requirement", question="放在哪里？", options=["标题下面", "文末"]))
+    await adapter.handle_event(ev("question", "analyze-requirement", question="Where should it go?", options=["Below the title", "At the end"]))
     q = adapter.web.named("chat_postMessage")[-1]
     assert q["reply_broadcast"] is True
     buttons = [b for blk in q["blocks"] if blk["type"] == "actions" for b in blk["elements"]]
-    assert [json.loads(b["value"])["text"] for b in buttons] == ["标题下面", "文末"]
+    assert [json.loads(b["value"])["text"] for b in buttons] == ["Below the title", "At the end"]
     root = adapter.state.run("blog-development-1")
     await adapter.on_message({"type": "message", "channel_type": "im", "user": ME, "channel": root["channel"],
-                              "thread_ts": root["ts"], "text": "标题下面"})
-    assert adapter.relay.done == [("reply", "blog-development-1", "analyze-requirement", "标题下面", "slack", ME)]
-    await adapter.handle_event(ev("replied", "analyze-requirement", text="标题下面"))
-    assert "已回复" in json.dumps(adapter.web.named("chat_update")[-1]["blocks"], ensure_ascii=False)
+                              "thread_ts": root["ts"], "text": "Below the title"})
+    assert adapter.relay.done == [("reply", "blog-development-1", "analyze-requirement", "Below the title", "slack", ME)]
+    await adapter.handle_event(ev("replied", "analyze-requirement", text="Below the title"))
+    assert "Answered" in json.dumps(adapter.web.named("chat_update")[-1]["blocks"], ensure_ascii=False)
 
 
 async def test_an_unregistered_user_is_told_their_id_and_nothing_runs(adapter):
@@ -135,13 +135,13 @@ async def test_approval_shows_the_risk_conclusion_and_closes_when_approved(adapt
     await adapter.handle_event(ev("approval", "human-review", needed=1, risk="medium", actions=[], missing=""))
     msg = adapter.web.named("chat_postMessage")[-1]
     body = json.dumps(msg["blocks"], ensure_ascii=False)
-    assert "中风险，1 人审批" in body and "只改文档" not in body and '"approve"' in body
+    assert "Medium risk, 1 approver" in body and "Only docs change" not in body and '"approve"' in body
     await adapter.on_action({"action_id": "approve", "value": json.dumps({"run": "blog-development-1", "step": "human-review"})},
                             {"channel": {"id": "D1"}, "message": {"ts": "1.9"}}, ME)
     assert adapter.relay.done[-1] == ("approve", "blog-development-1", "human-review", "slack", ME)
     await adapter.handle_event(ev("approval_progress", "human-review", needed=1, approvers=["jakobhe"], missing=""))
     closed = json.dumps(adapter.web.named("chat_update")[-1]["blocks"], ensure_ascii=False)
-    assert "已批准：jakobhe" in closed and '"approve"' not in closed
+    assert "Approved by: jakobhe" in closed and '"approve"' not in closed
 
 
 async def test_a_finished_run_with_a_delivery_names_the_pushed_branch(adapter):
@@ -149,7 +149,7 @@ async def test_a_finished_run_with_a_delivery_names_the_pushed_branch(adapter):
     await adapter.handle_event(ev("run_finished", status="succeeded", delivery={"branch": "myorch/x", "commit": "a" * 40}))
     assert "pr_wait" not in adapter.state.run("blog-development-1")
     body = json.dumps(adapter.web.named("chat_postMessage")[-1]["blocks"], ensure_ascii=False)
-    assert "myorch/x" in body and "aaaaaaaaaaaa" in body and "正在开 PR" not in body
+    assert "myorch/x" in body and "aaaaaaaaaaaa" in body and "Opening the PR" not in body
 
 
 def test_the_start_form_offers_each_project_flow_pair_and_draws_the_flows_fields(tmp_path):
@@ -184,7 +184,7 @@ def test_a_chosen_project_offers_only_its_flows(tmp_path):
     mine = [c for c in choices if c["project"] == "blog"]
     assert len(mine) > 1
     assert [(o["text"]["text"], o["value"]) for o in blocks["pick:blog"]["element"]["options"]] == [
-        (f"{c['label']}（{c['flow']}）", f"blog|{c['file']}") for c in mine]  # no "blog · " prefix
+        (f"{c['label']} ({c['flow']})", f"blog|{c['file']}") for c in mine]  # no "blog · " prefix
     assert "initial_option" not in blocks["pick:blog"]["element"]
     assert json.loads(view["private_metadata"]) == {"project": "blog"}
 
@@ -202,12 +202,12 @@ async def test_changing_the_project_redraws_the_form_with_that_projects_tasks(ad
 
 
 def test_flows_without_a_project_are_listed_under_no_project(tmp_path):
-    choices = [{"project": "myorch", "file": "flows/a.yaml", "flow": "a", "role": "development", "label": "开发",
+    choices = [{"project": "myorch", "file": "flows/a.yaml", "flow": "a", "role": "development", "label": "Development",
                 "specs": {}},
-               {"project": "", "file": "flows/x.yaml", "flow": "x", "role": "chore", "label": "杂事", "specs": {}}]
+               {"project": "", "file": "flows/x.yaml", "flow": "x", "role": "chore", "label": "Chores", "specs": {}}]
     view = start_view(choices, None, [])
     opts = view["blocks"][0]["element"]["options"]
-    assert [(o["text"]["text"], o["value"]) for o in opts] == [("myorch", "p:myorch"), ("无项目", "p:")]
+    assert [(o["text"]["text"], o["value"]) for o in opts] == [("myorch", "p:myorch"), ("No project", "p:")]
     view = start_view(choices, None, [], project="")
     task = next(b for b in view["blocks"] if b["block_id"] == "pick:")
     assert [o["value"] for o in task["element"]["options"]] == ["|flows/x.yaml"]
@@ -226,18 +226,18 @@ async def test_submitting_the_start_form_starts_the_run_with_the_message(adapter
             "state": {"values": {
         "project": {"project": {"selected_option": {"value": "p:myorch"}}},
         "pick:myorch": {"pick": {"selected_option": {"value": "myorch|flows/development.yaml"}}},
-        "in:task": {"v": {"type": "plain_text_input", "value": "worker 镜像缺 ssh"}},
+        "in:task": {"v": {"type": "plain_text_input", "value": "the worker image lacks ssh"}},
         "in:incident": {"v": {"type": "plain_text_input", "value": "blog-development-1"}}}}}
     assert form_values(view) == ("myorch|flows/development.yaml",
-                                 {"task": "worker 镜像缺 ssh", "incident": "blog-development-1"})
+                                 {"task": "the worker image lacks ssh", "incident": "blog-development-1"})
     assert await adapter.on_submit(view, ME) is None
     assert adapter.relay.done[-1] == ("start", "flows/development.yaml", "myorch", {"incident": "blog-development-1"},
-                                      "worker 镜像缺 ssh", "slack", ME)
+                                      "the worker image lacks ssh", "slack", ME)
 
 
 async def test_a_failed_start_is_shown_in_the_form(adapter):
     async def boom(*a, **k):
-        raise ValueError("项目 myorch 没有同步")
+        raise ValueError("project myorch is not synced")
     adapter.relay.start = boom
     view = {"callback_id": "start", "private_metadata": json.dumps({"chosen": "myorch|flows/development.yaml"}),
             "blocks": [{"block_id": "project"}, {"block_id": "pick:myorch"}, {"block_id": "in:task"}],
@@ -245,7 +245,7 @@ async def test_a_failed_start_is_shown_in_the_form(adapter):
         "pick:myorch": {"pick": {"selected_option": {"value": "myorch|flows/development.yaml"}}},
         "in:task": {"v": {"value": "x"}}}}}
     res = await adapter.on_submit(view, ME)
-    assert res["response_action"] == "errors" and "没有同步" in res["errors"]["pick:myorch"]
+    assert res["response_action"] == "errors" and "not synced" in res["errors"]["pick:myorch"]
 
 
 async def test_a_form_opened_before_the_upgrade_still_starts(adapter):
@@ -261,7 +261,7 @@ async def test_submitting_without_a_project_asks_for_one(adapter):
     view = {"callback_id": "start", "private_metadata": "{}", "blocks": [{"block_id": "project"}],
             "state": {"values": {"project": {"project": {"selected_option": None}}}}}
     res = await adapter.on_submit(view, ME)
-    assert res == {"response_action": "errors", "errors": {"project": "先选项目"}} and adapter.relay.done == []
+    assert res == {"response_action": "errors", "errors": {"project": "Pick a project first"}} and adapter.relay.done == []
 
 
 async def test_submitting_without_a_task_asks_for_one_on_the_task_list(adapter):
@@ -270,11 +270,11 @@ async def test_submitting_without_a_task_asks_for_one_on_the_task_list(adapter):
             "state": {"values": {"project": {"project": {"selected_option": {"value": "p:myorch"}}},
                                  "pick:myorch": {"pick": {"selected_option": None}}}}}
     res = await adapter.on_submit(view, ME)
-    assert res == {"response_action": "errors", "errors": {"pick:myorch": "先选任务"}} and adapter.relay.done == []
+    assert res == {"response_action": "errors", "errors": {"pick:myorch": "Pick a task first"}} and adapter.relay.done == []
 
 
 async def test_a_flow_without_a_project_starts_with_no_project(adapter, monkeypatch):
-    x = {"project": "", "file": "flows/x.yaml", "flow": "x", "role": "chore", "label": "杂事", "specs": {}}
+    x = {"project": "", "file": "flows/x.yaml", "flow": "x", "role": "chore", "label": "Chores", "specs": {}}
     monkeypatch.setattr(adapter, "_choices", lambda: [x])
     view = {"callback_id": "start", "private_metadata": json.dumps({"project": "", "chosen": "|flows/x.yaml"}),
             "blocks": [{"block_id": "project"}, {"block_id": "pick:"}],
@@ -285,8 +285,8 @@ async def test_a_flow_without_a_project_starts_with_no_project(adapter, monkeypa
 
 
 def test_first_section_takes_the_text_under_a_heading():
-    assert first_section("# A\n\n## 结论\n一\n二\n## 下一节\n三", "结论") == "一\n二"
-    assert first_section("没有标题", "结论") == ""
+    assert first_section("# A\n\n## Verdict\none\ntwo\n## Next\nthree", "Verdict") == "one\ntwo"
+    assert first_section("no heading", "Verdict") == ""
 
 
 def test_a_restarted_adapter_keeps_its_threads(tmp_path):

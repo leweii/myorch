@@ -14,11 +14,11 @@ role: sweep
 inputs:
   depth:
     type: select
-    label: 审查强度
+    label: Audit depth
     options:
-      - {value: quick, label: "quick：1 个审查员，Haiku"}
-      - {value: standard, label: "standard：2 个审查员，Sonnet"}
-      - {value: deep, label: "deep：3 个审查员，Opus"}
+      - {value: quick, label: "quick: 1 auditor, Haiku"}
+      - {value: standard, label: "standard: 2 auditors, Sonnet"}
+      - {value: deep, label: "deep: 3 auditors, Opus"}
 defaults:
   depth: standard
 image: "{{project.image}}"
@@ -76,7 +76,7 @@ steps:
       except (OSError, ValueError):
           cursor = 0
       if not files:
-          raise SystemExit("sweep: 项目包的 sweep 设置没有选中任何文件")
+          raise SystemExit("sweep: the project pack's sweep settings select no files")
       start = cursor % len(files)
       pickd = (files[start:] + files[:start])[:chunk]
       os.makedirs(f"{ws}/docs/sweep", exist_ok=True)
@@ -87,7 +87,7 @@ steps:
           known = []
       json.dump(known, open(f"{ws}/docs/sweep/known.json", "w"), ensure_ascii=False, indent=1)
       json.dump({"status": "ok",
-                 "summary": f"这次看 {len(pickd)} 个文件（全部 {len(files)} 个里的第 {start + 1} 个起），已知问题 {len(known)} 条",
+                 "summary": f"looking at {len(pickd)} files this time (from file {start + 1} of {len(files)}), {len(known)} known problems",
                  "outputs": {"files": len(pickd), "total": len(files), "start": start, "next": (start + len(pickd)) % len(files),
                              "known": len(known)}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
@@ -100,73 +100,75 @@ steps:
     needs: [pick]
     fanout: "{{preset.auditors}}"
     outputs:
-      findings: "本审查员的发现条数"
+      findings: "Number of this auditor's findings"
     limits: { timeout: 30m }
     prompt: |
-      你是代码审查员，编号 {{replica}}，共 {{preset.auditors}} 个。
-      这一步只读代码，不改代码。
-      你的任务：在 docs/sweep/chunk.txt 列出的文件里，找出现在就存在的缺陷。这些不是新改动，是已经在主分支上的代码。
+      You are a code auditor, number {{replica}} of {{preset.auditors}}.
+      This step only reads code; it does not change code.
+      Your task: in the files listed in docs/sweep/chunk.txt, find defects that exist now. These are not new changes; the code is already on the main branch.
+      Write everything in English.
 
-      ## 输入
-      - 要看的文件：docs/sweep/chunk.txt，每行一个路径，相对于仓库根目录（当前目录就是仓库）。
-      - 已经报告过的问题：docs/sweep/known.json。里面的问题不要再报告。
-      - review 标准：project/guide/review-guide.md。这个文件可能不存在。
-      - 这批文件以外的代码只用来理解上下文，不要报告它们的问题。
+      ## Input
+      - The files to look at: docs/sweep/chunk.txt, one path per line, relative to the repository root (the current directory is the repository).
+      - Problems already reported: docs/sweep/known.json. Do not report them again.
+      - Review standard: project/guide/review-guide.md. This file may not exist.
+      - Use code outside this batch of files only to understand the context. Do not report its problems.
 
-      ## 找什么
-      1. 正确性：错误的逻辑、漏掉的边界情况、没有处理的错误、和文档或注释不一致的行为。
-      2. 安全：注入、泄露的密钥、不安全的默认值、缺少的权限检查。
-      3. 会让用户看到错误结果的问题：坏掉的链接、错误的数据、显示错误。
-      4. 你的重点：1 号多看正确性和边界情况，2 号多看安全和错误处理，3 号多看文档和数据是否一致。
-         其他编号没有额外重点。
-      不要报告：代码风格、命名、可以写得更好但没有错的地方、缺少测试。
+      ## What to look for
+      1. Correctness: wrong logic, missed edge cases, unhandled errors, behaviour that differs from the docs or comments.
+      2. Security: injection, leaked secrets, unsafe defaults, missing permission checks.
+      3. Problems that show users wrong results: broken links, wrong data, wrong display.
+      4. Your focus: number 1 looks more at correctness and edge cases, number 2 at security and error handling, number 3 at whether docs and data agree.
+         Other numbers have no extra focus.
+      Do not report: code style, naming, things that could be written better but are not wrong, missing tests.
 
-      ## 严重程度
-      - Important：会造成错误行为、数据错误、安全问题，值得安排人修。
-      - Nit：确实是问题，但影响小。
-      没有把握是不是问题时，不要报告。每条发现都要能指出具体的代码和后果。
+      ## Severity
+      - Important: causes wrong behaviour, wrong data or a security problem; worth having a person fix it.
+      - Nit: really a problem, but with a small impact.
+      When you are not sure it is a problem, do not report it. Every finding must point to specific code and its consequence.
 
-      ## 写结果
-      结果写到 docs/sweep/audit-{{replica}}.json。格式是 JSON 数组：
-      [{"severity": "Important", "class": "correctness", "title": "一句话说明问题",
+      ## Write the result
+      Write the result to docs/sweep/audit-{{replica}}.json. The format is a JSON array:
+      [{"severity": "Important", "class": "correctness", "title": "the problem in one sentence",
         "locations": [{"file": "src/a/B.java", "line": 42}],
-        "evidence": "为什么是问题，引用相关代码，说明后果", "detail": "补充说明，可以为空"}]
-      class 取下面的一个值：correctness、security、performance、maintainability、docs。
-      没有发现时，写一个空数组 []。
+        "evidence": "why it is a problem, citing the relevant code and stating the consequence", "detail": "more detail, may be empty"}]
+      class is one of: correctness, security, performance, maintainability, docs.
+      When there are no findings, write an empty array [].
 
   - id: verify
     harness: claude-code
     profile: dev-read
     needs: [audit]
     outputs:
-      new_important: "新发现的 Important 问题条数"
-      new_nit: "新发现的 Nit 问题条数"
+      new_important: "Number of new Important problems"
+      new_nit: "Number of new Nit problems"
     limits: { timeout: 20m }
     prompt: |
-      你是核实员。这一步只读代码，不改代码。
-      你的任务：核实审查员的发现，去掉误报和已知问题，写一份给人看的日报。
+      You are the verifier. This step only reads code; it does not change code.
+      Your task: verify the auditors' findings, remove false positives and known problems, and write a daily report for people.
+      Write everything in English.
 
-      ## 输入
-      - 审查员的发现：docs/sweep/audit-*.json。
-      - 这次看的文件：docs/sweep/chunk.txt。
-      - 已经报告过的问题：docs/sweep/known.json。
+      ## Input
+      - The auditors' findings: docs/sweep/audit-*.json.
+      - The files looked at this time: docs/sweep/chunk.txt.
+      - Problems already reported: docs/sweep/known.json.
 
-      ## 做法
-      1. 每条发现都打开代码亲自核实。不成立的去掉。
-      2. 几个审查员报告的同一个问题合并成一条，votes 写报告它的审查员人数。
-      3. 和 known.json 里的问题是同一个问题时，去掉。
-      4. 只有一个审查员报告、你核实也成立的问题，保留。
+      ## How
+      1. Open the code and verify every finding yourself. Remove the ones that do not hold.
+      2. Merge the same problem reported by several auditors into one item; votes is the number of auditors who reported it.
+      3. Remove a problem when it is the same as one in known.json.
+      4. Keep a problem that only one auditor reported when your verification confirms it.
 
-      ## 写结果
-      - docs/sweep/verified.json：JSON 数组，只包含新问题。每一项：
-        {"severity": "Important", "class": "correctness", "title": "一句话说明问题",
+      ## Write the result
+      - docs/sweep/verified.json: a JSON array with only the new problems. Each item:
+        {"severity": "Important", "class": "correctness", "title": "the problem in one sentence",
          "file": "src/a/B.java", "line": 42, "locations": [{"file": "src/a/B.java", "line": 42}],
-         "evidence": "为什么是问题", "votes": 2}
-      - docs/sweep/report.md：给人看的日报。
-        - 没有新问题时，只写一句：「这批文件没有发现新问题。」后面附上看了哪些目录。
-        - 有新问题时，第一句写数量：Important 几条，Nit 几条。然后按严重程度列出每条：位置、问题、后果、建议怎么修。
-        - 不写过程，不写「一切正常」以外的客套话。
-      - outputs.new_important 和 outputs.new_nit 写条数。
+         "evidence": "why it is a problem", "votes": 2}
+      - docs/sweep/report.md: the daily report for people.
+        - With no new problems, write one sentence only: "No new problems found in this batch of files." Then list which directories were looked at.
+        - With new problems, the first sentence gives the count: how many Important, how many Nit. Then list each one by severity: location, problem, consequence, suggested fix.
+        - Do not describe the process. No pleasantries beyond "all fine".
+      - outputs.new_important and outputs.new_nit are the counts.
 
   # Remember what was reported and move the cursor. Only reached when the steps above succeeded,
   # so a failed run sweeps the same chunk again next time.
@@ -206,8 +208,8 @@ steps:
       pick = json.load(open(f"{ws}/.myorch/steps/pick/out/manifest.json"))["outputs"]
       json.dump({"next": pick["next"], "total": pick["total"], "run": run}, open(f"{state}/cursor.json", "w"))
       json.dump({"status": "ok",
-                 "summary": (f"记下 {added} 条新问题，见 docs/sweep/report.md" if added else "没有新问题")
-                            + f"。下次从第 {pick['next'] + 1} 个文件开始",
+                 "summary": (f"recorded {added} new problems, see docs/sweep/report.md" if added else "no new problems")
+                            + f". Next time starts at file {pick['next'] + 1}",
                  "outputs": {"added": added, "known": len(known)}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
       PY

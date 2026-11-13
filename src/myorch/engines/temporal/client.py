@@ -71,10 +71,10 @@ async def resume_run(client: Client, run_id: str, steps: list[str] | None = None
     desc = await client.get_workflow_handle(run_id).describe()
     engine = desc.status.name if desc.status else "UNKNOWN"
     if engine == "RUNNING":
-        raise ValueError("运行还没有结束。正在等你决定的步骤，直接在对话里回复。")
+        raise ValueError("The run has not ended yet. For a step that is waiting on you, reply in the conversation.")
     state = await get_status(client, run_id)
     if state is None:
-        raise ValueError(f"读不到运行 {run_id} 的状态")
+        raise ValueError(f"cannot read the state of run {run_id}")
     if state.status == "running":  # terminated from outside: nothing recorded the end
         state.cancel()
     trial = state.model_copy(deep=True)
@@ -115,12 +115,12 @@ async def reject(client: Client, run_id: str, step_id: str, approver: str) -> No
 async def request_changes(client: Client, run_id: str, step_id: str, approver: str, text: str) -> None:
     """Send the run back from an approval gate with change requests (the gate needs approval.changes)."""
     if not text.strip():
-        raise ValueError("修改意见不能为空")
+        raise ValueError("the change request is empty")
     await _waiting(client, run_id, step_id, {"waiting_approval"})
     state = await get_status(client, run_id)
     step = state.step_of(step_id) if state else None
     if step is None or step.approval is None or step.approval.changes is None:
-        raise ValueError(f"{step_id!r} 不接受修改意见（没有配置 approval.changes），只能批准或驳回")
+        raise ValueError(f"{step_id!r} does not accept change requests (approval.changes is not configured): approve or reject it")
     await client.get_workflow_handle(run_id).signal(
         FlowWorkflow.request_changes, ChangesInput(step_id=step_id, approver=approver, text=text))
 

@@ -61,7 +61,7 @@ def test_prompt_includes_upstream_and_contract():
 
 
 def test_outcome_precedence():
-    q = Question(question="颜色？", options=["红", "蓝"])
+    q = Question(question="Which colour?", options=["red", "blue"])
     ok = Manifest(step_id="s", summary="done")
     # myorch-ask wins even if the agent also wrote an ok manifest
     assert resolve_outcome("s", ok, q, []).status == "needs_input"
@@ -76,18 +76,18 @@ def test_outcome_precedence():
 def test_interaction_modes_in_prompt():
     never = Step(id="a", harness="h", profile="p", prompt="x")
     allowed = never.model_copy(update={"interaction": "allowed"})
-    assert "不要向用户提问" in build_prompt(never, {}, {}) and "myorch-ask" not in build_prompt(never, {}, {})
+    assert "Do not ask the user questions" in build_prompt(never, {}, {}) and "myorch-ask" not in build_prompt(never, {}, {})
     assert "/sandbox/bin/myorch-ask" in build_prompt(allowed, {}, {})
-    assert "只读" in build_prompt(never, {}, {}, repo_writable=False)
-    assert "蓝色" in build_reply_prompt(allowed, "蓝色")
+    assert "read-only in this step" in build_prompt(never, {}, {}, repo_writable=False)
+    assert "use blue" in build_reply_prompt(allowed, "use blue")
 
 
 def test_escalate_forces_question_when_outputs_say_so():
     from myorch.core.manifest import escalate
     m = Manifest(step_id="a", summary="done", outputs={"requires_design_decision": True,
-                 "design_question": "替换阅读时间还是并列显示？", "design_options": ["替换", "并列"]})
+                 "design_question": "Replace the reading time or show both?", "design_options": ["replace", "both"]})
     q = escalate(m, "outputs.requires_design_decision")
-    assert q.status == "needs_input" and q.question.question.startswith("替换") and q.question.options == ["替换", "并列"]
+    assert q.status == "needs_input" and q.question.question.startswith("Replace") and q.question.options == ["replace", "both"]
     assert escalate(m.model_copy(update={"outputs": {"requires_design_decision": False}}), "outputs.requires_design_decision").status == "ok"
     asked = m.model_copy(update={"status": "needs_input", "question": Question(question="x")})
     assert escalate(asked, "outputs.requires_design_decision").question.question == "x"  # agent already asked

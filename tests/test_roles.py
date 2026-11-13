@@ -20,7 +20,7 @@ def test_a_flow_for_one_project_refuses_another():
     f = load_flow("flow: ck-development\nrole: development\nprojects: [mdm]\nsteps:\n  - {id: a, harness: script, profile: p}\n")
     assert f.kind == "development"
     f.check_project("mdm")
-    with pytest.raises(ValueError, match="只给项目 mdm"):
+    with pytest.raises(ValueError, match="only for projects mdm"):
         f.check_project("blog")
 
 
@@ -30,5 +30,5 @@ def test_the_projects_own_flow_is_found_by_role(tmp_path: Path):
     assert find_flow(tmp_path, "eval", "mdm").name == "ck-eval.yaml"
     assert find_flow(tmp_path, "eval", "blog").name == "eval.yaml"  # nothing of its own: the general one
     assert flow_meta(tmp_path / "demo-eval.yaml") == {"flow": "demo-eval", "role": "eval", "projects": ["demo"], "file": "demo-eval.yaml"}
-    with pytest.raises(ValueError, match="没有给项目"):
+    with pytest.raises(ValueError, match="No .* flow for project"):
         find_flow(tmp_path, "sweep", "mdm")

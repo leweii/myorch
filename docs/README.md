@@ -1,81 +1,79 @@
-# myorch 文档
+# myorch docs
 
-English: [docs/en/README.md](en/README.md)（英文版是网页版的首页）
+myorch is a flow-driven agent platform. Flows are written in YAML, for example "requirements analysis → implementation → multi-reviewer review → risk approval → push the branch". Temporal handles scheduling, retries and waiting for people. Each step runs in its own OpenShell sandbox, and the sandbox holds no real credentials. Project-specific information (repository, identity, check scripts, knowledge) lives in the project pack, so one flow can be used for many projects. People interact with myorch in the local console (`myorch ui`) or in Slack direct messages. A local Claude Code session can receive run results through a channel and then start follow-up flows. The whole set of services runs with docker compose (`deploy/`).
 
-myorch 是一个流程驱动的 agent 平台。流程用 YAML 写，例如「需求分析 → 实现 → 多人 review → 风险审批 → 推分支」。Temporal 负责调度、重试和等人。每个步骤在一个独立的 OpenShell sandbox 里执行，sandbox 里没有真实凭证。仓库、身份、检查脚本、知识这些项目专有的信息放在项目包里，同一个流程可以用在多个项目上。人在本地控制台（`myorch ui`）或 Slack 私信里和 myorch 交互。本机的 Claude Code 会话可以通过 channel 收到运行结果，再发起后续流程。整套服务用 docker compose 运行（`deploy/`）。
+## Directories: four places
 
-## 目录：四个地方
-
-| # | 位置 | 是什么 | git |
+| # | Location | What it is | git |
 |---|---|---|---|
-| ① | `myorch/` | 代码仓库：平台本身（代码、流程、权限、镜像、辅助命令、文档），和项目无关 | `leweii/myorch` |
-| ② | `myorch-knowledge/` | 项目包仓库：每个项目怎么做（仓库地址、检查脚本、风险规则、项目知识）。learn 等流程采纳的建议写回这里 | 独立的 git 仓库（私有 `leweii/myorch-knowledge`）。myorch 只在本机提交，不推送 |
-| ③ | `myorch-data/` | 本机运行数据：`temporal.db`、`events.db`、评测集、Slack 适配器的状态 | 不进 git |
-| ④ | Docker volume `myorch-artifacts` | 运行时的文件：每个运行的工作区、② 的快照、共享缓存。sandbox 只看得到这里 | 不进 git |
+| ① | `myorch/` | Code repository: the platform itself (code, flows, permissions, images, helper commands, docs), independent of any project | `leweii/myorch` |
+| ② | `myorch-knowledge/` | Project pack repository: how each project is done (repository URL, check scripts, risk rules, project knowledge). Proposals adopted by learn and other flows are written back here | A separate git repository (private `leweii/myorch-knowledge`). myorch only commits locally and does not push |
+| ③ | `myorch-data/` | Local run data: `temporal.db`, `events.db`, eval sets, the Slack adapter's state | Not in git |
+| ④ | Docker volume `myorch-artifacts` | Runtime files: each run's workspace, snapshots of ②, shared caches. This is the only place the sandbox can see | Not in git |
 
-①②③ 放在同一个父目录下。sandbox 看不到 ①②③：项目包先 `project sync` 成 ④ 里的快照，再只读挂进去。工作凭证只在 OpenShell gateway 里，由 `deploy/secrets/providers.yaml` 录入。关系图、各目录的内容、改了什么要做什么，见 [1. 概览 · 目录和存储](01-overview.md#目录和存储)。
+①②③ sit in the same parent directory. The sandbox cannot see ①②③: the project pack is first turned into a snapshot in ④ with `project sync`, then mounted read-only. Work credentials exist only in the OpenShell gateway and are entered through `deploy/secrets/providers.yaml`. For the relationship diagram, the contents of each directory, and what to do after changing something, see [1. Overview · Directories and storage](01-overview.md#directories-and-storage).
 
-## 平台特点
+## Platform features
 
-| # | 特点 | 怎么做到 | 状态 |
+| # | Feature | How | Status |
 |---|---|---|---|
-| 1 | **可移植** | 所有配置都是文件：流程（`flows/*.yaml`）、权限（`profiles/*.yaml`）、项目包（`myorch-knowledge/<项目>/`）、渠道（`channels.yaml`）。框架代码不写任何项目专有的东西。流程引擎只在 `engines/` 这一层，调度逻辑在 `core/`，引擎可以替换。整套服务（包括 OpenShell gateway）打包成 docker compose，换一台机器只要 `docker compose up` 和一个凭证文件 | 本地运行和调试：已实现。docker compose：已实现（macOS）。云端多人：设计目标，现在只支持单机 |
-| 2 | **和 agent 的 harness 解耦** | 每种 agent 通过一个 harness adapter 接入（`runner/harnesses/base.py`）。adapter 里写怎么拼命令行、要哪些模型凭证、能不能续接会话。流程只写 `harness: <名字>`，换 agent 不用改流程 | 已接入：claude-code、script。codex、pi、opencode：待接入 |
-| 3 | **流程引擎维护开发流程** | 开发流程（需求分析、实现、review、审批、交付）写成 YAML，由 Temporal 调度、重试、等人。一个角色一个流程，所有项目共用。项目专有的信息都在项目包里，流程只读 `{{project.x}}`。流程形状的差异（review 强度、要不要 takeaway）写在 `project.yaml` 的 `flows:` 里，项目专属的 prompt 条款写在 `prompts/` 里，流程用 `if:` 按项目裁剪。同类项目可以共享项目包模板（`_templates/`） | 已实现 |
-| 4 | **OpenShell 作为 sandbox 框架** | 每个步骤在一个新的 OpenShell sandbox 里执行，用完删除 | 已实现 |
-| 4.1 | 凭证隔离管理 | 工作凭证只在 OpenShell gateway 里。sandbox 里只有占位符，请求出站时由 sandbox 外的 supervisor 换成真实凭证。agent 碰不到任何凭证 | 已实现 |
-| 4.2 | sandbox 权限最小化 | 每个步骤按 profile 拿到最少的权限：镜像、网络 policy、要注入的凭证、代码只读还是可写。能访问 GitHub 的步骤不执行仓库代码，执行代码的步骤没有 GitHub 凭证 | 已实现 |
-| 5 | **可挂载知识库** | 知识源登记在 `myorch-knowledge/` 里，有三种：本机目录、git 仓库、MCP 服务。每次运行开始时固定每个知识源的快照版本，只读挂进 agent 步骤的 sandbox（`/sandbox/workspace/knowledge/<名字>/`）。MCP 知识源不挂目录，由 agent 通过 MCP 查询，token 由 OpenShell 替换。项目包里还有 myorch 维护的 `guide/` 和仓库自带的文档（`repo_docs`）。learn 流程根据历史运行提出改进，你采纳后写回 `guide/` | 已实现 |
-| 6 | **平台改自己** | 项目 `myorch` 用共用的 development 流程（加 `incident` 输入）改 myorch 自己的代码、流程和文档。给出出问题的运行时，先判断原因是不是在平台上 | 已实现，还没有真实运行过 |
-| 7 | **多个入口** | 控制台、Slack 私信（发起、回答、审批）、本机 Claude Code 会话（通过 channel 收通知，用工具读日志和发起流程，不能审批）都接在同一个 channel 层上 | 已实现。Claude Code channel 是研究预览 |
+| 1 | **Portable** | All configuration is files: flows (`flows/*.yaml`), permissions (`profiles/*.yaml`), project packs (`myorch-knowledge/<project>/`), channels (`channels.yaml`). The framework code contains nothing project-specific. The flow engine is confined to the `engines/` layer and the scheduling logic is in `core/`, so the engine can be replaced. The whole set of services (including the OpenShell gateway) is packaged as docker compose. Moving to another machine takes only `docker compose up` and one credentials file | Local runs and debugging: implemented. docker compose: implemented (macOS). Multi-user in the cloud: design goal; only a single machine is supported now |
+| 2 | **Decoupled from the agent harness** | Each kind of agent plugs in through a harness adapter (`runner/harnesses/base.py`). The adapter defines how to build the command line, which model credentials it needs, and whether it can resume a session. A flow only says `harness: <name>`, so changing the agent does not change the flow | Integrated: claude-code, script. codex, pi, opencode: not yet integrated |
+| 3 | **The flow engine maintains the development flows** | Development flows (requirements analysis, implementation, review, approval, delivery) are written in YAML and scheduled, retried and paused for people by Temporal. One flow per role, shared by all projects. Project-specific information is all in the project pack; the flow only reads `{{project.x}}`. Differences in flow shape (review strength, whether there is a takeaway) are set in `flows:` in `project.yaml`, project-specific prompt rules are in `prompts/`, and flows use `if:` to tailor themselves per project. Similar projects can share a project pack template (`_templates/`) | Implemented |
+| 4 | **OpenShell as the sandbox framework** | Each step runs in a new OpenShell sandbox, which is deleted after use | Implemented |
+| 4.1 | Isolated credential management | Work credentials exist only in the OpenShell gateway. The sandbox holds only placeholders; when a request goes out, the supervisor outside the sandbox replaces them with the real credentials. The agent cannot touch any credential | Implemented |
+| 4.2 | Least privilege for sandboxes | Each step gets the least permissions according to its profile: image, network policy, credentials to inject, code read-only or writable. Steps that can reach GitHub do not run repository code; steps that run code have no GitHub credentials | Implemented |
+| 5 | **Mountable knowledge** | Knowledge sources are registered in `myorch-knowledge/`. There are three kinds: local directory, git repository, MCP service. At the start of each run, a snapshot version of each knowledge source is pinned and mounted read-only into the agent steps' sandboxes (`/sandbox/workspace/knowledge/<name>/`). MCP knowledge sources are not mounted as directories; the agent queries them through MCP and OpenShell replaces the token. The project pack also holds the `guide/` that myorch maintains and the repository's own docs (`repo_docs`). The learn flow proposes improvements based on past runs; after you adopt them, they are written back to `guide/` | Implemented |
+| 6 | **The platform changes itself** | The project `myorch` uses the shared development flow (with the `incident` input) to change myorch's own code, flows and docs. When given a run that went wrong, it first decides whether the cause is in the platform | Implemented, not yet run for real |
+| 7 | **Several entry points** | The console, Slack direct messages (start, answer, approve), and a local Claude Code session (gets notifications through a channel, reads logs and starts flows with tools, cannot approve) all connect to the same channel layer | Implemented. The Claude Code channel is a research preview |
 
-## 阅读顺序
+## Reading order
 
-| # | 章节 | 什么时候看 |
+| # | Chapter | When to read it |
 |---|---|---|
-| 1 | [概览：目录和核心概念](01-overview.md) | 第一次看，想知道各个目录的作用和关系，或者忘了某个名词的意思 |
-| 2 | [服务和依赖](02-services.md) | 想知道要起哪些服务、谁依赖谁、哪个服务停了会怎样 |
-| 3 | [架构](03-architecture.md) | 想理解系统怎么拼起来，或者改代码前 |
-| 4 | [安装和启动](04-setup.md) | 新机器上装环境，每天开工时起服务 |
-| 5 | [命令参考](05-cli.md) | 想知道某个 `myorch` 命令做什么、有哪些参数 |
-| 6 | [流程清单](06-flows.md) | 想知道有哪些流程。每个流程的输入、步骤、什么时候需要你，在[流程手册](workflows/README.md)里 |
-| 7 | [项目包](07-projects.md) | 接入新项目，或改项目的检查、风险规则、知识 |
-| 8 | [写流程：YAML 语法](08-flow-syntax.md) | 要新写或改一个流程 |
-| 9 | [设计原则](09-principles.md) | 想知道系统为什么这样设计，做取舍前 |
-| 10 | [使用规范](10-conventions.md) | 凭证、审批、改代码、维护文档的规矩 |
-| 11 | [排错](11-troubleshooting.md) | 跑不起来、卡住、报错 |
+| 1 | [Overview: directories and core concepts](01-overview.md) | First time reading, when you want to know what each directory does and how they relate, or when you forget what a term means |
+| 2 | [Services and dependencies](02-services.md) | When you want to know which services to start, what depends on what, and what happens when a service stops |
+| 3 | [Architecture](03-architecture.md) | When you want to understand how the system fits together, or before changing code |
+| 4 | [Setup](04-setup.md) | Setting up a new machine, and starting services at the start of each day |
+| 5 | [CLI reference](05-cli.md) | When you want to know what a `myorch` command does and what arguments it takes |
+| 6 | [Flows](06-flows.md) | When you want to know which flows exist. Each flow's inputs, steps, and when it needs you are in the [Flow manual](workflows/README.md) |
+| 7 | [Project packs](07-projects.md) | Onboarding a new project, or changing a project's checks, risk rules or knowledge |
+| 8 | [Writing flows: YAML syntax](08-flow-syntax.md) | When you write a new flow or change one |
+| 9 | [Design principles](09-principles.md) | When you want to know why the system is designed this way, before making trade-offs |
+| 10 | [Conventions](10-conventions.md) | The rules for credentials, approvals, changing code and maintaining docs |
+| 11 | [Troubleshooting](11-troubleshooting.md) | When things don't start, get stuck, or report errors |
 
-## 一页速查
+## Quick reference
 
 ```sh
-# 服务（都在 myorch/ 目录下）。Docker Desktop 启动后自动起来
-docker compose -f deploy/compose.yaml ps              # temporal、gateway、worker、ui 都在跑
-docker compose -f deploy/compose.yaml up -d --build   # 改了 src/ 或 flows/ 以后
-docker compose -f deploy/compose.yaml run --rm providers   # 改了 deploy/secrets/providers.yaml 以后
+# Services (all from the myorch/ directory). They start automatically once Docker Desktop is running
+docker compose -f deploy/compose.yaml ps              # temporal, gateway, worker, ui are all running
+docker compose -f deploy/compose.yaml up -d --build   # after changing src/ or flows/
+docker compose -f deploy/compose.yaml run --rm providers   # after changing deploy/secrets/providers.yaml
 
-# 本机 Claude Code 会话收 myorch 的通知（在 myorch/ 目录下）
+# A local Claude Code session receives myorch notifications (from the myorch/ directory)
 claude --dangerously-load-development-channels server:myorch
 
-# 在控制台里发起运行、回复提问、审批。命令行也能做同样的事：
+# Start runs, answer questions and approve in the console. The command line can do the same:
 uv run myorch run flows/development.yaml --project blog -i task="..."
-uv run myorch list                       # 最近的运行，哪些在等你
-uv run myorch status <run_id>            # 一个运行的进度、提问、审批
-uv run myorch reply <run_id> <step> "…"  # 回答 agent 的提问
-uv run myorch approve <run_id> <step>    # 审批
+uv run myorch list                       # recent runs, and which ones are waiting on you
+uv run myorch status <run_id>            # a run's progress, questions, approvals
+uv run myorch reply <run_id> <step> "…"  # answer an agent's question
+uv run myorch approve <run_id> <step>    # approve
 ```
 
-| 界面 | 地址 |
+| Interface | Address |
 |---|---|
-| 控制台 | http://127.0.0.1:8800/ |
-| Temporal 界面 | http://127.0.0.1:8233/ |
-| Slack | 给 myorch 发私信，或者 `/myorch` |
+| Console | http://127.0.0.1:8800/ |
+| Temporal UI | http://127.0.0.1:8233/ |
+| Slack | Send myorch a direct message, or use `/myorch` |
 
-## 其他文档
+## Other documents
 
-- [ARCHITECTURE.md](../ARCHITECTURE.md)：完整的设计文档。本目录讲「怎么用」，ARCHITECTURE.md 讲「为什么」。两者冲突时以代码为准，再修正文档。
-- [PLAN.md](../PLAN.md)：实施计划和每一项的实测结果。
-- [流程手册](workflows/README.md)（网页版 `docs/zh/workflows/index.html`，英文 `docs/workflows/index.html`）：每个流程做什么、输入、步骤图、每一步做什么、什么时候需要你。文字在 `flows/<流程>.md`（英文在 `docs/en/flows/`），改完重新生成：`uv run --with markdown python docs/workflows/build.py`。
-- `myorch-knowledge/README.md`：项目包目录的说明。
-- [deploy/README.md](../deploy/README.md)：docker compose 的安装、新机器的安装脚本、凭证文件、Slack、Claude Code channel、发布 origin/main、端口、已知限制。
-- `docs/notes/`：各项设计的记录，例如 channel 层、交付接口、gateway 放进 Docker 的调研、Slack 适配器、Claude Code channel。
-- `docs/zh/index.html`：本目录的网页版（单页，左侧导航）。英文版 `docs/index.html` 是首页，源文件在 `docs/en/`（写法见 `docs/en/TRANSLATING.md`），中英文一起改。改了任何一章后重新生成：`uv run --with markdown python docs/build-html.py`。
+- [ARCHITECTURE.md](../ARCHITECTURE.md): the full design document. This directory covers "how to use it"; ARCHITECTURE.md covers "why". When the two conflict, the code is right; then fix the docs.
+- [PLAN.md](../PLAN.md): the implementation plan and the measured results for each item.
+- [Flow manual](workflows/README.md) (web version `docs/workflows/index.html`): what each flow does, its inputs, step graph, what each step does, and when it needs you. The text is in `flows/<flow>.md`; regenerate after changing it: `uv run --with markdown python docs/workflows/build.py`.
+- `myorch-knowledge/README.md`: the description of the project pack directory.
+- [deploy/README.md](../deploy/README.md): docker compose installation, the install script for new machines, the credentials file, Slack, the Claude Code channel, publishing origin/main, ports, known limitations.
+- `docs/notes/`: records of individual designs, for example the channel layer, the delivery interface, the research on moving the gateway into Docker, the Slack adapter, the Claude Code channel.
+- `docs/index.html`: the web version of this directory and the docs' home page (single page, navigation on the left). Regenerate after changing any chapter: `uv run --with markdown python docs/build-html.py`.

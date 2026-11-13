@@ -51,15 +51,15 @@ def find_seed(data_root: Path, project: str, repo: str, base: str) -> Seed:
     """The local clone to seed from, after checking that it is a clone of `repo` with origin/<base>."""
     path = configured_clone(data_root, project)
     if path is None:
-        return Seed(None, f"{data_root / CONFIG_FILE} 里没有 {project}")
+        return Seed(None, f"{project} is not in {data_root / CONFIG_FILE}")
     if not path.is_dir():
-        return Seed(None, f"本机克隆不存在：{path}")
+        return Seed(None, f"Local clone does not exist: {path}")
     git_dir = _git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
     if not git_dir:
-        return Seed(None, f"不是 git 仓库：{path}")
+        return Seed(None, f"Not a git repository: {path}")
     url = _git(path, "remote", "get-url", "origin") or ""
     if _repo_of(url) != repo.lower():
-        return Seed(None, f"{path} 的 origin 是 {url or '（无）'}，不是 {repo}")
+        return Seed(None, f"The origin of {path} is {url or '(none)'}, not {repo}")
     if not _git(path, "rev-parse", "--verify", "--quiet", f"refs/remotes/origin/{base}"):
-        return Seed(None, f"{path} 没有 origin/{base}")
+        return Seed(None, f"{path} has no origin/{base}")
     return Seed(Path(git_dir), str(path))

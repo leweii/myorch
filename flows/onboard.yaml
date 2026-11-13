@@ -13,8 +13,8 @@ role: onboard
 inputs:
   focus:
     type: message
-    label: 要重点看的地方
-    hint: 可选，例如「前端检查」「数据库迁移」
+    label: Focus areas
+    hint: Optional, for example “frontend checks”, “database migrations”
 defaults:
   focus: ""
 image: "{{project.image}}"
@@ -31,7 +31,7 @@ steps:
     profile: dev-write
     needs: [sync]
     outputs:
-      passed: "检查是否全部通过"
+      passed: "Whether all checks passed"
     limits: { timeout: 60m }
     prompt: |
       set -uo pipefail
@@ -48,7 +48,7 @@ steps:
       if [ -f "$MYORCH_WORKSPACE/project/checks.sh" ]; then
         bash "$MYORCH_WORKSPACE/project/checks.sh"; code=$?
       else
-        echo "# 没有 checks.sh" > "$CHECKS_DIR/report.md"; echo '{"passed": false, "failed": ["no checks.sh"], "skipped": []}' > "$CHECKS_DIR/result.json"; code=0
+        echo "# No checks.sh" > "$CHECKS_DIR/report.md"; echo '{"passed": false, "failed": ["no checks.sh"], "skipped": []}' > "$CHECKS_DIR/result.json"; code=0
       fi
       secs=$(( $(date +%s) - start ))
       python3 - "$CHECKS_DIR" "$code" "$secs" <<'PY'
@@ -57,10 +57,10 @@ steps:
       try:
           r = json.load(open(f"{d}/result.json"))
       except (OSError, ValueError):
-          r = {"passed": False, "failed": [f"checks.sh 没写出 result.json（退出码 {code}）"], "skipped": []}
+          r = {"passed": False, "failed": [f"checks.sh did not write result.json (exit code {code})"], "skipped": []}
       n = len([l for l in open(f"{d}/changed.txt") if l.strip()])
-      setup = "；setup.sh 失败" if os.path.exists("/tmp/setup-failed") else ""
-      summary = f"样本改动 {n} 个文件，检查 {'通过' if r.get('passed') else '未通过：' + '、'.join(map(str, r.get('failed', [])))}，用时 {secs}s{setup}"
+      setup = "; setup.sh failed" if os.path.exists("/tmp/setup-failed") else ""
+      summary = f"sample change of {n} files, checks {'passed' if r.get('passed') else 'failed: ' + ', '.join(map(str, r.get('failed', [])))}, took {secs}s{setup}"
       json.dump({"status": "ok", "summary": summary, "outputs": {"passed": bool(r.get("passed")), "seconds": secs, **r}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
       PY
@@ -71,47 +71,47 @@ steps:
     model: claude-opus-5-5
     needs: [try-checks]
     outputs:
-      proposals: "提出的项目包修改建议条数（0 到 8）"
+      proposals: "Number of proposed project pack changes (0 to 8)"
     limits: { timeout: 40m }
     prompt: |
-      你负责让 myorch 了解这个项目（{{project.repo}}），以后的开发、review 和风险判定都依赖你的结论。
-      不要修改仓库或项目包，只写 docs/onboard/ 下的文件。{{inputs.focus}}
+      You help myorch understand this project ({{project.repo}}). Later development, review and risk verdicts depend on your conclusions.
+      Do not change the repository or the project pack; only write files under docs/onboard/. Write everything in English. {{inputs.focus}}
 
-      输入：
-      - repo/：项目代码（{{project.base}} 分支最新）。
-      - 仓库自带的知识（只读，见工作区说明）：先读它们，不要重复里面已有的内容。
-      - project/：myorch 当前的项目包（模板和项目合并后的样子）。project/project.json 是配置；
-        guide/ 是 myorch 维护的知识；checks.sh、setup.sh 是检查和准备脚本；risk-rules.yaml 是审批规则；
-        security.md 是安全 review 重点。
-      - docs/onboard/checks/：用最近 5 个提交做样本跑 checks.sh 的结果（report.md、result.json、changed.txt）。
+      Input:
+      - repo/: the project code (latest {{project.base}} branch).
+      - The repository's own knowledge (read-only, see the workspace notes): read it first, and do not repeat what it already says.
+      - project/: myorch's current project pack (the template and the project merged). project/project.json is the configuration;
+        guide/ is the knowledge myorch maintains; checks.sh and setup.sh are the check and setup scripts; risk-rules.yaml holds the approval rules;
+        security.md lists the security review focus.
+      - docs/onboard/checks/: the result of running checks.sh on the last 5 commits as a sample (report.md, result.json, changed.txt).
 
-      要弄清楚并核对：
-      1. 结构：模块怎么划分、依赖关系、哪些是对外契约（接口、协议、数据库迁移）、前端在哪。
-      2. 构建和检查：怎么构建、怎么只测受影响的部分、需要哪些私有依赖或环境；checks.sh 是否找对了
-         模块、是否漏了检查、哪里因为与改动无关的原因失败（环境、网络、缓存）。
-      3. 约定：代码风格、测试写法、提交和 PR 约定，与 project/guide/ 里写的是否一致。
-      4. 风险：哪些路径改动需要更多人审批（risk-rules.yaml 有没有漏的或误伤的）；安全上要特别注意什么。
+      Find out and verify:
+      1. Structure: how modules are divided, their dependencies, which parts are external contracts (interfaces, protocols, database migrations), where the frontend is.
+      2. Build and checks: how to build, how to test only the affected parts, which private dependencies or environment are needed; whether checks.sh finds the right
+         modules, whether it misses checks, and where it fails for reasons unrelated to the change (environment, network, cache).
+      3. Conventions: code style, how tests are written, commit and PR conventions, and whether they match what project/guide/ says.
+      4. Risk: which paths need more approvers when changed (whether risk-rules.yaml misses some or catches too much); what needs special attention for security.
 
-      写四个文件：
-      - docs/onboard/report.md：给人看的项目概况和你的结论，每条结论注明依据（文件路径）。
-      - docs/onboard/proposals.json：JSON 数组，最多 8 条，每项
-        {"id": 1, "title": "一句话", "kind": "fill-gap|fix-checks|fix-rule|security", "evidence": ["<文件路径或检查结果>", ...],
-         "changes": [{"file": "project/<文件>", "edits": [{"old": "<文件里恰好出现一次的原文>", "new": "<替换后>"}]}
-                     或 {"file": "project/<文件>", "append": "<追加到末尾的内容>"}
-                     或 {"file": "project/<文件>", "content": "<整个文件的新内容>"}]}
-        只能改 project/guide/（可新建文件）、project/checks.sh、project/setup.sh、project/risk-rules.yaml、project/security.md。
-        修改写进项目自己的文件：模板来的 guide/、checks.sh、setup.sh 会先复制一份再改，所以 edits 可以引用你看到的原文；
-        risk-rules.yaml 和 security.md 是模板和项目拼接的，项目自己的部分只有项目特有的内容，所以对它们只用
-        append（security.md）或 content（risk-rules.yaml，写完整的项目规则文件：`rules:` 列表，可选 `default:`）。
-        guide/ 只写仓库自带文档里没有、而且会影响 agent 判断的内容，措辞简短。
-      - docs/onboard/proposals.md：给人看的版本，每条：编号、标题、依据、具体改什么。
-      - docs/onboard/open-questions.md：需要人回答才能定的问题（可以为空）。
+      Write four files:
+      - docs/onboard/report.md: an overview of the project and your conclusions, for people. Give the source (file path) for each conclusion.
+      - docs/onboard/proposals.json: a JSON array, at most 8 items, each
+        {"id": 1, "title": "one sentence", "kind": "fill-gap|fix-checks|fix-rule|security", "evidence": ["<file path or check result>", ...],
+         "changes": [{"file": "project/<file>", "edits": [{"old": "<text that occurs exactly once in the file>", "new": "<replacement>"}]}
+                     or {"file": "project/<file>", "append": "<content appended to the end>"}
+                     or {"file": "project/<file>", "content": "<the whole new content of the file>"}]}
+        Only project/guide/ (new files are allowed), project/checks.sh, project/setup.sh, project/risk-rules.yaml and project/security.md can be changed.
+        Changes go into the project's own files: guide/, checks.sh and setup.sh that come from the template are copied first and then changed, so edits can cite the text you see;
+        risk-rules.yaml and security.md are the template and the project joined together, and the project's own part holds only what is specific to the project, so for them use only
+        append (security.md) or content (risk-rules.yaml: write the complete project rules file, a `rules:` list and an optional `default:`).
+        In guide/, write only what the repository's own docs do not say and what affects the agents' judgement. Keep the wording short.
+      - docs/onboard/proposals.md: the version for people. Each item: number, title, source, what exactly changes.
+      - docs/onboard/open-questions.md: questions a person must answer before they can be settled (may be empty).
 
   - use: lib/choose-proposals.yaml
     id: choose
     needs: [analyze]
     when: "steps.analyze.outputs.proposals > 0"
-    with: {dir: docs/onboard, what: 项目包修改建议}
+    with: {dir: docs/onboard, what: project pack change proposals}
 
   # Host action: validates every change (pack files of the onboard scope only), writes all or
   # nothing, commits to myorch-knowledge, re-syncs the snapshot.

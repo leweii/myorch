@@ -42,9 +42,9 @@ OK = frozenset({"succeeded", "skipped"})
 BAD = frozenset({"failed", "rejected", "blocked", "cancelled"})
 TERMINAL = OK | BAD
 
-LOOP_OPTIONS = ["再跑一轮", "接受当前结果，继续后面的步骤", "终止流程"]
+LOOP_OPTIONS = ["Run one more round", "Accept the current result and continue with the later steps", "Stop the flow"]
 # Offered when a step with on_failed: ask has used up its retries. Any other reply is a hint.
-FAILURE_OPTIONS = ["重新开始（新会话）", "跳过这个步骤，继续后面的", "终止流程"]
+FAILURE_OPTIONS = ["Start over (new session)", "Skip this step and continue with the later ones", "Stop the flow"]
 FailureChoice = Literal["retry", "skip", "abort", "hint"]
 
 
@@ -281,7 +281,7 @@ class RunState(BaseModel):
                     continue
                 deps = [self._group_status(d) for d in inst.deps]
                 if any(d == "bad" for d in deps):
-                    inst.status, inst.error = "blocked", "上游步骤失败或被驳回"
+                    inst.status, inst.error = "blocked", "an upstream step failed or was rejected"
                     changed = True
                 elif all(d == "ok" for d in deps):
                     step = self.flow.step(inst.step_id)
@@ -299,7 +299,7 @@ class RunState(BaseModel):
         if lr.status == "pending":
             deps = [self._group_status(d) for d in loop.needs]
             if any(d == "bad" for d in deps):
-                lr.status, lr.error = "failed", "上游步骤失败或被驳回"
+                lr.status, lr.error = "failed", "an upstream step failed or was rejected"
                 return True
             if all(d == "ok" for d in deps):
                 if loop.when and not evaluate(loop.when, self.context(loop_round=(loop.id, 0))):
@@ -316,7 +316,7 @@ class RunState(BaseModel):
         if not all(i.status in TERMINAL for i in body):
             return False
         if any(i.status in BAD for i in body):
-            lr.status, lr.error = "failed", f"第 {lr.round} 轮有步骤失败"
+            lr.status, lr.error = "failed", f"a step failed in round {lr.round}"
             return True
         if evaluate(loop.until, self.context(loop_round=(loop.id, lr.round))):
             lr.status = "succeeded"
@@ -325,7 +325,7 @@ class RunState(BaseModel):
         elif loop.on_exhausted == "accept":
             lr.status = "succeeded"
         elif loop.on_exhausted == "fail":
-            lr.status, lr.error = "failed", f"{lr.max_rounds} 轮后仍未满足 until 条件"
+            lr.status, lr.error = "failed", f"the until condition is still not met after {lr.max_rounds} rounds"
         else:
             advice = ""
             if loop.reflect:
@@ -340,10 +340,10 @@ class RunState(BaseModel):
                 if r.status == "succeeded" and r.manifest is not None:
                     out = r.manifest.outputs
                     rec, why = out.get("recommendation"), out.get("reason") or r.manifest.summary
-                    advice = f"\n反思建议：{rec}。{why}" if rec else (f"\n反思：{why}" if why else "")
+                    advice = f"\nReflect proposal: {rec}. {why}" if rec else (f"\nReflect: {why}" if why else "")
             lr.status = "waiting_input"
             lr.question = Question(
-                question=f"循环 {loop.id} 已经跑了 {lr.round} 轮，仍未满足：{loop.until}。怎么处理？{advice}",
+                question=f"Loop {loop.id} has run {lr.round} rounds and still does not meet: {loop.until}. What should happen?{advice}",
                 options=LOOP_OPTIONS,
             )
             actions.append(AskLoop(loop_id=loop.id))
@@ -368,7 +368,7 @@ class RunState(BaseModel):
         elif choice == 1:
             lr.status = "succeeded"
         else:
-            lr.status, lr.error = "failed", "用户终止了流程"
+            lr.status, lr.error = "failed", "the user stopped the flow"
         return True
 
     def change_round(self, iid: str) -> int:
@@ -380,7 +380,7 @@ class RunState(BaseModel):
         step = self.step_of(iid)
         changes = step.approval.changes if step.approval else None
         if changes is None:
-            raise ValueError(f"{step.id} 不接受修改意见（没有配置 approval.changes）")
+            raise ValueError(f"{step.id} does not accept change requests (approval.changes is not configured)")
         return changes
 
     def request_changes(self, iid: str, by: str, text: str, at: str, keep_attempts: bool = False) -> int:
@@ -394,11 +394,11 @@ class RunState(BaseModel):
         inst = self.instances[iid]
         changes = self._changes_config(iid)
         if inst.status != "waiting_approval":
-            raise ValueError(f"{iid} 没有在等审批（状态 {inst.status}）")
+            raise ValueError(f"{iid} is not waiting for approval (status {inst.status})")
         loop = self.flow.item(changes.loop)
         lr = self.loops[loop.id]
         if lr.status != "succeeded":
-            raise ValueError(f"循环 {loop.id} 的状态是 {lr.status}，不能再跑")
+            raise ValueError(f"loop {loop.id} is {lr.status} and cannot run again")
         record = self.approvals.get(inst.step_id) or ApprovalRecord()
         record.changes.append(ChangeRequest(by=by, text=text, at=at, round=lr.round + 1))
         self.approvals[inst.step_id] = record
@@ -431,11 +431,11 @@ class RunState(BaseModel):
         A rejected gate is a person's decision and is not reopened. A loop that ran out of rounds
         under on_exhausted: fail has no failed step and stays failed."""
         if self.status not in ("failed", "cancelled"):
-            raise ValueError(f"只有失败或取消的运行可以接着执行（现在是 {self.status}）")
+            raise ValueError(f"only a failed or cancelled run can be resumed (it is {self.status})")
         retry = [i for i in self.instances.values() if i.status in ("failed", "cancelled")
                  and (only is None or i.id in only or i.step_id in only)]
         if not retry:
-            raise ValueError("没有可以重新执行的步骤" + (f"：{', '.join(sorted(only))}" if only else ""))
+            raise ValueError("no step can be re-run" + (f": {', '.join(sorted(only))}" if only else ""))
         retry_ids, reset = {i.id for i in retry}, []
         for inst in self.instances.values():
             if inst.id in retry_ids or inst.status == "blocked" or (only is None and inst.status == "cancelled"):
@@ -468,7 +468,7 @@ class RunState(BaseModel):
         self.status = "cancelled"
 
     def failure_summary(self) -> str:
-        bad = [f"{i.id}={i.status}" + (f"（{i.error[:120]}）" if i.status == "failed" and i.error else "")
+        bad = [f"{i.id}={i.status}" + (f" ({i.error[:120]})" if i.status == "failed" and i.error else "")
                for i in self.instances.values() if i.status in BAD]
         bad += [f"{lr.id}={lr.status}" for lr in self.loops.values() if lr.status == "failed"]
         return ", ".join(bad) or "unknown"
@@ -530,13 +530,13 @@ class RunState(BaseModel):
         approval = self.step_of(iid).approval
         missing = []
         if len(approvers) < needed:
-            missing.append(f"还需要 {needed - len(approvers)} 人批准")
+            missing.append(f"{needed - len(approvers)} more approval(s) needed")
         initiator = self.mandate.initiator if self.mandate else None
         same_person = {initiator, *(self.mandate.initiator_aliases if self.mandate else [])}
         if needed > 0 and approval is not None and approval.require_initiator and initiator \
                 and not (same_person & approvers):
-            missing.append(f"发起人 {initiator} 必须是审批人之一")
-        return "；".join(missing) or None
+            missing.append(f"the initiator {initiator} must be one of the approvers")
+        return "; ".join(missing) or None
 
     def upstream(self, iid: str) -> dict[str, Manifest]:
         """Manifests the instance should see: its dependencies, plus the previous round of its loop."""
@@ -569,10 +569,10 @@ def failure_reason(inst: Instance) -> str:
     if r is not None and r.error:
         return r.error
     if m is not None and m.status == "failed":
-        return m.summary or "agent 判定这一步失败"
+        return m.summary or "the agent declared this step failed"
     if r is not None and r.exit_code not in (0, None):
-        return f"退出码 {r.exit_code}"
-    return "未知原因"
+        return f"exit code {r.exit_code}"
+    return "unknown reason"
 
 
 def skip_after_failure(inst: Instance, reason: str) -> None:
@@ -580,7 +580,7 @@ def skip_after_failure(inst: Instance, reason: str) -> None:
     on. Its outputs are dropped: later steps must not act on a half-done result (a `when` on one of
     its outputs is then false)."""
     inst.status, inst.skipped_after_failure = "skipped", True
-    inst.error = f"失败后跳过（on_failed: skip）：{reason}"[:2000]
+    inst.error = f"skipped after failure (on_failed: skip): {reason}"[:2000]
     if inst.manifest is not None:
         inst.manifest = inst.manifest.model_copy(update={"outputs": {}})
 
@@ -622,17 +622,17 @@ def failure_question(run_id: str, inst: Instance, agent: bool) -> Question:
     reason = failure_reason(inst)
     if len(reason) > 300:
         reason = reason[:300] + "…"
-    text = (f"步骤 {inst.id} 失败了（第 {inst.attempts} 次尝试）：{reason}\n"
-            f"日志：`myorch logs {run_id} {inst.id}`\n回复编号选择怎么处理")
+    text = (f"Step {inst.id} failed (attempt {inst.attempts}): {reason}\n"
+            f"Log: `myorch logs {run_id} {inst.id}`\nReply with a number to choose what to do")
     if agent:
-        text += "；也可以直接写一段提示（例如“先别改 X，看看 Y”），agent 会接着上次的会话按提示再试"
-    return Question(question=text + "。", options=list(FAILURE_OPTIONS))
+        text += ". Or write a hint (for example \"don't change X yet, look at Y\"), and the agent tries again in the same session, following the hint"
+    return Question(question=text + ".", options=list(FAILURE_OPTIONS))
 
 
 def parse_failure_reply(reply: str) -> tuple[FailureChoice, str]:
     """A number or the exact option text picks an option; anything else is a hint."""
     text = reply.strip()
-    head = text.split(".")[0].split("、")[0].strip()
+    head = text.split(".")[0].split("\u3001")[0].strip()  # "2. ..." or "2\u3001..." (ideographic comma)
     idx = int(head) - 1 if head.isdigit() and 1 <= int(head) <= len(FAILURE_OPTIONS) else (
         FAILURE_OPTIONS.index(text) if text in FAILURE_OPTIONS else None)
     if idx is None:
@@ -643,7 +643,7 @@ def parse_failure_reply(reply: str) -> tuple[FailureChoice, str]:
 def match_option(reply: str, options: list[str]) -> int | None:
     """'2', '2. xxx' or the option text itself -> index; None if nothing matches."""
     text = reply.strip()
-    head = text.split(".")[0].split("、")[0].strip()
+    head = text.split(".")[0].split("\u3001")[0].strip()  # "2. ..." or "2\u3001..." (ideographic comma)
     if head.isdigit() and 1 <= int(head) <= len(options):
         return int(head) - 1
     for i, opt in enumerate(options):

@@ -72,7 +72,7 @@ start follow-ups for runs that were themselves started to fix an incident more t
 
 You cannot approve, reject or request changes: tell the user to do it in the console \
 (http://127.0.0.1:8800/) or in Slack. Answer a question with reply only when the answer follows from the \
-user's request or the repository; otherwise ask the user."""
+user's request or the repository; otherwise ask the user. Write messages and replies to myorch in English."""
 
 
 # ---- event filtering and wording (pure, tested without a server) ------------------------------
@@ -113,36 +113,36 @@ def notice(e: dict[str, Any], run: dict[str, Any]) -> tuple[str, dict[str, str]]
     """(content, meta) of one channel notification."""
     d, kind, rid, step = e["data"], e["kind"], e["run_id"], e.get("step", "")
     flow, project = run.get("flow", ""), run.get("project", "")
-    head = f"{flow} {rid}" + (f"（{project}）" if project else "")
+    head = f"{flow} {rid}" + (f" ({project})" if project else "")
     status = ""
     if kind == "run_finished":
         status = d.get("status", "")
-        mark = {"succeeded": "✅ 成功", "failed": "❌ 失败", "rejected": "🚫 被驳回", "cancelled": "⏹ 已取消"}.get(status, status)
-        text = f"{mark}：{head}"
+        mark = {"succeeded": "✅ succeeded", "failed": "❌ failed", "rejected": "🚫 rejected", "cancelled": "⏹ cancelled"}.get(status, status)
+        text = f"{mark}: {head}"
         if d.get("stopped"):
-            text += f"。没有改代码：{clip(d['stopped'], 300)}"
+            text += f". No code changed: {clip(d['stopped'], 300)}"
         if d.get("failure"):
-            text += f"。{clip(d['failure'], 600)}"
+            text += f". {clip(d['failure'], 600)}"
         if d.get("pr_url"):
-            text += f"。PR：{d['pr_url']}"
+            text += f". PR: {d['pr_url']}"
         elif d.get("delivery"):
             dl = d["delivery"]
-            text += f"。已推送分支 {dl.get('branch', '')}（{str(dl.get('commit', ''))[:12]}），PR 没有开。"
+            text += f". Pushed branch {dl.get('branch', '')} ({str(dl.get('commit', ''))[:12]}). No PR opened."
     elif kind == "question":
-        opts = "；".join(f"{i + 1}. {clip(o, 80)}" for i, o in enumerate(d.get("options") or []))
-        text = f"❓ {head} 的步骤 {step} 在等回答：{clip(d.get('question'), 800)}" + (f" 选项：{opts}" if opts else "")
+        opts = "; ".join(f"{i + 1}. {clip(o, 80)}" for i, o in enumerate(d.get("options") or []))
+        text = f"❓ {head}: step {step} is waiting for an answer: {clip(d.get('question'), 800)}" + (f" Options: {opts}" if opts else "")
     elif kind == "approval":
         status = "waiting_approval"
-        text = (f"🖐 {head} 等人审批（风险 {d.get('risk', '?')}，需要 {d.get('needed', 1)} 人"
-                + (f"，还差 {d['missing']}" if d.get("missing") else "") + "）。审批只能由人在控制台或 Slack 里做。")
+        text = (f"🖐 {head} is waiting for approval (risk {d.get('risk', '?')}, {d.get('needed', 1)} approver(s) needed"
+                + (f", still needed: {d['missing']}" if d.get("missing") else "") + "). Only a person can approve, in the console or in Slack.")
     elif kind == "approval_reminder":
         status = "waiting_approval"
-        text = f"⏰ {head} 的 {step} 还在等审批（已等 {d.get('waited', '')}）。"
+        text = f"⏰ {head}: {step} is still waiting for approval (waited {d.get('waited', '')})."
     elif kind == "pr_opened":
-        text = f"🔗 {head} 开了 PR：{d.get('url', '')}"
+        text = f"🔗 {head} opened a PR: {d.get('url', '')}"
     elif kind == "step_finished":
         status = d.get("status", "")
-        text = f"✗ {head} 的步骤 {step} {status}：{clip(d.get('error') or d.get('summary'), 600)}"
+        text = f"✗ {head}: step {step} {status}: {clip(d.get('error') or d.get('summary'), 600)}"
     else:
         text = f"{kind} {head}"
     meta = {"run_id": rid, "kind": kind, "step": step, "status": status, "project": project, "flow": flow}
@@ -150,8 +150,8 @@ def notice(e: dict[str, Any], run: dict[str, Any]) -> tuple[str, dict[str, str]]
 
 
 def digest(lines: list[str], more: int) -> str:
-    out = "你不在时 myorch 发生了这些事：\n" + "\n".join(f"- {l}" for l in lines)
-    return out + (f"\n- ……还有 {more} 条，用 events 工具查看。" if more else "")
+    out = "While you were away, this happened in myorch:\n" + "\n".join(f"- {l}" for l in lines)
+    return out + (f"\n- … {more} more. Use the events tool to see them." if more else "")
 
 
 def run_view(events: list[dict[str, Any]]) -> dict[str, Any]:
@@ -258,32 +258,40 @@ def tool(name: str, description: str, props: dict[str, Any] | None = None, requi
 
 S, I = {"type": "string"}, {"type": "integer"}
 TOOLS = [
-    tool("runs", "最近的运行：run_id、状态、流程、项目、发起人、标签（labels，例如 Jira 工单 MD-18700）。"
-                 "label：只看带这个标签的运行（不分大小写，只写数字也行），或 run_id 里包含它的；搜全部运行，不只最近的。",
+    tool("runs", "Recent runs: run_id, status, flow, project, initiator, labels (e.g. the Jira ticket MD-18700). "
+                 "label: only runs with this label (case-insensitive; the number alone works too), or whose run_id "
+                 "contains it. It searches all runs, not only recent ones.",
          {"limit": I, "project": S, "label": S}),
-    tool("run", "一个运行的状态：每一步的状态和摘要、正在等什么（提问、审批）、结束结果和失败原因。", {"run_id": S}, ["run_id"]),
-    tool("events", "一个运行（或全部）的原始事件，按 seq。", {"run_id": S, "after": I, "limit": I}),
-    tool("step", "一个步骤实例的 manifest、输出文件列表和日志尾部。instance 例如 implement、review.r2.x1。",
+    tool("run", "A run's state: each step's status and summary, what it is waiting for (question, approval), "
+                "how it ended and why it failed.", {"run_id": S}, ["run_id"]),
+    tool("events", "The raw events of one run (or of all runs), by seq.", {"run_id": S, "after": I, "limit": I}),
+    tool("step", "A step instance's manifest, output file list and log tail. instance e.g. implement, review.r2.x1.",
          {"run_id": S, "instance": S}, ["run_id", "instance"]),
-    tool("log", "一个步骤的完整日志，分页读。which：turn（默认最后一次尝试的最后一轮；attempt=A、turn=N 选别的）"
-                "或 supervisor（sandbox 的网络、DNS、凭证记录）。重试不覆盖之前尝试的日志。",
+    tool("log", "A step's complete log, paged. which: turn (default: the last turn of the last attempt; attempt=A, "
+                "turn=N pick another) or supervisor (the sandbox's network, DNS and credentials records). "
+                "A retry does not overwrite the logs of earlier attempts.",
          {"run_id": S, "instance": S, "which": S, "attempt": I, "turn": I, "offset": I, "limit": I}, ["run_id", "instance"]),
-    tool("files", "运行工作区里的文件列表，默认 docs/。", {"run_id": S, "dir": S}, ["run_id"]),
-    tool("file", "读运行工作区里的一个文件（需求、设计、review、CI 报告、流程快照 .myorch/flow.yaml……），分页。",
+    tool("files", "The files in a run's workspace, docs/ by default.", {"run_id": S, "dir": S}, ["run_id"]),
+    tool("file", "Reads one file in a run's workspace (requirements, design, review, CI report, the flow snapshot "
+                 ".myorch/flow.yaml, ...), paged.",
          {"run_id": S, "path": S, "offset": I, "limit": I}, ["run_id", "path"]),
-    tool("changes", "运行的改动（相对 base 的 diff）和 review 材料。base 默认取项目的 base 分支。", {"run_id": S, "base": S}, ["run_id"]),
-    tool("flows", "能发起的流程：角色、适用的项目、输入项。"),
-    tool("start", "发起一个流程。message 是请求原文（写清楚现象、证据、要改什么、对应哪个 incident）。inputs 是流程的输入，"
-                  "例如 {\"incident\": \"<run id>\"} 或 {\"from_run\": \"<run id>\"}。发起的运行会被这个会话关注。"
-                  "labels：额外的标签（例如 [\"MD-18700\"]）；工单输入和输入里的工单号会自动成为标签。",
+    tool("changes", "A run's changes (the diff against base) and review material. base defaults to the project's "
+                    "base branch.", {"run_id": S, "base": S}, ["run_id"]),
+    tool("flows", "The flows you can start: role, the projects they apply to, inputs."),
+    tool("start", "Starts a flow. message is the original request, in English (state the symptom, the evidence, "
+                  "what to change, and which incident it answers). inputs are the flow's inputs, "
+                  "e.g. {\"incident\": \"<run id>\"} or {\"from_run\": \"<run id>\"}. This session follows the run it starts. "
+                  "labels: extra labels (e.g. [\"MD-18700\"]). Ticket inputs and ticket numbers in the inputs become "
+                  "labels automatically.",
          {"flow": S, "project": S, "message": S, "inputs": {"type": "object"}, "labels": {"type": "array", "items": S}},
          ["flow", "message"]),
-    tool("reply", "回答一个在等回答的步骤。", {"run_id": S, "step": S, "text": S}, ["run_id", "step", "text"]),
-    tool("resume", "从失败的步骤继续一个失败或取消的运行。steps 为空时继续所有失败的步骤。",
+    tool("reply", "Answers a step that is waiting for an answer.", {"run_id": S, "step": S, "text": S}, ["run_id", "step", "text"]),
+    tool("resume", "Continues a failed or cancelled run from its failed steps. With no steps, every failed step "
+                  "continues.",
          {"run_id": S, "steps": {"type": "array", "items": S}}, ["run_id"]),
-    tool("follow", "关注一个运行：它的事件推送到这个会话。", {"run_id": S}, ["run_id"]),
-    tool("unfollow", "不再关注一个运行。", {"run_id": S}, ["run_id"]),
-    tool("subscription", "这个会话订阅了什么：身份、范围、项目、关注的运行、推送的事件类型。"),
+    tool("follow", "Follows a run: its events are pushed to this session.", {"run_id": S}, ["run_id"]),
+    tool("unfollow", "Stops following a run.", {"run_id": S}, ["run_id"]),
+    tool("subscription", "What this session subscribes to: identity, scope, projects, followed runs, pushed event kinds."),
 ]
 
 
@@ -325,7 +333,7 @@ class ChannelServer:
                     text = await self.call(p.get("name", ""), p.get("arguments") or {})
                     result = {"content": [{"type": "text", "text": text}]}
                 except Exception as ex:  # a failed call is a tool error, not a protocol error
-                    result = {"content": [{"type": "text", "text": f"错误：{ex}"}], "isError": True}
+                    result = {"content": [{"type": "text", "text": f"Error: {ex}"}], "isError": True}
             elif method == "ping":
                 result = {}
             else:
@@ -444,20 +452,20 @@ class ChannelServer:
                                                    "inputs": a.get("inputs") or {}, "message": a["message"],
                                                    **({"labels": list(a["labels"])} if a.get("labels") else {})})
             self.sub.followed.add(res["run_id"])
-            return f"已发起 {res['run_id']}，这个会话会收到它的事件。"
+            return f"Started {res['run_id']}. This session will receive its events."
         if name == "reply":
             await api.post(f"/channel/runs/{a['run_id']}/reply", {"step": a["step"], "text": a["text"]})
-            return "已回复。"
+            return "Replied."
         if name == "resume":
             res = await api.post(f"/channel/runs/{a['run_id']}/resume", {"steps": a.get("steps") or []})
             self.sub.followed.add(a["run_id"])
             return dump(res)
         if name == "follow":
             self.sub.followed.add(a["run_id"])
-            return f"关注 {a['run_id']}。"
+            return f"Following {a['run_id']}."
         if name == "unfollow":
             self.sub.followed.discard(a["run_id"])
-            return f"不再关注 {a['run_id']}。"
+            return f"No longer following {a['run_id']}."
         if name == "subscription":
             return dump(self.sub.describe())
         raise ValueError(f"unknown tool {name}")
@@ -473,10 +481,10 @@ class ChannelServer:
         res = await self.api.get(f"/channel/runs/{rid}/file", path=path)
         text = (res or {}).get("text")
         if text is None:
-            raise ValueError(f"{path} 不存在")
+            raise ValueError(f"{path} does not exist")
         part = text[offset: offset + limit]
         end = offset + len(part)
-        tail = f"\n\n[{path}：第 {offset}–{end} 个字符，共 {len(text)} 个" + (f"，下一页 offset={end}]" if end < len(text) else "，已到结尾]")
+        tail = f"\n\n[{path}: characters {offset}–{end} of {len(text)}" + (f", next page offset={end}]" if end < len(text) else ", end of file]")
         return part + tail
 
     async def _log(self, a: dict[str, Any]) -> str:
@@ -492,7 +500,7 @@ class ChannelServer:
                      and (not a.get("turn") or o[1] == int(a["turn"]))
                      and (not a.get("attempt") or o[0] == int(a["attempt"]))]
         if not cands:
-            raise ValueError(f"{logs_dir} 里没有 {prefix}* 日志。现有：{', '.join(names) or '无'}")
+            raise ValueError(f"No {prefix}* log in {logs_dir}. Present: {', '.join(names) or 'none'}")
         name = max(cands, key=key)
         return await self._page(rid, f"{logs_dir}/{name}", int(a.get("offset") or 0), int(a.get("limit") or PAGE))
 

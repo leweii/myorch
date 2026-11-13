@@ -195,7 +195,7 @@ class Service:
 
     async def _engine_view(self, run_id: str) -> dict[str, Any] | None:
         """The engine's state of a run started before the event-detail patch. Remove once those runs
-        are gone (docs/notes/2026-11-02-channel-layer.md, 迁移)."""
+        are gone (docs/notes/2026-11-02-channel-layer.md, Migration)."""
         from myorch.engines.temporal import client as tc
 
         try:
@@ -213,7 +213,7 @@ class Service:
                 out.append({"step": inst.id, "kind": "question", "text": inst.question.question, "options": inst.question.options})
             elif inst.status == "waiting_approval":
                 missing = st.approval_missing(inst.id, set(inst.approvals))
-                out.append({"step": inst.id, "kind": "approval", "text": missing or f"需要 {inst.approvals_needed} 人批准",
+                out.append({"step": inst.id, "kind": "approval", "text": missing or f"{inst.approvals_needed} approval(s) needed",
                             "approvals": inst.approvals})
         for lp in st.loops.values():
             if lp.status == "waiting_input" and lp.question:
@@ -292,7 +292,7 @@ class Service:
         return rows
 
     async def knowledge_all(self) -> list[dict[str, Any]]:
-        """Every registered source, shared and per project, for the 流程 sheet. A project-level row
+        """Every registered source, shared and per project, for the Flows sheet. A project-level row
         carries `project` (where it is registered, so it can be edited there)."""
         from myorch import knowledge as kb
         from myorch import project as projects
@@ -373,17 +373,17 @@ class Service:
     async def read_file(self, run_id: str, path: str) -> str | None:
         text = await self.relay.read_file(run_id, _safe_rel(path))
         if text is not None and len(text) > MAX_FILE_CHARS:
-            text = text[:MAX_FILE_CHARS] + f"\n\n[已截断：文件超过 {MAX_FILE_CHARS} 个字符]"
+            text = text[:MAX_FILE_CHARS] + f"\n\n[truncated: the file has more than {MAX_FILE_CHARS} characters]"
         return text
 
     async def read_image(self, run_id: str, path: str) -> tuple[bytes, str] | None:
         """An image file of the run as (bytes, media type); None when there is no such file."""
         kind = image_type(path)
         if not kind:
-            raise ValueError(f"只能预览图片（{'、'.join(IMAGE_TYPES)}）：{path}")
+            raise ValueError(f"Only images can be previewed ({', '.join(IMAGE_TYPES)}): {path}")
         data = await self.relay.read_bytes(run_id, _safe_rel(path), MAX_IMAGE_BYTES)
         if data is not None and len(data) > MAX_IMAGE_BYTES:
-            raise ValueError(f"图片超过 {MAX_IMAGE_BYTES // 1_000_000} MB，不能预览：{path}")
+            raise ValueError(f"The image is larger than {MAX_IMAGE_BYTES // 1_000_000} MB and cannot be previewed: {path}")
         return None if data is None else (data, kind)
 
     async def list_files(self, run_id: str, sub: str = "docs", depth: int = 4) -> list[str]:
@@ -540,7 +540,7 @@ class Service:
         """Continue a failed or cancelled run from its failed steps (relay.resume)."""
         reset = await self.relay.resume(check_run_id(run_id), steps, via=VIA, account=self.user)
         self._runs = (0.0, [])
-        self.log(run_id, {"kind": "resume", "steps": steps or [], "text": "、".join(reset)})
+        self.log(run_id, {"kind": "resume", "steps": steps or [], "text": ", ".join(reset)})
         return reset
 
     async def cancel(self, run_id: str) -> None:
@@ -610,7 +610,9 @@ class Service:
         else:
             text = await self.request_text(run_id)
             if text:  # started elsewhere (CLI, a channel) with the original request saved
-                text = text.split("\n\n", 2)[-1] if text.startswith("# 原始请求") else text
+                # relay.request_file writes "# <heading>\n\n<preamble>\n\n<message>": keep the message only.
+                # Matched on the "# " heading, not its words, so files written in either language work.
+                text = text.split("\n\n", 2)[-1] if text.startswith("# ") else text
             items.append({"kind": "request", "by": m.get("initiator"), "at": m.get("requested_at"),
                           "text": text or "\n".join(f"{k}: {v}" for k, v in (detail.get("inputs") or {}).items() if v)})
 

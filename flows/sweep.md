@@ -1,92 +1,92 @@
 # sweep
 
-找项目现有代码里的 bug。所有项目共用这一个流程。每次按固定顺序看一批文件，几个审查员并行看，核实后写一份日报。适合每晚定时跑，一轮一轮把整个仓库扫完。
+Finds bugs in a project's existing code. All projects share this one flow. Each run looks at a batch of files in a fixed order, with several auditors in parallel, verifies the findings and writes a daily report. It suits nightly schedules that work through the whole repository batch by batch.
 
-它是观察模式：只写日报 `docs/sweep/report.md`，不改代码，不推送，不启动 development，也不改知识库。发现的问题要修，由人另起 [development](development.md)。和 [review](review.md) 的区别：review 看一个 PR 的改动，sweep 看已经在主分支上的代码。
+It is observe-only: it writes only the daily report `docs/sweep/report.md`. It does not change code, does not push, does not start development and does not change the knowledge. To fix a problem it found, a person starts a separate [development](development.md) run. The difference from [review](review.md): review looks at a PR's change; sweep looks at code already on the main branch.
 
 ```sh
-uv run myorch run flows/sweep.yaml --project mdm                     # 跑一次，审查强度默认 standard
+uv run myorch run flows/sweep.yaml --project mdm                     # run once, audit depth defaults to standard
 uv run myorch run flows/sweep.yaml --project mdm -i depth=deep
-uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '0 2 * * *'   # 每晚 2 点
+uv run myorch schedule add nightly-sweep-mdm --flow sweep --project mdm --cron '0 2 * * *'   # every night at 2:00
 ```
 
-控制台：先选项目，任务选「找 bug」，选审查强度。第一条消息不用写。
+Console: choose the project first, then the task **Find bugs**, and choose the audit depth. The first message is not needed.
 
 <!-- flow-graph -->
 
-## 看哪些文件
+## Which files it looks at
 
-由项目包 `project.yaml` 的 `sweep:` 决定（见 [7. 项目包](../docs/07-projects.md)）：
+Decided by `sweep:` in the project pack's `project.yaml` (see [7. Project packs](../docs/07-projects.md)):
 
-| 字段 | 含义 | 不写时 |
+| Field | Meaning | When not set |
 |---|---|---|
-| `paths` | 只看这些目录或文件 | 整个仓库 |
-| `include` | 只看匹配这些 glob 的文件（可以用 `**`） | 不筛选 |
-| `exclude` | 不看匹配这些 glob 的文件 | 不排除 |
-| `chunk` | 每次看几个文件（1 到 200） | 20 |
+| `paths` | Look only at these directories or files | The whole repository |
+| `include` | Look only at files matching these globs (`**` allowed) | No filter |
+| `exclude` | Skip files matching these globs | Nothing excluded |
+| `chunk` | How many files per run (1 to 200) | 20 |
 
-- 文件列表来自 `git ls-files`，按路径排序。
-- mdm 和 blog 现在没有写 `sweep:`，所以看整个仓库，每次 20 个文件。myorch 只看 `src/myorch`、`flows`、`tools`、`deploy`（不看 `src/myorch/ui/static/vendor/**`），每次 15 个。
-- sweep 读的是项目包快照里的配置。改了 `project.yaml` 以后要 `uv run myorch project sync <项目>`。
-- 配置一个文件都没选中时，`pick` 失败。
+- The file list comes from `git ls-files`, sorted by path.
+- mdm and blog currently have no `sweep:`, so they look at the whole repository, 20 files per run. myorch looks only at `src/myorch`, `flows`, `tools` and `deploy` (not `src/myorch/ui/static/vendor/**`), 15 files per run.
+- sweep reads the configuration from the project pack snapshot. After changing `project.yaml`, run `uv run myorch project sync <project>`.
+- When the configuration selects no files at all, `pick` fails.
 
-## 每一步做什么
+## What each step does
 
-| 步骤 | 做什么 | 产物 |
+| Step | What it does | Artifacts |
 |---|---|---|
-| `sync` | 克隆或更新仓库，切到最新的 base 分支（[`lib/sync-base.yaml`](lib/sync-base.yaml)，用项目共享的 bare mirror 加速） | `repo/` |
-| `pick` | 按游标取下一批文件，把已知问题复制一份进工作区。游标在这里不动 | `docs/sweep/chunk.txt`、`docs/sweep/known.json` |
-| `audit` | 几个审查员各自读这批文件，找现在就存在的缺陷。只读，不改代码 | `docs/sweep/audit-<编号>.json` |
-| `verify` | 逐条打开代码核实，去掉误报和已知问题，合并重复的，写日报 | `docs/sweep/verified.json`、`docs/sweep/report.md` |
-| `record` | 把新问题记进 `known.json`，游标前移 | 共享目录里的 `cursor.json`、`known.json` |
+| `sync` | Clones or updates the repository and checks out the latest base branch ([`lib/sync-base.yaml`](lib/sync-base.yaml), sped up by the project's shared bare mirror) | `repo/` |
+| `pick` | Takes the next batch of files at the cursor and copies the known issues into the workspace. The cursor does not move here | `docs/sweep/chunk.txt`, `docs/sweep/known.json` |
+| `audit` | Each auditor reads the batch on its own and looks for defects that exist now. Read-only; does not change code | `docs/sweep/audit-<n>.json` |
+| `verify` | Checks each finding by opening the code, removes false positives and known issues, merges duplicates, writes the daily report | `docs/sweep/verified.json`, `docs/sweep/report.md` |
+| `record` | Records the new issues in `known.json` and moves the cursor forward | `cursor.json`, `known.json` in the shared directory |
 
-### audit：找什么
+### audit: what it looks for
 
-- 正确性（逻辑错误、漏掉的边界情况、没处理的错误、和文档或注释不一致）、安全（注入、泄露的密钥、不安全的默认值、缺少的权限检查）、用户会看到的错误（坏链接、错误的数据或显示）。
-- 每个审查员有自己的重点：1 号多看正确性和边界情况，2 号多看安全和错误处理，3 号多看文档和数据是否一致。
-- 不报：代码风格、命名、能写得更好但没错的地方、缺少测试；已知问题；这批文件以外的代码（只用来理解上下文）。
-- 严重程度只有两级：`Important`（错误行为、数据错误、安全问题，值得安排人修）和 `Nit`（确实是问题，但影响小）。没把握的不报。
-- 有 `guide/review-guide.md` 时按它的标准看。
+- Correctness (logic errors, missed edge cases, unhandled errors, mismatches with docs or comments), security (injection, leaked secrets, unsafe defaults, missing permission checks), errors users see (broken links, wrong data or display).
+- Each auditor has its own focus: auditor 1 looks more at correctness and edge cases, auditor 2 at security and error handling, auditor 3 at whether docs and data agree.
+- Not reported: code style, naming, things that could be written better but are not wrong, missing tests; known issues; code outside this batch of files (used only to understand context).
+- There are only two severities: `Important` (wrong behaviour, wrong data, security problems; worth having someone fix) and `Nit` (really a problem, but with small impact). Findings it is not sure about are not reported.
+- When there is a `guide/review-guide.md`, it follows its standards.
 
-### verify：核实
+### verify: verification
 
-- 每条都打开代码亲自核实，不成立的去掉。
-- 几个审查员报的同一个问题合并成一条，`votes` 是报告它的人数。只有一个人报、核实成立的也保留。
-- 和 `known.json` 里是同一个问题的去掉。
-- 日报：没有新问题时只有一句「这批文件没有发现新问题。」，后面附看了哪些目录。有新问题时，第一句写 Important 和 Nit 各几条，再按严重程度列出每条的位置、问题、后果、建议怎么修。不写过程，不写客套话。
+- Each finding is checked by opening the code; findings that do not hold are removed.
+- The same issue reported by several auditors is merged into one, and `votes` is the number of auditors who reported it. Findings reported by only one auditor are kept if they hold.
+- Findings that are the same issue as one in `known.json` are removed.
+- The daily report: with no new problems, it has only the sentence "No new problems found in this batch of files.", followed by the directories that were looked at. With new problems, the first sentence gives the number of Important and Nit findings, then lists each one by severity with its location, the problem, the consequence and a suggested fix. No process notes, no pleasantries.
 
-## 跨运行的状态
+## State across runs
 
-跨运行的状态放在项目共享目录 `shared/<项目>/sweep/`（myorch 存储的 volume 上）。只有 `pick` 和 `record` 挂载它。
+State across runs lives in the project's shared directory `shared/<project>/sweep/` (on the myorch storage volume). Only `pick` and `record` mount it.
 
-| 文件 | 内容 | 谁写 |
+| File | Content | Written by |
 |---|---|---|
-| `cursor.json` | `{"next": 下一批从第几个文件开始, "total": 文件总数, "run": 写它的运行}` | `record` |
-| `known.json` | 报告过的问题列表：`fingerprint`、`file`、`line`、`title`、`severity`、`run`、`at`（日期） | `record` 追加 |
+| `cursor.json` | `{"next": index of the file the next batch starts at, "total": total number of files, "run": the run that wrote it}` | `record` |
+| `known.json` | List of reported issues: `fingerprint`, `file`, `line`, `title`, `severity`, `run`, `at` (date) | `record` appends |
 
-- **整个运行成功后游标才前移。** `record` 是最后一步，前面任何一步失败，它都不执行，下次重扫同一批。
-- 扫到最后一个文件后从头开始，所以能一直定时跑下去。
-- 游标是排序后列表里的位置，不是文件名。文件增删后，下一批的起点会跟着错开几个文件：可能漏看或重看几个，下一轮会补上。
-- 已知问题去两次重：verify 按意思判断是不是同一个问题，`record` 再按 `文件|标题` 的指纹去掉完全相同的。
-- `known.json` 只增不减。想从头扫，删掉 `cursor.json`；想让某个问题再被报告，从 `known.json` 里删掉那一项。每个运行的工作区里也有一份当时的副本 `docs/sweep/known.json`。
+- **The cursor moves forward only after the whole run succeeds.** `record` is the last step. If any earlier step fails, it does not run, and the next run scans the same batch again.
+- After the last file it starts over from the beginning, so it can keep running on a schedule.
+- The cursor is a position in the sorted list, not a file name. When files are added or deleted, the start of the next batch shifts by a few files: a few may be skipped or looked at twice, and the next pass makes up for it.
+- Known issues are deduplicated twice: verify decides by meaning whether two are the same issue, and `record` then removes exact duplicates by the `file|title` fingerprint.
+- `known.json` only grows. To scan from the beginning, delete `cursor.json`. To have an issue reported again, delete its entry from `known.json`. Each run's workspace also has a copy from that time in `docs/sweep/known.json`.
 
-## 你介入的地方
+## Where you step in
 
-运行中不需要你。看日报：控制台打开运行，「文档」里的 `docs/sweep/report.md`；或者 `uv run myorch ws <run> docs/sweep/report.md`。值得修的问题，另起 development。
+You are not needed while it runs. To read the daily report: open the run in the console and find `docs/sweep/report.md` under its **Docs** tab; or `uv run myorch ws <run> docs/sweep/report.md`. For issues worth fixing, start a separate development run.
 
-## 定时跑
+## Scheduled runs
 
-- `--flow` 要写流程名 `sweep`。需要别的审查强度时加 `-i depth=quick` 或 `-i depth=deep`。
-- 上一次定时发起的运行还在跑时，这一次跳过，所以两次运行不会同时动游标。不要加 `--allow-overlap`：两个运行会扫同一批文件，`known.json` 也可能被后结束的那个覆盖。
-- 运行的发起人是建定时任务的人。`uv run myorch schedule list` 看下次什么时候跑，`pause`、`unpause`、`delete` 管理，`trigger` 立即跑一次。
+- `--flow` takes the flow name `sweep`. For a different audit depth, add `-i depth=quick` or `-i depth=deep`.
+- When the run started by the previous schedule is still running, this one is skipped, so two runs never move the cursor at the same time. Do not add `--allow-overlap`: two runs would scan the same batch, and the one that ends later could overwrite `known.json`.
+- The run's starter is the person who created the schedule. `uv run myorch schedule list` shows when it runs next; `pause`, `unpause` and `delete` manage it; `trigger` runs it once right away.
 
-## 产物
+## Artifacts
 
 ```
 docs/sweep/
-  chunk.txt          这次看的文件，每行一个
-  known.json         开始时的已知问题副本
-  audit-<编号>.json   每个审查员的发现
-  verified.json      核实后的新问题
-  report.md          日报
+  chunk.txt          the files looked at this time, one per line
+  known.json         copy of the known issues at start
+  audit-<n>.json     each auditor's findings
+  verified.json      new issues after verification
+  report.md          daily report
 ```

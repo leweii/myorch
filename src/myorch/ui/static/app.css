@@ -630,7 +630,7 @@ table.findings th { font-weight: 600; font-size: 12px; color: var(--text-faint);
 .runsearch { flex: 1; min-width: 0; }
 .kuse .filelist { margin-top: 4px; }
 
-/* ---- eval cases in the 流程 dialog (flows.js caseView) ------------------------------------------ */
+/* ---- eval cases in the Flows dialog (flows.js caseView) ------------------------------------------ */
 .evlist { display: flex; flex-direction: column; gap: 6px; }
 .evf { display: grid; grid-template-columns: 18px 1fr; gap: 10px; align-items: start; padding: 9px 12px; border-radius: var(--r-md); background: var(--surface); box-shadow: var(--shadow-card); cursor: pointer; }
 .evf:hover { box-shadow: 0 0 0 1px var(--line-strong); }
@@ -665,7 +665,7 @@ body.has-max { overflow: hidden; }
 .diffbox.maxed > .dbody { flex: 1; min-height: 0; overflow: auto; padding: 4px 20px 24px; }
 .diffbox.maxed pre.diff { font-size: 12.5px; }
 
-/* knowledge registration form (流程 → 知识库) */
+/* knowledge registration form (Flows → Knowledge) */
 .kbform { display: grid; grid-template-columns: 1fr; gap: 10px; max-width: 640px; margin: 12px 0; }
 .kbform label { display: grid; grid-template-columns: 150px 1fr; align-items: center; gap: 10px; font-size: 13px; color: var(--text-faint); }
 .kbform label.check { grid-template-columns: auto 1fr; }
@@ -685,7 +685,7 @@ dialog:focus, dialog:focus-visible { outline: none; }
 a.vbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .md img { max-width: 100%; height: auto; }
 
-/* list items (the 流程定义 view) and scroll bars */
+/* list items (the Flow definitions view) and scroll bars */
 .list .item { padding: 6px 10px; border-radius: var(--r-md); cursor: pointer; }
 .list .item + .item { margin-top: 1px; }
 .list .item:hover { background: var(--hover); }

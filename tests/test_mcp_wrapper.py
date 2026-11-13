@@ -64,7 +64,7 @@ def test_unregistered_tools_are_denied_and_an_unreachable_server_is_denied_whole
     assert FakeMcp.auth[0] == "Basic " + base64.b64encode(b"me@x:ph-jira").decode()
     cfg = json.loads(Path(args[args.index("--mcp-config") + 1]).read_text())["mcpServers"]
     assert cfg["wiki"]["headers"]["Authorization"] == "Bearer ph-wiki"
-    assert "notThere" in r.stderr and "读不到工具列表" in r.stderr
+    assert "notThere" in r.stderr and "cannot read the tool list" in r.stderr
 
 
 def run_check(tmp_path, tools, *call, env=None):
@@ -82,16 +82,16 @@ def run_check(tmp_path, tools, *call, env=None):
 def test_check_reports_the_tools_and_makes_one_call(tmp_path):
     r = run_check(tmp_path, ["getJiraIssue", "searchJiraIssuesUsingJql"], "--call", "getJiraIssue", '{"issueIdOrKey": "MD-1"}')
     assert r.returncode == 0, r.stdout
-    assert "登记并且可用：getJiraIssue, searchJiraIssuesUsingJql" in r.stdout
-    assert "服务器有但没登记（运行时禁用）：createJiraIssue, editJiraIssue" in r.stdout
+    assert "registered and available: getJiraIssue, searchJiraIssuesUsingJql" in r.stdout
+    assert "on the server but not registered (disabled at run time): createJiraIssue, editJiraIssue" in r.stdout
     assert "MD-1: Sync to ERP" in r.stdout and r.stdout.strip().endswith("RESULT: ok")
 
 
 def test_check_fails_on_a_missing_tool_a_failed_call_or_no_token(tmp_path):
-    assert "登记了但服务器没有：notThere" in run_check(tmp_path, ["getJiraIssue", "notThere"]).stdout
+    assert "registered but not on the server: notThere" in run_check(tmp_path, ["getJiraIssue", "notThere"]).stdout
     r = run_check(tmp_path, ["getJiraIssue"], "--call", "getJiraIssue", '{"issueIdOrKey": "MD-2"}')
-    assert r.returncode == 1 and "调用 getJiraIssue 失败" in r.stdout
+    assert r.returncode == 1 and "call getJiraIssue failed" in r.stdout
     r = run_check(tmp_path, ["getJiraIssue"], "--call", "createJiraIssue", "{}")
-    assert r.returncode == 1 and "没有登记" in r.stdout  # only registered tools are ever called
+    assert r.returncode == 1 and "is not registered" in r.stdout  # only registered tools are ever called
     r = run_check(tmp_path, ["getJiraIssue"], env={"PATH": "/usr/bin:/bin"})
-    assert r.returncode == 1 and "没有 JIRA_TOKEN" in r.stdout
+    assert r.returncode == 1 and "no JIRA_TOKEN" in r.stdout

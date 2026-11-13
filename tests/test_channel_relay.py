@@ -21,7 +21,7 @@ steps:
 
 class FakeStore:
     def __init__(self):
-        self.files = {"runs/r1/docs/requirements.md": "# 需求"}
+        self.files = {"runs/r1/docs/requirements.md": "# Requirements"}
 
     def read_file(self, rel):
         return self.files.get(rel)
@@ -79,10 +79,10 @@ def test_person_comes_from_identities(relay):
 
 async def test_commands_are_forwarded_with_the_person(relay, calls):
     await relay.approve("r1", "human-review", via="github", account="leweii")
-    await relay.request_changes("r1", "human-review", "改一下", via="web", account="jakobhe")
+    await relay.request_changes("r1", "human-review", "Change this", via="web", account="jakobhe")
     await relay.reply("r1", "a", "B", via="web", account="jakobhe")
     assert calls[0] == ("approve", ("r1", "human-review", "jakobhe"), {})
-    assert calls[1] == ("request_changes", ("r1", "human-review", "jakobhe", "改一下"), {})
+    assert calls[1] == ("request_changes", ("r1", "human-review", "jakobhe", "Change this"), {})
     with pytest.raises(ValueError):
         await relay.reply("r1", "a", "  ", via="web", account="jakobhe")
     with pytest.raises(ValueError):
@@ -90,11 +90,11 @@ async def test_commands_are_forwarded_with_the_person(relay, calls):
 
 
 async def test_start_saves_the_request_and_fills_task(relay, calls):
-    rid = await relay.start("ask", None, {}, "加一个按钮\n细节在这里", via="web", account="jakobhe")
+    rid = await relay.start("ask", None, {}, "Add a button\nDetails here", via="web", account="jakobhe")
     assert rid == "ask-1"
     name, args, kw = calls[0]
-    assert name == "start_run" and args[1] == {"task": "加一个按钮"} and args[2] == "jakobhe"
-    assert "细节在这里" in kw["files"]["docs/external/request.md"] and kw["source"] == "web"
+    assert name == "start_run" and args[1] == {"task": "Add a button"} and args[2] == "jakobhe"
+    assert "Details here" in kw["files"]["docs/external/request.md"] and kw["source"] == "web"
     with pytest.raises(ValueError):
         await relay.start("../x", None, {}, "", via="web", account="jakobhe")
 
@@ -121,6 +121,7 @@ async def test_runs_carry_labels_and_a_search_looks_past_the_limit(relay, calls,
     log = relay.events_log
     # An old development run: run_started has inputs but no labels (before labels existed).
     log.append("dev-1f29e33a", [("started", "run_started", "", {"flow": "dev", "inputs": {"ticket": "18700"}}),
+                                ("pr:42", "pr_opened", "", {"url": "https://github.com/o/r/pull/42", "repo": "o/r", "number": 42}),
                                 ("finished", "run_finished", "", {"status": "succeeded"})])
     # A helper run started from the CLI names it by id; another lists tickets in a string.
     log.append("eval-hidden-tests-aa", [("started", "run_started", "", {
@@ -137,6 +138,7 @@ async def test_runs_carry_labels_and_a_search_looks_past_the_limit(relay, calls,
     monkeypatch.setattr(relay_mod.tc, "list_runs", list_runs)
     rows = {r["run_id"]: r for r in await relay.runs(limit=10)}
     assert rows["dev-1f29e33a"]["status"] == "COMPLETED"  # gone from Temporal: listed from the event log
+    assert rows["dev-1f29e33a"]["pr_url"] == "https://github.com/o/r/pull/42" and "pr_url" not in rows["r1"]
     assert [r["run_id"] for r in await relay.runs(limit=3)] == ["eval-fetch-tickets-bb", "eval-hidden-tests-aa", "r1"]
     assert rows["eval-hidden-tests-aa"]["labels"] == ["MD-18700"]  # inherited from the run it names
     assert rows["eval-fetch-tickets-bb"]["labels"] == ["batch2", "MD-1", "MD-18700"]  # md-2: not upper case
@@ -156,7 +158,7 @@ async def test_start_adds_the_labels_of_the_run_it_continues(relay, calls, tmp_p
     (tmp_path / "flows" / "dev.yaml").write_text(TICKET_FLOW)
     relay.events_log.append("dev-1f29e33a", [("started", "run_started", "", {"flow": "dev", "inputs": {"ticket": "18700"}})])
     relay.events_log.append("dev-1f29e33a", [("finished", "run_finished", "", {"status": "succeeded"})])
-    await relay.start("ask", None, {"from": "dev-1f29e33a"}, "看一下", via="claude-code", account="jakobhe",
+    await relay.start("ask", None, {"from": "dev-1f29e33a"}, "Take a look", via="claude-code", account="jakobhe",
                       labels=["eval"])
     assert calls[0][2]["labels"] == ["eval", "MD-18700"]
 
@@ -171,7 +173,7 @@ async def test_follow_continues_after_the_last_seq(relay):
 
 
 async def test_content_is_read_from_the_workspace(relay):
-    assert await relay.read_file("r1", "docs/requirements.md") == "# 需求"
+    assert await relay.read_file("r1", "docs/requirements.md") == "# Requirements"
     assert await relay.list_files("r1") == ["requirements.md"]
     with pytest.raises(ValueError):
         await relay.read_file("r1", "../../etc/passwd")
@@ -232,5 +234,5 @@ async def test_http_guards_and_routes(relay, calls):
     assert (await call(app, "POST", "/runs/r1/nope", body={}, headers=ui))["status"] == 404
     assert [e["key"] for e in (await call(app, "GET", "/events.json"))["json"]] == ["started", "ask:a:1"]
     f = await call(app, "GET", "/runs/r1/file", query="path=docs/requirements.md")
-    assert f["json"]["text"] == "# 需求"
+    assert f["json"]["text"] == "# Requirements"
     assert (await call(app, "GET", "/runs/r1/changes"))["status"] == 400  # base is required

@@ -152,7 +152,7 @@ def create_channel_app(relay: Relay, port: int, user: str | None = None):
         except ValueError as e:
             return err(str(e))
         if via != "web" and cmd in HUMAN_ONLY:
-            return err(f"{cmd} 只能由人在控制台或 Slack 里做，{via} 不行", 403)
+            return err(f"Only a person can do {cmd}, in the console or in Slack; {via} cannot", 403)
         who = {"via": via, "account": account}
         try:
             if cmd == "reply":
@@ -187,7 +187,7 @@ def create_channel_app(relay: Relay, port: int, user: str | None = None):
         except (ValueError, RuntimeError) as e:
             return err(str(e))
         if text is None:
-            return err(f"没有这个文件：{path}。", 404)
+            return err(f"No such file: {path}.", 404)
         return JSONResponse({"path": path, "text": text})
 
     async def step(req: Request) -> Response:

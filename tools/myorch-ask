@@ -20,7 +20,7 @@ args = p.parse_args()
 
 if os.environ.get("MYORCH_INTERACTION") != "allowed":
     # /sandbox/bin is mounted in every step (for myorch-checks); only some steps may ask.
-    sys.exit("myorch-ask: 这一步不能向用户提问。按步骤说明自己决定，或者停止并写明原因。")
+    sys.exit("myorch-ask: this step may not ask the user. Decide yourself as the step instructions say, or stop and write down why.")
 if not args.question.strip():
     sys.exit("myorch-ask: question must not be empty")
 
@@ -29,4 +29,4 @@ os.makedirs(os.path.dirname(path), exist_ok=True)
 with open(path, "w", encoding="utf-8") as f:
     json.dump({"question": args.question.strip(), "options": args.option}, f, ensure_ascii=False)
 
-print("问题已提交给用户。请立即结束本轮，不要继续执行；用户的回复会在下一轮发给你。")
+print("The question has been sent to the user. End this turn now and do not continue; the user's reply arrives as your next turn.")

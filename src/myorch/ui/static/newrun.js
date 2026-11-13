@@ -1,7 +1,7 @@
 // The new-run form, a tab of its own. Nothing here knows a flow, a role or an input by name: the project
 // decides the tasks (/api/flows: the project's flows, with label, hint and order from core/inputs.py),
 // the task decides the fields (its input specs), and the specs decide how a field looks, what is
-// required, what folds under 更多选项 (`more`) and how "continue on this branch" works.
+// required, what folds under More options (`more`) and how "continue on this branch" works.
 // Uses el/api/$/S/openTab/closeTab from app.js.
 //
 // State is NR, not the DOM. Every change sends a "newrun:change" event (detail: NR) that the
@@ -10,7 +10,7 @@
 
 const NR = { project: "", flow: "", values: {}, continued: null };  // continued: the run a continue started from
 
-const RUN_STATUS = { COMPLETED: "完成", FAILED: "失败", CANCELED: "已取消", TERMINATED: "已终止", TIMED_OUT: "超时" };
+const RUN_STATUS = { COMPLETED: "completed", FAILED: "failed", CANCELED: "cancelled", TERMINATED: "terminated", TIMED_OUT: "timed out" };
 
 function inputSpec(v) { return typeof v === "string" ? { type: "string" } : (v || { type: "string" }); }
 // The flow's inputs as the chosen project sees them (the server resolves them: some inputs apply to
@@ -47,7 +47,7 @@ const FIELD_TYPES = {
     initial: (spec) => spec.options?.[0]?.value ?? spec.options?.[0] ?? "",
   },
   run: {
-    render: (name, spec, ctx) => el("select", { name }, el("option", { value: "", text: spec.empty || "（不选）" }),
+    render: (name, spec, ctx) => el("select", { name }, el("option", { value: "", text: spec.empty || "(none)" }),
       ...runChoices(ctx.project, spec.role || ctx.flow.role).map((r) => el("option", { value: r.run_id,
         text: fillTemplate(spec.option || "{run_id} · {status}", runFields(r)) }))),
   },
@@ -108,7 +108,7 @@ function renderStartInputs() {
   const want = NR.flow || localStorage.getItem(`myorch.task.${project}`);
   const f = flows.find((x) => x.flow === want) || flows.find((x) => x.default) || flows[0];
   if (!f) {
-    $("#sfTasks").replaceChildren(el("div", { class: "warn small", text: `项目 ${project} 没有可以用的流程。` }));
+    $("#sfTasks").replaceChildren(el("div", { class: "warn small", text: `Project ${project} has no flows to use.` }));
     $("#sfInputs").replaceChildren(); $("#sfMoreInputs").replaceChildren(); $("#sfMore").hidden = true; $("#sfFlowDesc").textContent = ""; NR.flow = ""; changed(); return;
   }
   NR.flow = f.flow;
@@ -129,7 +129,7 @@ function renderStartInputs() {
     const must = !!spec.required || projectRequired.has(name);
     if (must) field.required = true;
     (spec.more && !must ? more : fields).push(el("label", { class: `field f-${spec.type}` },
-      el("span", { class: "fl" }, el("span", { text: spec.label || name }), must ? el("span", { class: "req", text: "必填" }) : null),
+      el("span", { class: "fl" }, el("span", { text: spec.label || name }), must ? el("span", { class: "req", text: "required" }) : null),
       type.wrap ? type.wrap(field, spec) : field));
   }
   $("#sfInputs").replaceChildren(...fields);
@@ -137,8 +137,8 @@ function renderStartInputs() {
   $("#sfMore").hidden = !more.length;
   if (more.some((l) => l.querySelector("[name]")?.value)) $("#sfMore").open = true;  // a value set there stays in sight
   const msg = messageSpec(f);
-  $("#nrMsgLabel").textContent = `${msg?.label || "补充说明"}${msg?.required ? "（必填）" : "（可选）"}`;
-  $("#nrMessage").placeholder = NR.continued?.hint || msg?.hint || "要改什么，越具体越好。";
+  $("#nrMsgLabel").textContent = `${msg?.label || "Details"}${msg?.required ? " (required)" : " (optional)"}`;
+  $("#nrMessage").placeholder = NR.continued?.hint || msg?.hint || "What to change. The more specific, the better.";
   changed();
 }
 
@@ -156,11 +156,11 @@ function formProblem(f, text) {
   const values = formValues(), specs = Object.fromEntries(specsOf(f));
   const label = (n) => specs[n]?.label || n;
   const missing = Object.keys(values).filter((n) => (specs[n].required || projectRequired.has(n)) && !String(values[n]).trim());
-  if (missing.length) return `请先填：${missing.map(label).join("、")}`;
+  if (missing.length) return `Fill in first: ${missing.map(label).join(", ")}`;
   const msg = messageSpec(f);
-  if (msg?.required && !text.trim()) return `请写${msg.label || "补充说明"}。`;
+  if (msg?.required && !text.trim()) return `Write the ${msg.label || "details"}.`;
   for (const group of f.require_one_of || []) {
-    if (!group.some((n) => String(values[n] ?? "").trim())) return `${group.map(label).join(" 或 ")}，至少填一项。`;
+    if (!group.some((n) => String(values[n] ?? "").trim())) return `Fill in at least one of: ${group.map(label).join(" or ")}`;
   }
   return "";
 }
@@ -182,7 +182,7 @@ async function startRun() {
     closeTab("new");
     openTab({ kind: "run", run: r.run_id });
     loadRuns();
-  } catch (e) { $("#nrError").textContent = `没有启动：${e.message}`; }
+  } catch (e) { $("#nrError").textContent = `Not started: ${e.message}`; }
   $("#nrStart").disabled = false;
 }
 
@@ -201,7 +201,7 @@ function continuation(d) {
   return null;
 }
 function canContinue(d) { return !!continuation(d); }
-function continueLabel(d) { return continuation(d)?.spec.continue.label || "接着改"; }
+function continueLabel(d) { return continuation(d)?.spec.continue.label || "Continue"; }
 function continueEnded(d) { return continuation(d)?.spec.continue.ended || ""; }
 
 async function continueRun() {

@@ -126,7 +126,7 @@ def test_the_project_pack_shapes_development():
     """One development flow: the pack's flows.development, jira and prompts decide its shape."""
     light = {**PROJECT, "flows": {"development": {"reviewers": 1, "max_rounds": 1, "security": False,
                                                    "on_exhausted": "accept"}},
-             "prompts": {"develop": "## 博客\n这是一个个人博客。", "review": "## 博客还要看\n- 链接"}}
+             "prompts": {"develop": "## Blog\nThis is a personal blog.", "review": "## Also check for the blog\n- links"}}
     f = load_flow(read_flow_file(REPO / "flows" / "development.yaml", {"task": "x"}, light))
     assert [i.id for i in f.steps] == ["sync-master", "checkout-branch", "develop", "review-fix", "risk-rules",
                                        "classify-risk", "human-review", "deliver"]  # no Jira, no takeaway
@@ -134,8 +134,8 @@ def test_the_project_pack_shapes_development():
     assert next(i for i in f.steps if i.id == "risk-rules").needs == ["review-fix"]  # takes over takeaway-commit's
     lp = loop_of(f)
     assert lp.max_rounds == 1 and lp.on_exhausted == "accept" and lp.steps[1].fanout == 1
-    assert "security" not in [s.id for s in lp.steps] and "## 博客还要看\n- 链接" in lp.steps[1].prompt
-    assert "## 博客\n这是一个个人博客。" in next(i for i in f.steps if i.id == "develop").prompt
+    assert "security" not in [s.id for s in lp.steps] and "## Also check for the blog\n- links" in lp.steps[1].prompt
+    assert "## Blog\nThis is a personal blog." in next(i for i in f.steps if i.id == "develop").prompt
     assert f.inputs["ticket"] == {"type": "hidden"} and f.inputs["incident"] == {"type": "hidden"}
 
     full = {**PROJECT, "jira": {**PROJECT["jira"], "url": "https://j", "key": "MD"},
@@ -263,7 +263,7 @@ def test_e2e_acceptance_off_skips_the_agent_and_still_ends(tmp_path: Path):
     assert evaluate(accept.when, {}) is False
     ok = {"steps": {"e2e-smoke": {"outputs": {"passed": True}}, "e2e-accept": {"status": "skipped"}}}
     assert evaluate(e2e.until, ok) is True and evaluate(fix.when, ok) is False
-    bad = {"steps": {"e2e-smoke": {"outputs": {"passed": False, "failed": ["首页"], "environment": []}},
+    bad = {"steps": {"e2e-smoke": {"outputs": {"passed": False, "failed": ["home page"], "environment": []}},
                      "e2e-accept": {"status": "skipped"}}}
     assert evaluate(e2e.until, bad) is False and evaluate(fix.when, bad) is True
     # Only environment problems: the block ends without a fix (risk-rules asks a person instead).

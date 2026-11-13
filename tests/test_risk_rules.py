@@ -67,37 +67,37 @@ def run(tmp_path: Path, rules: dict, approvers: list[str], verified: list | None
 
 def test_changed_with_text_matches_added_or_removed_lines(tmp_path: Path):
     rules = {"default": 0, "rules": [
-        {"changed_with_text": {"paths": ["*.java"], "pattern": "@(Table|Column)\\b"}, "approvers": 2, "reason": "实体字段"},
-        {"changed_with_text": {"paths": ["*.sql"], "pattern": "(?i)\\bDROP\\b"}, "approvers": 1, "reason": "破坏性语句"}]}
+        {"changed_with_text": {"paths": ["*.java"], "pattern": "@(Table|Column)\\b"}, "approvers": 2, "reason": "entity fields"},
+        {"changed_with_text": {"paths": ["*.sql"], "pattern": "(?i)\\bDROP\\b"}, "approvers": 1, "reason": "destructive statement"}]}
     m = run(tmp_path, rules, approvers=[])
     assert m["outputs"]["approvers"] == 2 and m["outputs"]["available"] == 99
-    assert "实体字段：svc/Order.java" in m["summary"] and "破坏性语句：db/V2__drop.sql" in m["summary"]
+    assert "entity fields: svc/Order.java" in m["summary"] and "destructive statement: db/V2__drop.sql" in m["summary"]
 
 
 def test_open_findings_and_failed_checks_need_a_person(tmp_path: Path):
-    verified = [{"severity": "Important", "status": "open", "title": "空 id 没校验"},
-                {"severity": "Important", "status": "fixed", "title": "已修"},
-                {"severity": "Nit", "status": "new", "title": "命名"}]
+    verified = [{"severity": "Important", "status": "open", "title": "empty id not validated"},
+                {"severity": "Important", "status": "fixed", "title": "fixed already"},
+                {"severity": "Nit", "status": "new", "title": "naming"}]
     m = run(tmp_path, {"default": 0, "rules": []}, approvers=[], verified=verified, ci_passed=False)
     o = m["outputs"]
     assert o["approvers"] == 1 and o["open_findings"] == 1 and o["ci_passed"] is False
-    assert "1 条没解决的 Important 问题：空 id 没校验" in m["summary"] and "检查失败：gradle" in m["summary"]
+    assert "1 unresolved Important findings: empty id not validated" in m["summary"] and "checks failed: gradle" in m["summary"]
 
 
 def test_more_approvers_than_registered_people_are_capped(tmp_path: Path):
-    rules = {"default": 0, "rules": [{"paths": ["svc/*"], "approvers": 2, "reason": "服务"}]}
+    rules = {"default": 0, "rules": [{"paths": ["svc/*"], "approvers": 2, "reason": "service"}]}
     m = run(tmp_path, rules, approvers=["jakobhe"])
     assert m["outputs"]["approvers"] == 2 and m["outputs"]["available"] == 1
-    assert "规则要求 2 人，项目只登记了 1 个审批人，按 1 人审批" in m["summary"]
+    assert "the rules require 2 approvers, the project registers only 1; 1 will approve" in m["summary"]
 
 
 def test_e2e_failures_in_the_last_round_need_a_person(tmp_path: Path):
     ok = {"passed": True, "failed": []}
     m = run(tmp_path / "a", {"default": 0, "rules": []}, approvers=[], e2e={
-        "round-1/smoke": {"passed": False, "failed": ["旧失败"]}, "round-1/acceptance": ok,
-        "round-2/smoke": ok, "round-2/acceptance": {"passed": False, "failed": ["默认主题是 mono"]}})
+        "round-1/smoke": {"passed": False, "failed": ["old failure"]}, "round-1/acceptance": ok,
+        "round-2/smoke": ok, "round-2/acceptance": {"passed": False, "failed": ["default theme is mono"]}})
     assert m["outputs"]["approvers"] == 1 and m["outputs"]["e2e_passed"] is False
-    assert "端到端测试失败：默认主题是 mono" in m["summary"] and "旧失败" not in m["summary"]
+    assert "end-to-end tests failed: default theme is mono" in m["summary"] and "old failure" not in m["summary"]
     # Fixed in the last round, or no e2e block at all: no extra approver.
     m = run(tmp_path / "b", {"default": 0, "rules": []}, approvers=[], e2e={"round-1/smoke": ok, "round-1/acceptance": ok})
     assert m["outputs"]["approvers"] == 0 and m["outputs"]["e2e_passed"] is True
@@ -113,7 +113,7 @@ def test_commits_after_the_last_review_round_need_a_person(tmp_path: Path):
     m = run(tmp_path, NO_RULES, approvers=["a"], after_review=2)
     assert m["outputs"]["approvers"] == 1
     assert [c["subject"] for c in m["outputs"]["unreviewed_commits"]] == ["fix(e2e): case 0", "fix(e2e): case 1"]
-    assert "2 个提交没有经过 review" in m["summary"]
+    assert "2 commits were not reviewed" in m["summary"]
 
 
 def test_nothing_after_review_and_no_head_record_add_nothing(tmp_path: Path):
@@ -123,14 +123,14 @@ def test_nothing_after_review_and_no_head_record_add_nothing(tmp_path: Path):
 
 def test_e2e_environment_problems_are_not_code_failures(tmp_path: Path):
     m = run(tmp_path, NO_RULES, approvers=["a"],
-            e2e={"round-1/smoke": {"passed": False, "failed": [], "environment": ["Chromium 没有启动"]}})
+            e2e={"round-1/smoke": {"passed": False, "failed": [], "environment": ["Chromium did not start"]}})
     assert m["outputs"]["approvers"] == 1 and m["outputs"]["e2e_passed"] is False
-    assert "没有测成" in m["summary"] and "端到端测试失败" not in m["summary"]
+    assert "did not run" in m["summary"] and "end-to-end tests failed" not in m["summary"]
 
 
 def test_e2e_rebuttals_for_a_person_are_named(tmp_path: Path):
     m = run(tmp_path, NO_RULES, approvers=["a"],
-            e2e={"round-1/smoke": {"passed": False, "failed": ["首页列表"]}},
-            files={"docs/e2e/round-1/rebuttal.md": "- 首页列表：和改动无关：首页模板这次没有改。\n- 其他：用例写错了\n"})
+            e2e={"round-1/smoke": {"passed": False, "failed": ["home page list"]}},
+            files={"docs/e2e/round-1/rebuttal.md": "- home page list: Unrelated to the change: the template is unchanged.\n- other: the test case is wrong\n"})
     assert m["outputs"]["approvers"] == 1
-    assert "1 条要人判断的说明" in m["summary"] and "首页模板这次没有改" in m["summary"]
+    assert "1 notes for a person to judge" in m["summary"] and "the template is unchanged" in m["summary"]

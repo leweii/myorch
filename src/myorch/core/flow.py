@@ -287,7 +287,7 @@ class Flow(BaseModel):
 
     def check_project(self, project: str | None) -> None:
         if self.projects and project not in self.projects:
-            raise ValueError(f"流程 {self.flow} 只给项目 {', '.join(self.projects)} 用，不能用于 {project or '（没有项目）'}")
+            raise ValueError(f"flow {self.flow} is only for projects {', '.join(self.projects)}, not for {project or '(no project)'}")
 
     @model_validator(mode="after")
     def _validate_graph(self) -> Flow:

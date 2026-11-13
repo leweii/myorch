@@ -86,7 +86,7 @@ def make_runner(config_dir, phases):
 
 KEY = StepKey(run_id="r1", step_id="verify.r2", attempt=2)
 STEP = Step(id="verify", harness="claude-code", profile="p", prompt="round {{loop.round}}", needs=["review"],
-            outputs={"blocking": "阻塞问题数"})
+            outputs={"blocking": "number of blocking findings"})
 CTX = {"inputs": {"repo": "o/r"}, "run": {"id": "r1", "branch": "myorch/r1"}, "loop": {"round": 2}, "steps": {},
        "project": {"name": "blog", "providers": {"github": "github-bot"}, "repo_docs": ["CLAUDE.md"]}}
 
@@ -127,7 +127,7 @@ async def test_workspace_mounts_env_and_session(config_dir):
     assert argv[argv.index("--session-id") + 1] == session_id(KEY)
     prompt = argv[argv.index("-p") + 1]
     assert prompt.startswith("round 2") and "/sandbox/workspace/project/" in prompt and "repo/CLAUDE.md" in prompt
-    assert "`blocking`" in prompt and "不要向用户提问" in prompt
+    assert "`blocking`" in prompt and "Do not ask the user questions" in prompt
     assert os_.deleted == [name, name]
 
 
@@ -144,10 +144,10 @@ async def test_continuation_turn_resumes_session(config_dir):
     runner, os_ = make_runner(config_dir, [SandboxStatus(phase="Completed", exit_code=0)])
     step = STEP.model_copy(update={"interaction": "allowed"})
     turn2 = KEY.model_copy(update={"turn": 2})
-    await runner.run(req(key=turn2, step=step, reply="用红色"), NullRunContext())
+    await runner.run(req(key=turn2, step=step, reply="use red"), NullRunContext())
     argv = os_.created["argv"]
     assert argv[argv.index("--resume") + 1] == session_id(KEY)
-    assert argv[argv.index("-p") + 1].startswith("用户回复了你的问题")
+    assert argv[argv.index("-p") + 1].startswith("The user replied to your question")
     assert {m.target for m in os_.created["mounts"]} >= {"/sandbox/bin"}
 
 
@@ -207,17 +207,17 @@ def test_ask_rules_say_replies_are_text_only():
     from myorch.core.prompt import _interaction_section
 
     text = _interaction_section(Step(id="a", harness="claude-code", profile="p", interaction="allowed"))
-    assert "回复不会触发任何操作" in text and "粘贴" in text
+    assert "a reply does not trigger any action" in text and "paste" in text
 
 
 async def test_hint_after_failure_resumes_session_with_retry_prompt(config_dir):
     runner, os_ = make_runner(config_dir, [SandboxStatus(phase="Completed", exit_code=0)])
     turn2 = KEY.model_copy(update={"turn": 2})
-    await runner.run(req(key=turn2, reply="先看测试数据", failure="timed out after 30m"), NullRunContext())
+    await runner.run(req(key=turn2, reply="look at the test data first", failure="timed out after 30m"), NullRunContext())
     argv = os_.created["argv"]
     assert argv[argv.index("--resume") + 1] == session_id(KEY)
     prompt = argv[argv.index("-p") + 1]
-    assert prompt.startswith("上一轮失败了：timed out after 30m") and "先看测试数据" in prompt
+    assert prompt.startswith("The previous turn failed: timed out after 30m") and "look at the test data first" in prompt
 
 
 async def test_step_image_beats_profile_and_flow_image(config_dir):
@@ -288,7 +288,7 @@ async def test_live_output_stops_at_the_cap(config_dir, monkeypatch):
                         drain_seconds=0.05)
     await runner.run(req(), NullRunContext())
     text = "".join(r[4] for r in sink.rows)
-    assert text.startswith("0123456789") and "never" not in text and "输出太多" in text
+    assert text.startswith("0123456789") and "never" not in text and "too much output" in text
 
 
 async def test_claude_steps_stream_through_myorch_stream(config_dir):

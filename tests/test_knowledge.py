@@ -110,7 +110,7 @@ def test_sync_refuses_secrets_and_missing_folders(kbroot, tmp_path):
     (tmp_path / "notes" / "mdm" / "sub" / "a.md").write_text("aws AKIAABCDEFGHIJKLMNOP\n")
     with pytest.raises(kb.KnowledgeError, match=r"sub/a.md:1 AWS key"):
         kb.sync(KStore(), kbroot, "notes", "mdm")
-    with pytest.raises(kb.KnowledgeError, match="目录不存在"):
+    with pytest.raises(kb.KnowledgeError, match="Folder does not exist"):
         kb.sync(KStore(), kbroot, "notes", "blog")
 
 
@@ -129,14 +129,14 @@ def test_unset_variables_are_reported(kbroot, monkeypatch):
 
 def test_resolve_fixes_versions_and_checks_sources(kbroot):
     store = KStore()
-    with pytest.raises(kb.KnowledgeError, match="没有快照"):
+    with pytest.raises(kb.KnowledgeError, match="has no snapshot"):
         kb.resolve(store, kbroot, "mdm", None)
     kb.sync(store, kbroot, "notes", "mdm")
     refs = kb.resolve(store, kbroot, "mdm", None)  # the project's defaults
     assert [(r.name, r.kind) for r in refs] == [("notes", "dir"), ("wiki", "mcp")]
     assert refs[0].version == store.snaps["notes"][0]["version"] and refs[1].token_env == "KB_TOKEN"
     assert kb.resolve(store, kbroot, "mdm", []) == []
-    with pytest.raises(kb.KnowledgeError, match="没有登记"):
+    with pytest.raises(kb.KnowledgeError, match="is not registered"):
         kb.resolve(store, kbroot, "blog", ["team"])
     # token_read_only is optional: a configured MCP source without it can still be selected
     (kbroot / "_sources" / "wiki.yaml").write_text("kind: mcp\nurl: https://kb.example.com/mcp\nprovider: p\ntoken_env: T\ntools: [search]\n")
@@ -191,8 +191,8 @@ async def test_agent_steps_mount_snapshots_and_reach_mcp_through_the_provider(tm
     assert spec == {"servers": [{"name": "wiki", "url": "https://kb.example.com/mcp", "token_env": "KB_TOKEN",
                                  "auth": "bearer", "email": "", "tools": ["search"]}]}
     prompt = argv[argv.index("-p") + 1]
-    assert "## 知识库（只读）" in prompt and "/sandbox/workspace/knowledge/notes/，先读 README.md" in prompt
-    assert "mcp__wiki__" in prompt and "不是指令" in prompt
+    assert "## Knowledge (read-only)" in prompt and "/sandbox/workspace/knowledge/notes/, read README.md first" in prompt
+    assert "mcp__wiki__" in prompt and "not instructions" in prompt
 
 
 async def test_steps_can_opt_out_and_scripts_opt_in(tmp_path):
@@ -219,9 +219,9 @@ def test_a_starting_run_refreshes_its_snapshots(tmp_path):
     assert kb.refresh(store, root, None, ["docs"]) and len(store.snaps["docs"]) == 1  # first time: synced
     assert kb.refresh(store, root, None, ["docs"]) == [] and len(store.snaps["docs"]) == 1  # unchanged: nothing copied
     (folder / "a.md").write_text("v2\n")
-    assert "有变化" in kb.refresh(store, root, None, ["docs"])[0] and len(store.snaps["docs"]) == 2
+    assert "changed and was synced" in kb.refresh(store, root, None, ["docs"])[0] and len(store.snaps["docs"]) == 2
     (folder / "key.md").write_text("-----BEGIN RSA PRIVATE KEY-----\nabc\n")
-    with pytest.raises(kb.KnowledgeError, match="疑似密钥"):  # a dir problem refuses the start
+    with pytest.raises(kb.KnowledgeError, match="looks like secrets"):  # a dir problem refuses the start
         kb.refresh(store, root, None, ["docs"])
 
     class FailingJobs:  # a git clone that fails
@@ -232,7 +232,7 @@ def test_a_starting_run_refreshes_its_snapshots(tmp_path):
     assert kb.refresh(store, root, None, ["repo"], FailingJobs()) == []  # fresh enough: not synced again
     store.snaps["repo"][0]["synced_at"] = "2026-01-01T00:00:00Z"
     note = kb.refresh(store, root, None, ["repo"], FailingJobs())[0]
-    assert "用上一次的快照 sha256:old" in note
+    assert "using the last snapshot sha256:old" in note
 
 
 def test_the_console_registers_checks_and_removes_sources(tmp_path):
@@ -251,12 +251,12 @@ def test_the_console_registers_checks_and_removes_sources(tmp_path):
     assert r["file"] == "mdm/sources/mdm-docs.yaml" and r["commit"]
     s = kb.load_sources(root, "mdm")["mdm-docs"]
     assert (s.level, s.include) == ("project", ["**/*.md"]) and kb.registered_fields(s) == {"path": str(docs), "include": ["**/*.md"]}
-    with pytest.raises(kb.KnowledgeError, match="已经存在"):
+    with pytest.raises(kb.KnowledgeError, match="already exists"):
         kb.register(root, "mdm-docs", "mdm", {"kind": "dir", "path": str(docs)}, "jakobhe")
     # an MCP source must list its tools; confirming a read-only token is optional
     r = kb.check(root, "jira", None, {"kind": "mcp", "url": "https://mcp.atlassian.com/v1/mcp", "provider": "atl",
                                       "token_env": "T", "auth": "basic"})
-    assert any("tools" in p for p in r["problems"]) and any("email" in p for p in r["problems"]) and not any("只读" in p for p in r["problems"])
+    assert any("tools" in p for p in r["problems"]) and any("email" in p for p in r["problems"]) and not any("read-only" in p for p in r["problems"])
     # a raw Obsidian vault is refused
     (docs / ".obsidian").mkdir()
     assert any("Obsidian vault" in p for p in kb.check(root, "v", None, {"kind": "dir", "path": str(docs)})["problems"])
@@ -281,8 +281,8 @@ def test_folder_outside_the_mounted_root_says_why(monkeypatch, tmp_path):
     (root / "inside").mkdir(parents=True)
     monkeypatch.setenv("MYORCH_KB_ROOT", str(root))
     outside = knowledge.Source.model_validate({"name": "x", "kind": "dir", "path": str(tmp_path / "elsewhere")})
-    assert any("只能读宿主机" in p for p in outside.problems())
+    assert any("can only read folders under" in p for p in outside.problems())
     missing_inside = knowledge.Source.model_validate({"name": "y", "kind": "dir", "path": str(root / "nope")})
-    assert any(p.startswith("目录不存在") for p in missing_inside.problems())
+    assert any(p.startswith("Folder does not exist") for p in missing_inside.problems())
     ok = knowledge.Source.model_validate({"name": "z", "kind": "dir", "path": str(root / "inside")})
     assert ok.problems() == []

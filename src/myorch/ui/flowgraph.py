@@ -129,7 +129,7 @@ class FlowDefs:
                     "doc": f"flows/{p.stem}.md" if (self.root / f"{p.stem}.md").is_file() else None,
                 })
             except yaml.YAMLError as e:
-                item["error"] = f"YAML 解析失败：{e}"
+                item["error"] = f"YAML parse error: {e}"
             for u in item.get("uses", []):
                 used_by.setdefault(u, []).append(item["flow"])
             flows.append(item)
@@ -147,7 +147,7 @@ class FlowDefs:
                 item["params"] = list((doc.get("params") or {}).keys())
                 item["uses"] = _uses(body)
             except yaml.YAMLError as e:
-                item["error"] = f"YAML 解析失败：{e}"
+                item["error"] = f"YAML parse error: {e}"
             frags.append(item)
         return {"version": self.version(), "flows": flows, "fragments": frags}
 
@@ -155,7 +155,7 @@ class FlowDefs:
         """The expanded flow as a tree; `error` instead when it does not load with these values."""
         out: dict[str, Any] = {"version": self.version(), "flow": flow, "project": project or None, "inputs": inputs}
         if not FLOW_NAME.match(flow) or not (self.root / f"{flow}.yaml").is_file():
-            return {**out, "error": f"没有这个流程：{flow}"}
+            return {**out, "error": f"No such flow: {flow}"}
         path = (self.root / f"{flow}.yaml").resolve()
         root = path.parent
 
@@ -164,7 +164,7 @@ class FlowDefs:
             if root not in target.parents:
                 raise FragmentError(f"fragment {rel!r} is outside {root}")
             if not target.is_file():
-                raise FragmentError(f"片段 {rel} 不存在")
+                raise FragmentError(f"fragment {rel} does not exist")
             return target.read_text()
 
         try:
@@ -175,7 +175,7 @@ class FlowDefs:
 
                 pub = projects.load_project(self.kb_root, project).public()
             elif uses_project(data):
-                return {**out, "error": "这个流程用到项目参数，先选一个项目。", "needs_project": True}
+                return {**out, "error": "This flow uses project parameters. Pick a project first.", "needs_project": True}
             values = {**(data.get("defaults") or {}), **{k: v for k, v in inputs.items() if v != ""}}
             f = Flow.model_validate(expand_flow(data, resolve, values, pub))
         except (yaml.YAMLError, FragmentError, ValidationError, ValueError, FileNotFoundError) as e:

@@ -167,7 +167,7 @@ class ActionRunner:
         if missing:
             raise ActionError(f"accepted proposals {missing} do not exist")
         if not ids:
-            return "没有采纳任何建议，知识库未改动", {"applied": [], "commit": ""}
+            return "no proposal adopted; knowledge unchanged", {"applied": [], "commit": ""}
 
         if not (self.kb_root / ".git").is_dir():
             raise ActionError(f"{self.kb_root} is not a git repository; run `git init` there first")
@@ -175,7 +175,7 @@ class ActionRunner:
         done = self._git("log", "--format=%H", f"--grep={marker}", "--fixed-strings")
         if done:  # idempotent: a retry after a successful commit must not apply twice
             version = (self.store.read_file(f"projects/{project}/.version") or "").strip()
-            return (f"这一步的建议已经写回过（{done.split()[0][:7]}）",
+            return (f"this step's proposals were already written back ({done.split()[0][:7]})",
                     {"applied": ids, "commit": done.split()[0], **({"version": version} if version else {})})
 
         # Validate everything in memory first; write nothing unless every edit applies cleanly.
@@ -196,14 +196,14 @@ class ActionRunner:
                 for ed in ch.edits:
                     n = text.count(ed.old) if ed.old else 0
                     if n != 1:
-                        errors.append(f"#{pid}: {ch.file}: 要替换的原文出现了 {n} 次（必须恰好 1 次）：{ed.old[:60]!r}")
+                        errors.append(f"#{pid}: {ch.file}: the text to replace occurs {n} times (must be exactly 1): {ed.old[:60]!r}")
                         continue
                     text = text.replace(ed.old, ed.new, 1)
                 if ch.append:
                     text = text.rstrip("\n") + "\n\n" + ch.append.strip("\n") + "\n"
                 contents[target] = text
         if errors:
-            raise ActionError("建议无法干净地应用，知识库未改动：\n" + "\n".join(errors))
+            raise ActionError("the proposals do not apply cleanly; knowledge unchanged:\n" + "\n".join(errors))
 
         for target, text in contents.items():
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -217,7 +217,7 @@ class ActionRunner:
                   "--", *rel)
         commit = self._git("rev-parse", "HEAD")
         n, version = projects.snapshot(self.store, self.kb_root, project)
-        return (f"采纳 {len(ids)} 条建议，改动 {len(rel)} 个文件，提交 {commit[:7]}，已同步项目 {project}（{n} 个文件，{version[:15]}）",
+        return (f"adopted {len(ids)} proposal(s), changed {len(rel)} file(s), commit {commit[:7]}, synced project {project} ({n} files, {version[:15]})",
                 {"applied": ids, "files": rel, "commit": commit, "version": version})
 
     # ---- postmortem-replay -------------------------------------------------------------
@@ -227,7 +227,7 @@ class ActionRunner:
 
         phase before: write the case as a draft (the change only) and replay it with today's knowledge.
         phase after: add the expected findings from docs/postmortem/case.json (the case then waits for
-        the person in 流程 → 评测集) and, when proposals were adopted (docs/postmortem/accepted.json), replay again
+        the person in Flows → Eval set) and, when proposals were adopted (docs/postmortem/accepted.json), replay again
         with the new knowledge. The replay is a separate eval run: the reviewers must not see this
         run's workspace (the incident, the fix, the analysis).
         """
@@ -253,7 +253,7 @@ class ActionRunner:
                 raise ActionError(f"docs/postmortem/case.json: {e}") from e
             if case["status"] == "draft":
                 case.update(findings=found, status="pending" if found else "rejected")
-            notes.append(f"期望的发现 {len(found)} 条，" + ("在「流程 → 评测集」里确认" if found else "没有可以事先发现的问题，案例不计分"))
+            notes.append(f"{len(found)} expected finding(s), " + ("confirm them in Flows → Eval set" if found else "no problem could have been found beforehand, the case is not scored"))
         again = phase == "before"
         if phase == "after" and self.store.read_file(f"{run_dir(key.run_id)}/docs/postmortem/accepted.json"):
             acc = self._read_json(key.run_id, "docs/postmortem/accepted.json")
@@ -264,11 +264,11 @@ class ActionRunner:
                 "case": case, "depth": depth, "by": mandate.get("initiator") or "myorch",
                 "source": f"postmortem:{key.run_id}:{phase}", "run_id": f"eval-{key.run_id.rsplit('-', 1)[-1]}-{phase}"})
             case["replays"][phase] = rid
-            notes.append(f"{'用现在的' if phase == 'before' else '用采纳后的'}知识库回放：{rid}")
+            notes.append(f"replay with {'the current' if phase == 'before' else 'the adopted'} knowledge: {rid}")
         elif phase == "after":
-            notes.append("没有采纳建议，不再回放")
+            notes.append("no proposal adopted, no second replay")
         evals.save_case(self.data_root, case)
-        return "；".join(notes) or "没有要做的", {"case": case["id"], "replay": case["replays"].get(phase, ""),
+        return "; ".join(notes) or "nothing to do", {"case": case["id"], "replay": case["replays"].get(phase, ""),
                                                   "expected": len(case["findings"])}
 
     # ---- run-trail, takeaways-learned (development's takeaway, learn reading it) ---------------
@@ -311,8 +311,8 @@ class ActionRunner:
             self.store.write_run_file(req.key.run_id, c, "")
         self.store.write_run_file(req.key.run_id, rel, json.dumps(t, ensure_ascii=False, indent=1))
         failed = list(t.get("failed_so_far") or [])
-        return (f"{len(t.get('steps') or [])} 个步骤" + (f"，失败过：{', '.join(map(str, failed))}" if failed else "")
-                + f"，{len(t.get('qa') or [])} 次问答，写入 {rel}" + (f"，删掉 {redacted} 行疑似密钥" if redacted else ""),
+        return (f"{len(t.get('steps') or [])} step(s)" + (f", failed so far: {', '.join(map(str, failed))}" if failed else "")
+                + f", {len(t.get('qa') or [])} question(s) and answer(s), written to {rel}" + (f", removed {redacted} line(s) that look like secrets" if redacted else ""),
                 {"path": rel, "failed": len(failed), "redacted": redacted})
 
     def takeaway_redact(self, key: StepKey, args: dict[str, str]) -> tuple[str, dict[str, Any]]:
@@ -333,8 +333,8 @@ class ActionRunner:
             kept.append(rel)
             redacted += n
         if not kept:
-            raise ActionError(f"没有内容：{' '.join(files) or '（没有给 files）'}")
-        return (f"检查了 {len(kept)} 个文件" + (f"，删掉 {redacted} 行疑似密钥" if redacted else "，没有疑似密钥"),
+            raise ActionError(f"no content: {' '.join(files) or '(no files given)'}")
+        return (f"checked {len(kept)} file(s)" + (f", removed {redacted} line(s) that look like secrets" if redacted else ", nothing that looks like a secret"),
                 {"files": len(kept), "redacted": redacted})
 
     def takeaways_learned(self, key: StepKey, project: str, args: dict[str, str]) -> tuple[str, dict[str, Any]]:
@@ -346,4 +346,4 @@ class ActionRunner:
         picked = data.get("picked") if isinstance(data, dict) else None
         runs = [str(p.get("run")) for p in picked or [] if isinstance(p, dict) and p.get("run")]
         new = takeaways.record(self.data_root, project, runs, key.run_id)
-        return (f"记下 {len(new)} 条 takeaway 已学过（共读了 {len(runs)} 条）", {"recorded": len(new), "read": len(runs)})
+        return (f"recorded {len(new)} takeaway(s) as learned ({len(runs)} read)", {"recorded": len(new), "read": len(runs)})

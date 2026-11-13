@@ -66,5 +66,5 @@ def find_flow(flows_dir: Path, role: str, project: str | None) -> Path:
         if not m["projects"] and general is None:
             general = p
     if general is None:
-        raise ValueError(f"没有给项目 {project or '（无）'} 用的 {role} 流程")
+        raise ValueError(f"No {role} flow for project {project or '(none)'}")
     return general

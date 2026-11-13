@@ -48,19 +48,19 @@ def test_progress_is_not_pushed_only_failed_steps_are():
 
 def test_a_notice_is_short_and_its_meta_keys_are_identifiers():
     text, meta = notice(ev("run_finished", status="failed", failure="implement: " + "x" * 2000), STARTED)
-    assert text.startswith("❌ 失败：blog-development blog-development-1") and len(text) < 800
+    assert text.startswith("❌ failed: blog-development blog-development-1") and len(text) < 800
     assert meta == {"run_id": "blog-development-1", "kind": "run_finished", "status": "failed",
                     "project": "blog", "flow": "blog-development"}
     text, _ = notice(ev("approval", step="human-review", needed=1, risk="medium"), STARTED)
-    assert "只能由人" in text
+    assert "Only a person can approve" in text
 
 
 def test_run_view_tracks_what_waits():
-    events = [ev("run_started", **STARTED), ev("question", step="analyze", question="哪里？", options=["上", "下"]),
+    events = [ev("run_started", **STARTED), ev("question", step="analyze", question="Where?", options=["top", "bottom"]),
               ev("approval", step="human-review", needed=1, risk="low")]
     v = run_view(events)
     assert [w["step"] for w in v["waiting"]] == ["analyze", "human-review"]
-    v = run_view(events + [ev("replied", step="analyze", text="上"),
+    v = run_view(events + [ev("replied", step="analyze", text="top"),
                            ev("approval_progress", step="human-review", needed=1, approvers=["jakobhe"])])
     assert v["waiting"] == []
     v = run_view(events + [ev("run_finished", status="failed", failure="boom")])
@@ -115,10 +115,10 @@ async def test_start_goes_through_the_api_and_the_session_follows_the_run(tmp_pa
     api = FakeApi()
     s, out = server(api, tmp_path, scope="session")
     await s.handle({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "start", "arguments": {
-        "flow": "mo-development", "project": "myorch", "message": "修 X", "inputs": {"incident": "blog-development-1"}}}})
+        "flow": "mo-development", "project": "myorch", "message": "Fix X", "inputs": {"incident": "blog-development-1"}}}})
     assert api.posts == [("/channel/runs", {"flow": "mo-development", "project": "myorch",
-                                            "inputs": {"incident": "blog-development-1"}, "message": "修 X"})]
-    assert "mo-development-9" in s.sub.followed and "已发起" in sent(out)[0]["result"]["content"][0]["text"]
+                                            "inputs": {"incident": "blog-development-1"}, "message": "Fix X"})]
+    assert "mo-development-9" in s.sub.followed and "Started" in sent(out)[0]["result"]["content"][0]["text"]
 
 
 async def test_runs_search_by_label_and_show_labels(tmp_path):
@@ -143,11 +143,11 @@ async def test_runs_search_by_label_and_show_labels(tmp_path):
 async def test_log_reads_the_newest_turn_or_the_supervisor_log_in_pages(tmp_path):
     s, _ = server(FakeApi(), tmp_path)
     text = await s.call("log", {"run_id": "r", "instance": "implement"})
-    assert text.startswith("<.myorch/steps/implement/logs/turn-2.log>") and "已到结尾" in text
+    assert text.startswith("<.myorch/steps/implement/logs/turn-2.log>") and "end of file" in text
     text = await s.call("log", {"run_id": "r", "instance": "implement", "limit": 30})
-    assert "第 0–30 个字符" in text and "下一页 offset=30" in text
+    assert "characters 0–30" in text and "next page offset=30" in text
     text = await s.call("log", {"run_id": "r", "instance": "implement", "which": "supervisor"})
-    assert "supervisor-1-2.log" in text and "已到结尾" in text
+    assert "supervisor-1-2.log" in text and "end of file" in text
 
 
 async def test_a_tool_error_is_reported_as_a_tool_result(tmp_path):
@@ -160,12 +160,12 @@ async def test_a_tool_error_is_reported_as_a_tool_result(tmp_path):
 async def test_what_happened_while_away_arrives_as_one_digest(tmp_path):
     api = FakeApi([ev("run_started", seq=1, **STARTED),
                    ev("step_finished", seq=2, step="sync", status="succeeded"),
-                   ev("run_finished", seq=3, status="failed", failure="implement 失败")])
+                   ev("run_finished", seq=3, status="failed", failure="implement failed")])
     s, out = server(api, tmp_path)
     await s.catch_up(0, 3)
     [msg] = sent(out)
     assert msg["method"] == "notifications/claude/channel" and msg["params"]["meta"] == {"kind": "digest"}
-    assert "你不在时" in msg["params"]["content"] and "implement 失败" in msg["params"]["content"]
+    assert "While you were away" in msg["params"]["content"] and "implement failed" in msg["params"]["content"]
 
 
 # ---- the channel API refuses approvals from an agent -------------------------------------------

@@ -7,7 +7,7 @@
 #   openshell provider create --name atlassian-mcp --type atlassian-mcp --credential ATLASSIAN_TOKEN
 #   unset ATLASSIAN_TOKEN
 #
-# Then register the source in the console (流程 → 知识库 → ＋ 登记知识源, type MCP), with only read
+# Then register the source in the console (Flows → Knowledge → + Register knowledge source, type MCP), with only read
 # tools in `tools` (e.g. getJiraIssue, searchJiraIssuesUsingJql): tools/myorch-mcp denies the rest.
 # Every MCP call is a POST to the same path, so the gateway cannot tell reads from writes: the tool
 # allowlist and a token that can only read are what keep it read only.

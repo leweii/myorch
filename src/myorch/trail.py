@@ -76,47 +76,48 @@ def previous_conversation(log, run_id: str, data_root=None) -> str:
     as docs/previous/conversation.md (the sandbox cannot read them)."""
     t = trail(log, [run_id])[0]
     notes = _console_notes(data_root, run_id)
-    lines = [f"# 上一次运行（{run_id}）里人说过的话", "",
-             "这是人对上一次运行说的话：回答、修改意见、审批意见。它们是人的决定，优先于上一次文档里的假设。",
-             "上一次的原始请求在 external-request.md。", ""]
-    lines += ["## agent 问的问题和人的回答", ""]
+    lines = [f"# What people said in the previous run ({run_id})", "",
+             "This is what people said to the previous run: answers, change requests, approval comments. "
+             "They are decisions made by people and take precedence over assumptions in the previous documents.",
+             "The original request of the previous run is in external-request.md.", ""]
+    lines += ["## Questions the agent asked and the answers", ""]
     if t["qa"]:
         for i, q in enumerate(t["qa"], 1):
-            lines.append(f"### {i}. 步骤 {q['step']}")
+            lines.append(f"### {i}. Step {q['step']}")
             lines.append("")
-            lines.append("问：" + q["question"])
+            lines.append("Q: " + q["question"])
             if q.get("options"):
                 lines.append("")
-                lines.append("选项：" + "；".join(str(o) for o in q["options"]))
+                lines.append("Options: " + "; ".join(str(o) for o in q["options"]))
             lines.append("")
-            lines.append("答：" + q["answer"])
+            lines.append("A: " + q["answer"])
             lines.append("")
     else:
-        lines += ["（没有提问）", ""]
-    lines += ["## 审批时的意见", ""]
+        lines += ["(no questions)", ""]
+    lines += ["## Comments at approval", ""]
     said = False
     for c in t["changes"]:
-        lines += [f"- 提修改意见（{c.get('by') or '?'}，步骤 {c['step']}）：{c['text']}"]
+        lines += [f"- Requested changes ({c.get('by') or '?'}, step {c['step']}): {c['text']}"]
         said = True
     for n in notes:
-        what = "批准" if n.get("kind") == "approve" else "驳回"
+        what = "Approved" if n.get("kind") == "approve" else "Rejected"
         text = _cut(n.get("text"))
-        lines += [f"- {what}（{n.get('by') or '?'}，步骤 {n.get('step') or '?'}）" + (f"：{text}" if text else "")]
+        lines += [f"- {what} ({n.get('by') or '?'}, step {n.get('step') or '?'})" + (f": {text}" if text else "")]
         said = True
     noted = {(n.get("step"), n.get("by")) for n in notes if n.get("kind") == "reject"}
     for r in t["rejected"]:
         if (r["step"], r.get("by")) not in noted:
-            lines += [f"- 驳回（{r.get('by') or '?'}，步骤 {r['step']}），没有写原因"]
+            lines += [f"- Rejected ({r.get('by') or '?'}, step {r['step']}), no reason given"]
             said = True
     if not said:
-        lines += ["（没有审批意见）"]
+        lines += ["(no approval comments)"]
     lines += [""]
     if t["failures"] or t["resumes"]:
-        lines += ["## 失败和重新执行", ""]
+        lines += ["## Failures and re-runs", ""]
         for f in t["failures"]:
-            lines += [f"- 步骤 {f['step']} 失败（尝试 {f.get('attempts') or '?'} 次）：{f['error']}"]
+            lines += [f"- Step {f['step']} failed ({f.get('attempts') or '?'} attempts): {f['error']}"]
         for r in t["resumes"]:
-            lines += [f"- {r.get('by') or '?'} 重新执行了：{', '.join(r['steps']) or '失败的步骤'}"]
+            lines += [f"- {r.get('by') or '?'} re-ran: {', '.join(r['steps']) or 'the failed steps'}"]
         lines += [""]
-    lines += [f"上一次的结果：{t['status'] or '未知'}"]
+    lines += [f"Result of the previous run: {t['status'] or 'unknown'}"]
     return "\n".join(lines) + "\n"

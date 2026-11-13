@@ -1,22 +1,18 @@
-"""Build the Flow manual, separate from the User manual (docs/build-html.py), one page per language:
-docs/workflows/index.html (English) and docs/zh/workflows/index.html (Chinese).
+"""Build the Flow manual, separate from the User manual (docs/build-html.py): docs/workflows/index.html.
 
     uv run --with markdown python docs/workflows/build.py
 
 One page, sidebar navigation, same look as the User manual (docs/build-html.py's page shell):
 - Home: the manual's README.md, written by hand (roles, which flow when, starting and stepping in):
-  docs/workflows/README.md (Chinese), docs/en/workflows/README.md (English).
+  docs/workflows/README.md.
 - One chapter per flow in flows/*.yaml. The step graph, the inputs and the step facts are generated
   from the YAML with the same expansion as `myorch run` and the console (myorch.ui.flowgraph), for one
   project (the flow's first `projects:` entry, else the first pack of PROJECT_ORDER that exists: mdm,
   whose development flow has every step) and default inputs. Flows are shared by every project; a
   project pack can leave steps out (flow-level `if:`) and change parameters (flows.development). The
-  prose is written by hand: flows/<flow>.md (Chinese), docs/en/flows/<flow>.md (English); a line
-  `<!-- flow-graph -->` in it places the graph, otherwise it goes before the prose.
+  prose is written by hand in flows/<flow>.md; a line `<!-- flow-graph -->` in it places the graph,
+  otherwise it goes before the prose.
 - Fragments: flows/lib/*.yaml, generated (description, params, which flows use it).
-
-The flows' own texts (input labels and hints, role names, fragment descriptions) are Chinese; the
-English page takes them from docs/workflows/en.py and lists the ones it has no English for.
 
 Project values come from the project packs in ../myorch-knowledge (or $MYORCH_KNOWLEDGE); a flow whose
 project pack is missing shows its expansion error instead of a graph.
@@ -45,8 +41,6 @@ KB = Path(os.environ.get("MYORCH_KNOWLEDGE") or REPO.parent / "myorch-knowledge"
 
 sys.path.insert(0, str(REPO / "src"))
 sys.dont_write_bytecode = True  # no __pycache__ in docs/
-sys.path.insert(0, str(HERE))
-from en import EN as FLOW_TEXT_EN  # noqa: E402
 from myorch.core.inputs import ROLE_INFO  # noqa: E402
 from myorch.ui.flowgraph import FlowDefs  # noqa: E402
 
@@ -61,33 +55,8 @@ _spec.loader.exec_module(shell)
 PROJECT_ORDER = ["mdm", "blog", "myorch"]
 MODEL = {"claude-opus-5-5": "Opus", "claude-sonnet-5-5": "Sonnet", "claude-haiku-5-5": "Haiku", "claude-fable-5-2": "Fable"}
 
-# The page's own words, per language. The flows' texts go through tx().
-WORDS: dict[str, dict[str, Any]] = {
-    "zh-CN": {
-        "flows": "流程", "type": {"string": "文本", "message": "消息", "select": "选项", "ticket": "工单号", "run": "运行", "int": "整数", "bool": "是/否"},
-        "exhausted": {"ask": "跑满后问你", "fail": "跑满后失败", "accept": "跑满后接受，继续往下"},
-        "script": "脚本", "host": "宿主机动作", "approval_n": "审批 · {n} 人", "approval_risk": "审批 · 人数按风险算",
-        "parallel": "×{n} 并行", "may_ask": "可能问你", "cond": "有条件", "skip": "失败当跳过", "waits": "等 {x}", "sep": "、",
-        "loop_head": "循环 · 最多 {n} 轮", "until": "直到", "reflect": "跑满仍未满足时先反思，再问你：再跑一轮 / 接受 / 终止",
-        "legend": ["脚本", "宿主机动作", "需要你：审批、提问", "有条件（鼠标停在「有条件」上看表达式）", "同一行的步骤并行"],
-        "no_inputs": "没有输入。", "colon": "：", "by_project": "看项目：", "required": "必填", "one_of": "二选一",
-        "only_if": "只对 {x} 成立的项目显示", "inputs_head": ["输入", "标签", "类型", "必填", "默认", "说明"],
-        "presets": "按输入 {x} 选一组参数（presets）：",
-        "approvers": "审批人数 {x}", "changes": "可以提修改意见：再跑一轮 {x}", "can_ask": "可以向你提问",
-        "instances": "{n} 个实例并行", "on_failed": "失败时 {x}", "timeout": "超时 {x}", "retries": "重试 {x}", "semi": "；",
-        "loop_row": "循环 {id}：最多 {n} 轮", "loop_until": "，直到 {x}", "loop_cond": "。条件 {x}", "loop_use": "。片段 {x}", "comma": "，",
-        "facts": "每一步的执行者、条件、输出（从 YAML 生成）", "facts_head": ["步骤", "执行", "条件", "outputs", "人和并行", "限制"],
-        "file": "文件", "prose": "，说明 {x}", "role": "角色", "task": "（控制台里的任务「{x}」）", "projects": "项目",
-        "shared": "所有项目共用", "hint": "一句话", "fragments": "片段", "expand_failed": "展开失败：{x}",
-        "where_project": "按项目 {x} 和默认输入展开（别的项目的项目包可能裁掉步骤、换掉参数）", "where_default": "按默认输入展开",
-        "steps": "步骤图", "generated": "从 {file} 生成，{where}，和 <code>myorch expand</code>、控制台「流程」看到的一样。",
-        "inputs": "输入", "unused": "没有流程用它", "none": "无", "kind": {"loop": "循环", "step": "步骤"},
-        "fragments_intro": ("片段是 <code>flows/lib/</code> 下可以复用的步骤或循环。流程用 <code>use:</code> 引用它，"
-                            "发起时展开。写法见<a href=\"../index.html#ch-08-flow-syntax\">使用手册 · 8. 写流程</a>。这张表从片段文件生成。"),
-        "fragments_head": ["文件", "类型", "做什么", "参数", "用它的流程"],
-        "home": "首页", "reference": "参考", "manual": "流程手册", "title": "myorch 流程手册", "user_manual": "使用手册",
-    },
-    "en": {
+# The page's own words.
+W: dict[str, Any] = {
         "flows": "Flows", "type": {"string": "text", "message": "message", "select": "options", "ticket": "ticket", "run": "run", "int": "integer", "bool": "yes/no"},
         "exhausted": {"ask": "asks you when out of rounds", "fail": "fails when out of rounds", "accept": "accepts when out of rounds and goes on"},
         "script": "script", "host": "host action", "approval_n": "approval · {n} people", "approval_risk": "approval · count set by risk",
@@ -104,32 +73,14 @@ WORDS: dict[str, dict[str, Any]] = {
         "file": "File", "prose": ", prose {x}", "role": "Role", "task": " (the console task “{x}”)", "projects": "Projects",
         "shared": "shared by every project", "hint": "In short", "fragments": "Fragments", "expand_failed": "Expansion failed: {x}",
         "where_project": "expanded for project {x} with default inputs (another project's pack may leave steps out or change parameters)", "where_default": "expanded with default inputs",
-        "steps": "Step graph", "generated": "Generated from {file}, {where}; the same as <code>myorch expand</code> and the console's Flows page (流程).",
+        "steps": "Step graph", "generated": "Generated from {file}, {where}; the same as <code>myorch expand</code> and the console's Flows page.",
         "inputs": "Inputs", "unused": "no flow uses it", "none": "none", "kind": {"loop": "loop", "step": "step"},
         "fragments_intro": ("Fragments are reusable steps or loops in <code>flows/lib/</code>. A flow refers to one with <code>use:</code>; "
                             "it is expanded when a run starts. Syntax: <a href=\"../index.html#ch-08-flow-syntax\">User manual · 8. Writing flows</a>. "
                             "This table is generated from the fragment files."),
         "fragments_head": ["File", "Kind", "What it does", "Params", "Used by"],
         "home": "Home", "reference": "Reference", "manual": "Flow manual", "title": "myorch Flow manual", "user_manual": "User manual",
-    },
 }
-
-LANG: Any = None                 # the shell.Lang being built
-W: dict[str, Any] = {}           # its words
-MISSING: dict[str, None] = {}    # flow texts with no English (in the order met)
-CJK = re.compile(r"[　-〿一-鿿＀-￯]")
-
-
-def tx(v: Any) -> str:
-    """A text from a flow (label, hint, description, role name), in the page's language."""
-    s = str(v)
-    if LANG.code != "en" or not CJK.search(s):
-        return s
-    if s in FLOW_TEXT_EN:
-        return FLOW_TEXT_EN[s]
-    MISSING[s] = None
-    return s
-
 
 def esc(v: Any) -> str:
     return html.escape(str(v), quote=True)
@@ -243,9 +194,9 @@ def inputs_table(doc: dict[str, Any]) -> str:
         need = (f'{W["by_project"]}<code>{esc(r)}</code>' if isinstance(r, str) else W["required"] if r else W["one_of"] if name in req else "")
         d = defaults.get(name, "")
         only = W["only_if"].format(x=f'<code>{esc(spec.get("if"))}</code>')
-        rows.append(f"<tr><td><code>{esc(name)}</code></td><td>{esc(tx(spec.get('label', '')))}</td><td>{t}</td>"
+        rows.append(f"<tr><td><code>{esc(name)}</code></td><td>{esc(spec.get('label', ''))}</td><td>{t}</td>"
                     f"<td>{need}</td><td>{f'<code>{esc(d)}</code>' if d not in ('', None) else ''}</td>"
-                    f"<td>{esc(tx(spec.get('hint', '')))}"
+                    f"<td>{esc(spec.get('hint', ''))}"
                     + (f'<br><span class="small">{only}</span>' if spec.get("if") else "")
                     + "</td></tr>")
     head = "".join(f"<th>{h}</th>" for h in W["inputs_head"])
@@ -301,9 +252,9 @@ def facts_table(g: dict[str, Any]) -> str:
                         + W["comma"] + esc(exhausted(t.get("on_exhausted")))
                         + (W["loop_cond"].format(x=f'<code>{esc(t["when"])}</code>') if t.get("when") else "")
                         + (W["loop_use"].format(x=f'<code>{esc(t["use"])}</code>') if t.get("use") else "") + "</td></tr>")
-            rows += facts_rows(t["steps"], "　")
+            rows += facts_rows(t["steps"], "\u2003")
             if t.get("reflect"):
-                rows += facts_rows([t["reflect"]], "　")
+                rows += facts_rows([t["reflect"]], "\u2003")
         else:
             rows += facts_rows([t])
     head = "".join(f"<th>{h}</th>" for h in W["facts_head"])
@@ -314,12 +265,8 @@ def facts_table(g: dict[str, Any]) -> str:
 # ---------------------------------------------------------------- markdown and links
 
 
-def out_dir() -> Path:
-    return LANG.out / "workflows"
-
-
 def link_target(src_dir: Path, target: str, flow_ids: dict[Path, str]) -> str | None:
-    """Rewrite a relative link in a source .md so it works from this language's workflows/index.html."""
+    """Rewrite a relative link in a source .md so it works from docs/workflows/index.html."""
     if re.match(r"^[a-z]+:|^#|^/", target):
         return None
     path, _, frag = target.partition("#")
@@ -328,13 +275,13 @@ def link_target(src_dir: Path, target: str, flow_ids: dict[Path, str]) -> str | 
     p = (src_dir / path).resolve()
     if p in flow_ids:                                   # another flow's doc: an anchor on this page
         return f"#{flow_ids[p]}--{frag}" if frag else f"#ch-{flow_ids[p]}"
-    if p == LANG.workflows.resolve():
+    if p == shell.WORKFLOWS.resolve():
         return f"#index--{frag}" if frag else "#ch-index"
-    chapters = {c.resolve(): shell.chapter_key(c) for c in LANG.chapters}
+    chapters = {c.resolve(): shell.chapter_key(c) for c in shell.chapters()}
     if p in chapters:                                    # a User manual chapter
         key = chapters[p]
         return f"../index.html#{key}--{frag}" if frag else f"../index.html#ch-{key}"
-    return shell.file_link(p, frag, out_dir())
+    return shell.file_link(p, frag, HERE)
 
 
 def render_md(text: str, key: str, src_dir: Path, flow_ids: dict[Path, str]) -> tuple[str, list]:
@@ -371,17 +318,16 @@ def flow_chapter(fd: FlowDefs, item: dict[str, Any], flow_ids: dict[Path, str]) 
     project = projects[0] if projects else next((p for p in PROJECT_ORDER if (KB / p).is_dir()), None)
     g = fd.graph(flow, project, {})
     role = item.get("role") or ""
-    label = tx(ROLE_INFO.get(role, {}).get("label", ""))
-    md_path = LANG.flows / f"{flow}.md"
+    label = str(ROLE_INFO.get(role, {}).get("label", ""))
+    md_path = FLOWS / f"{flow}.md"
     title, prose = (split_title(md_path.read_text()) if md_path.is_file() else ("", ""))
     title = flow  # the chapter is named after the flow; the .md's own title is not shown
-    zh_md = FLOWS / f"{flow}.md"
 
     meta = [f"<tr><td>{W['file']}</td><td><code>flows/{esc(path.name)}</code>"
             + (W["prose"].format(x=f"<code>{esc(os.path.relpath(md_path, REPO))}</code>") if md_path.is_file() else "") + "</td></tr>",
             f"<tr><td>{W['role']}</td><td><code>{esc(role)}</code>{esc(W['task'].format(x=label)) if label else ''}</td></tr>",
             f"<tr><td>{W['projects']}</td><td>{esc(W['sep'].join(projects)) if projects else W['shared']}</td></tr>"]
-    hint = tx(doc.get("hint") or ROLE_INFO.get(role, {}).get("hint", ""))
+    hint = str(doc.get("hint") or ROLE_INFO.get(role, {}).get("hint", ""))
     if hint:
         meta.append(f"<tr><td>{W['hint']}</td><td>{esc(hint)}</td></tr>")
     uses = item.get("uses") or []
@@ -398,9 +344,7 @@ def flow_chapter(fd: FlowDefs, item: dict[str, Any], flow_ids: dict[Path, str]) 
                  + graph_html(g) + facts_table(g))
     generated = (f'<h2 id="{key}--inputs">{W["inputs"]}</h2>' + inputs_table(doc) + presets_table(doc) + graph)
 
-    if not md_path.is_file() and zh_md.is_file():
-        print(f"warning: {md_path.relative_to(REPO)} is missing (the Chinese {zh_md.relative_to(REPO)} exists)", file=sys.stderr)
-    body, toc = render_md(prose, key, LANG.flows, flow_ids) if prose else ("", [])
+    body, toc = render_md(prose, key, FLOWS, flow_ids) if prose else ("", [])
     marker = "<!-- flow-graph -->"
     if marker in body:
         body = body.replace(f"<p>{marker}</p>", generated).replace(marker, generated)
@@ -412,7 +356,7 @@ def flow_chapter(fd: FlowDefs, item: dict[str, Any], flow_ids: dict[Path, str]) 
     subs += [{"id": t["id"], "name": t["name"]} for t in toc[0]["children"]] if toc and toc[0].get("level") == 1 else \
             [{"id": t["id"], "name": t["name"]} for t in toc]
     h1 = f"<h1>{esc(title)}{f' <small>{esc(label)}</small>' if label else ''}</h1>"
-    body = shell.link_code(head + body, f"ch-{key}") + (shell.source_link(md_path, LANG) if md_path.is_file() else "")
+    body = shell.link_code(head + body, f"ch-{key}") + (shell.source_link(md_path) if md_path.is_file() else "")
     return key, f'<section class="chapter" id="ch-{key}">{h1}{body}</section>', [f"{flow}", subs, label]
 
 
@@ -423,7 +367,7 @@ def fragments_chapter(ov: dict[str, Any]) -> tuple[str, str, list]:
         users = W["sep"].join(f'<a href="#ch-{esc(u)}">{esc(u)}</a>' for u in fr.get("used_by") or []) or W["unused"]
         params = W["sep"].join(f"<code>{esc(p)}</code>" for p in fr.get("params") or []) or W["none"]
         kind = W["kind"].get(fr.get("kind", ""), "")
-        rows.append(f'<tr id="{fid}"><td><code>{esc(fr["file"])}</code></td><td>{kind}</td><td>{esc(tx(fr.get("description", "")))}</td>'
+        rows.append(f'<tr id="{fid}"><td><code>{esc(fr["file"])}</code></td><td>{kind}</td><td>{esc(fr.get("description", ""))}</td>'
                     f"<td>{params}</td><td>{users}</td></tr>")
     head = "".join(f"<th>{h}</th>" for h in W["fragments_head"])
     body = (f"<h1>{W['fragments']}</h1><p>{W['fragments_intro']}</p>"
@@ -494,15 +438,13 @@ CSS = """
 
 
 
-def build(fd: FlowDefs, ov: dict[str, Any], lang: Any) -> None:
-    global LANG, W
-    LANG, W = lang, WORDS[lang.code]
-    flow_ids = {(lang.flows / f"{f['flow']}.md").resolve(): f["flow"] for f in ov["flows"]}
+def build(fd: FlowDefs, ov: dict[str, Any]) -> None:
+    flow_ids = {(FLOWS / f"{f['flow']}.md").resolve(): f["flow"] for f in ov["flows"]}
     sections, nav = [], []
 
-    rtitle, rbody = split_title(lang.workflows.read_text(encoding="utf-8"))
-    body, toc = render_md(rbody, "index", lang.workflows.parent, flow_ids)
-    body = shell.link_code(body, "ch-index") + shell.source_link(lang.workflows, lang)
+    rtitle, rbody = split_title(shell.WORKFLOWS.read_text(encoding="utf-8"))
+    body, toc = render_md(rbody, "index", shell.WORKFLOWS.parent, flow_ids)
+    body = shell.link_code(body, "ch-index") + shell.source_link(shell.WORKFLOWS)
     sections.append(f'<section class="chapter" id="ch-index"><h1>{esc(rtitle)}</h1>{body}</section>')
     items = "".join(f'<li><a href="#{t["id"]}">{t["name"]}</a></li>' for t in toc)
     nav.append(f'<li class="ch"><a class="ch-link" href="#ch-index">{W["home"]}</a><ul class="sub">{items}</ul></li>')
@@ -521,10 +463,9 @@ def build(fd: FlowDefs, ov: dict[str, Any], lang: Any) -> None:
     nav.append(f'<li class="grp-t">{W["reference"]}</li><li class="ch"><a class="ch-link" href="#ch-{key}">{name}</a></li>')
 
     xlink = f'<a class="xlink" href="../index.html">{W["user_manual"]} →</a>'
-    out = shell.page(lang, W["manual"], W["title"], xlink, "../" + lang.other + "workflows/index.html", CSS, "\n".join(nav), "\n".join(sections))
-    out_dir().mkdir(parents=True, exist_ok=True)
-    (out_dir() / "index.html").write_text(out, encoding="utf-8")
-    print(f"wrote {out_dir() / 'index.html'} ({len(ov['flows'])} flows, {len(ov['fragments'])} fragments)")
+    out = shell.page(W["manual"], W["title"], xlink, CSS, "\n".join(nav), "\n".join(sections))
+    (HERE / "index.html").write_text(out, encoding="utf-8")
+    print(f"wrote {HERE / 'index.html'} ({len(ov['flows'])} flows, {len(ov['fragments'])} fragments)")
 
 
 GENERATED = "<!-- Generated by docs/workflows/build.py. Do not edit by hand. -->"
@@ -537,14 +478,11 @@ def flow_readmes(ov: dict[str, Any]) -> dict[Path, str]:
     rows = ["| Flow | Role | Flow manual | Prose |", "|---|---|---|---|"]
     for item in sorted(ov["flows"], key=lambda f: (f.get("order", 99), f["flow"])):
         f = item["flow"]
-        prose = [f"[中文]({f}.md)"] if (FLOWS / f"{f}.md").is_file() else []
-        if (shell.EN.flows / f"{f}.md").is_file():
-            prose.insert(0, f"[English](../docs/en/flows/{f}.md)")
-        rows.append(f"| [`{f}.yaml`]({f}.yaml) | `{item.get('role') or ''}` | [{f}]({site}#ch-{f}) ([中文]({site.replace('/workflows/', '/zh/workflows/')}#ch-{f})) "
-                    f"| {' · '.join(prose)} |")
+        prose = f"[`{f}.md`]({f}.md)" if (FLOWS / f"{f}.md").is_file() else ""
+        rows.append(f"| [`{f}.yaml`]({f}.yaml) | `{item.get('role') or ''}` | [{f}]({site}#ch-{f}) | {prose} |")
     flows = "\n".join([GENERATED, "# Flows", "",
                        f"One flow per role, shared by every project. What each flow does, its inputs, its step graph and what each "
-                       f"step does: the [Flow manual]({site}) ([中文]({site.replace('/workflows/', '/zh/workflows/')})). Fragments "
+                       f"step does: the [Flow manual]({site}). Fragments "
                        f"(`use:`) are in [lib/](lib/); how to write a flow: [Writing flows]({shell.SITE}#ch-08-flow-syntax).", "",
                        *rows]) + "\n"
     frows = ["| Fragment | Used by | Flow manual |", "|---|---|---|"]
@@ -561,14 +499,10 @@ def flow_readmes(ov: dict[str, Any]) -> dict[Path, str]:
 def main() -> None:
     fd = FlowDefs(REPO, KB)
     ov = fd.overview()
-    for lang in shell.LANGS:
-        build(fd, ov, lang)
+    build(fd, ov)
     owned = [p for p in shell.generated_readmes() if "docs/workflows/build.py" in p.read_text(encoding="utf-8").split("\n", 1)[0]]
     changed = shell.write_or_check(flow_readmes(ov), False, owned)
     print(f"wrote flows/README.md and flows/lib/README.md ({len(changed)} changed)")
-    if MISSING:
-        print("warning: docs/workflows/en.py has no English for these flow texts (the English page shows them in Chinese):\n"
-              + "\n".join(f"    {t!r}: '',".replace("\n", " ") for t in MISSING), file=sys.stderr)
 
 
 if __name__ == "__main__":

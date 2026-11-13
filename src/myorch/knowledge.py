@@ -88,34 +88,34 @@ class Source(BaseModel):
         out = []
         if self.kind == "dir":
             if not self.path:
-                out.append("没有写 path")
+                out.append("path is not set")
             else:
                 try:
                     p = expand_path(self.path)
                     root = os.environ.get("MYORCH_KB_ROOT")  # set only in the containers
                     if not p.is_dir() and root and not p.is_relative_to(Path(root).resolve()):
-                        out.append(f"控制台和 worker 只能读宿主机 {root} 下的目录（deploy/compose.yaml 只读挂载了它），"
-                                   f"{p} 不在里面：把文件夹放到 {root} 下，或者从宿主机的命令行发起")
+                        out.append(f"The console and the worker can only read folders under {root} on the host (deploy/compose.yaml mounts it read-only). "
+                                   f"{p} is not under it: move the folder under {root}, or start from the command line on the host")
                     elif not p.is_dir():
-                        out.append(f"目录不存在：{p}")
+                        out.append(f"Folder does not exist: {p}")
                     elif (p / ".obsidian").is_dir():  # a vault holds secrets: only a curated folder is mounted
-                        out.append(f"{p} 是一个 Obsidian vault（有 .obsidian/），不能直接挂。挂一个你整理过的文件夹")
+                        out.append(f"{p} is an Obsidian vault (it has .obsidian/) and cannot be mounted as is. Mount a folder you have curated")
                 except KnowledgeError as e:
                     out.append(str(e))
         elif self.kind == "git":
             if not self.repo or not re.fullmatch(r"[\w.-]+/[\w.-]+", self.repo):
-                out.append("repo 要写成 owner/name")
+                out.append("repo must be owner/name")
             if not self.provider:
-                out.append("没有写 provider（能克隆这个仓库的 OpenShell provider）")
+                out.append("provider is not set (the OpenShell provider that can clone this repository)")
         else:
             if not self.url.startswith("https://"):
-                out.append("url 要以 https:// 开头")
+                out.append("url must start with https://")
             if not self.provider or not self.token_env:
-                out.append("没有写 provider 和 token_env")
+                out.append("provider and token_env are not set")
             if not self.tools:
-                out.append("没有写 tools（允许 agent 调用的工具，其余一律禁用）")
+                out.append("tools is not set (the tools the agent may call; all others are disabled)")
             if self.auth == "basic" and not self.email:
-                out.append("auth: basic 要写 email")
+                out.append("auth: basic needs email")
         return out
 
 
@@ -131,7 +131,7 @@ def _load_dir(d: Path, level: str, root: Path) -> dict[str, Source]:
             data = yaml.safe_load(f.read_text()) or {}
             out[name] = Source.model_validate({**data, "name": name, "level": level, "file": str(f.relative_to(root))})
         except Exception as e:  # one broken file should not hide the rest; it is reported as a problem
-            raise KnowledgeError(f"{f.relative_to(root)}：{e}") from e
+            raise KnowledgeError(f"{f.relative_to(root)}: {e}") from e
     return out
 
 
@@ -160,7 +160,7 @@ def expand_path(raw: str) -> Path:
     expanded = os.path.expanduser(os.path.expandvars(raw))
     if "$" in expanded:
         missing = re.findall(r"\$\{?(\w+)", expanded)
-        raise KnowledgeError(f"路径 {raw} 里的环境变量没有设置：{', '.join(missing)}")
+        raise KnowledgeError(f"Environment variables in path {raw} are not set: {', '.join(missing)}")
     return Path(expanded).resolve()
 
 
@@ -192,7 +192,7 @@ def selected(rel: str, include: list, exclude: list) -> bool:
 
 
 SECRET_RULES = [
-    ("私钥", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
+    ("private key", r"-----BEGIN [A-Z ]*PRIVATE KEY-----"),
     ("AWS key", r"\bA(?:KIA|SIA)[0-9A-Z]{16}\b"),
     ("GitHub token", r"\b(?:gh[pousr]_[A-Za-z0-9]{30,}|github_pat_[A-Za-z0-9_]{30,})"),
     ("Anthropic key", r"\bsk-ant-[A-Za-z0-9_-]{20,}"),
@@ -200,10 +200,10 @@ SECRET_RULES = [
     ("Slack token", r"\bxox[abprs]-[A-Za-z0-9-]{10,}"),
     ("Google API key", r"\bAIza[0-9A-Za-z_-]{35}\b"),
     ("JWT", r"\beyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}"),
-    ("密码或密钥赋值", r"(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|token)\b\s*[:=]\s*['\"]?[^\s'\"]{8,}"),
+    ("password or key assignment", r"(?i)\b(?:password|passwd|pwd|secret|api[_-]?key|access[_-]?token|token)\b\s*[:=]\s*['\"]?[^\s'\"]{8,}"),
     # An HTTP auth header with a literal credential (not "$TOKEN" or "<token>").
-    ("Authorization 头", r"(?i)\bauthorization\s*[:=]\s*['\"]?(?:basic|bearer)\s+[A-Za-z0-9._~+/-]{12,}=*"),
-    ("带凭证的地址", r"\b[a-z][a-z0-9+.-]*://[^/\s:@'\"<>]+:[^/\s@'\"<>]+@"),
+    ("Authorization header", r"(?i)\bauthorization\s*[:=]\s*['\"]?(?:basic|bearer)\s+[A-Za-z0-9._~+/-]{12,}=*"),
+    ("URL with credentials", r"\b[a-z][a-z0-9+.-]*://[^/\s:@'\"<>]+:[^/\s@'\"<>]+@"),
     # Azure DevOps PAT (older format): 52 characters of lowercase base32, no prefix. Plain hex (hashes,
     # commit ids) never matches: at least one letter after f is required.
     ("Azure DevOps PAT", r"\b(?=[a-z2-7]{0,51}[g-z])[a-z2-7]{52}\b"),
@@ -216,7 +216,7 @@ def redact_text(text: str) -> tuple[str, int]:
     hits = dict(scan_text(text))
     if not hits:
         return text, 0
-    out = "\n".join(f"（这一行像{hits[n]}，已删除）" if n in hits else line for n, line in enumerate(text.splitlines(), 1))
+    out = "\n".join(f"(this line looked like a {hits[n]} and was removed)" if n in hits else line for n, line in enumerate(text.splitlines(), 1))
     return out + ("\n" if text.endswith("\n") else ""), len(hits)
 
 
@@ -250,7 +250,7 @@ def scan_text(text: str) -> list[tuple[int, str]]:
 
 
 def collect(root: Path, include: list, exclude: list, allow: list, max_size: int) -> tuple[list[str], list[str], int]:
-    """Files to snapshot (relative paths), secret-scan findings ("file:line 规则"), total bytes."""
+    """Files to snapshot (relative paths), secret-scan findings ("file:line rule"), total bytes."""
     ignore = []
     if (root / ".myorchignore").is_file():
         ignore = [ln.strip() for ln in (root / ".myorchignore").read_text().splitlines() if ln.strip() and not ln.startswith("#")]
@@ -264,7 +264,7 @@ def collect(root: Path, include: list, exclude: list, allow: list, max_size: int
         data = p.read_bytes()
         total += len(data)
         if total > max_size:
-            raise ValueError(f"过滤后超过 max_size（{max_size} 字节），收窄 include 或调大 max_size")
+            raise ValueError(f"After filtering, the files exceed max_size ({max_size} bytes). Narrow include or raise max_size")
         try:
             text = data.decode("utf-8")
         except UnicodeDecodeError:
@@ -288,8 +288,8 @@ def version_of(root: Path, files: list[str]) -> str:
 
 def _scan_failure(name: str, findings: list[str]) -> KnowledgeError:
     shown = "\n".join(f"  {f}" for f in findings[:30]) + ("\n  …" if len(findings) > 30 else "")
-    return KnowledgeError(f"知识源 {name} 里有疑似密钥，没有同步。删掉这些内容，或者确认是误报后把「文件:行号」"
-                          f"写进 allow_findings：\n{shown}")
+    return KnowledgeError(f"Knowledge source {name} contains what looks like secrets and was not synced. Remove them, or if they are false positives, "
+                          f"add \"file:line\" to allow_findings:\n{shown}")
 
 
 def sync(store, kb_root: Path, name: str, project: str | None = None, job_runner=None) -> dict[str, Any]:
@@ -297,13 +297,13 @@ def sync(store, kb_root: Path, name: str, project: str | None = None, job_runner
     secret-scan findings is not stored."""
     sources = load_sources(kb_root, project)
     if name not in sources:
-        raise KnowledgeError(f"没有登记知识源 {name}" + (f"（项目 {project}）" if project else ""))
+        raise KnowledgeError(f"Knowledge source {name} is not registered" + (f" (project {project})" if project else ""))
     s = sources[name]
     problems = [p for p in s.problems() if s.kind != "mcp"]
     if s.kind == "mcp":
-        raise KnowledgeError(f"{name} 是 MCP 知识源，不需要同步")
+        raise KnowledgeError(f"{name} is an MCP knowledge source; it does not need syncing")
     if problems:
-        raise KnowledgeError(f"知识源 {name} 不能同步：{'；'.join(problems)}")
+        raise KnowledgeError(f"Knowledge source {name} cannot be synced: {'; '.join(problems)}")
     known = {v["version"] for v in store.knowledge_versions(name)}
     if s.kind == "dir":
         root = expand_path(s.path)
@@ -311,7 +311,7 @@ def sync(store, kb_root: Path, name: str, project: str | None = None, job_runner
         if findings:
             raise _scan_failure(name, findings)
         if not files:
-            raise KnowledgeError(f"知识源 {name} 过滤后没有文件（{root}）")
+            raise KnowledgeError(f"Knowledge source {name} has no files after filtering ({root})")
         version = version_of(root, files)
         if version not in known:
             with tempfile.TemporaryDirectory() as tmp:
@@ -334,7 +334,7 @@ r = subprocess.run(["git", "-c", "http.extraHeader=Authorization: Basic " + auth
                     "--branch", spec["ref"], f"https://github.com/{spec['repo']}.git", str(src)],
                    capture_output=True, text=True)
 if r.returncode != 0:
-    json.dump({"error": "git clone 失败：" + r.stderr[-800:]}, open(out / "result.json", "w")); sys.exit(0)
+    json.dump({"error": "git clone failed: " + r.stderr[-800:]}, open(out / "result.json", "w")); sys.exit(0)
 __HELPERS__
 try:
     files, findings, total = collect(src, spec["include"], spec["exclude"], spec["allow"], spec["max_size"])
@@ -368,7 +368,7 @@ def _sync_git(store, kb_root: Path, s: Source, project: str | None, job_runner, 
 
         image = projects.load_project(kb_root, project).image or ""
     if not image:
-        raise KnowledgeError(f"git 知识源 {s.name} 需要一个带 git 和 python3 的镜像：在登记文件里写 image，或者用 --project 指定项目")
+        raise KnowledgeError(f"Git knowledge source {s.name} needs an image with git and python3: set image in the registration file, or pass --project")
     spec = {"repo": s.repo, "ref": s.ref, "include": s.include, "exclude": s.exclude,
             "allow": s.allow_findings, "max_size": s.max_size}
     key = f"knowledge-{s.name}-{hashlib.sha1(json.dumps(spec, sort_keys=True).encode()).hexdigest()[:8]}"
@@ -378,11 +378,11 @@ def _sync_git(store, kb_root: Path, s: Source, project: str | None, job_runner, 
     res = asyncio.run(runner.run(key, GIT_JOB.replace("__HELPERS__", _helpers_source()), [s.provider],
                                  files={"spec.json": json.dumps(spec)}, timeout=600))
     if res.get("error"):
-        raise KnowledgeError(f"知识源 {s.name}：{res['error']}")
+        raise KnowledgeError(f"Knowledge source {s.name}: {res['error']}")
     if res.get("findings"):
         raise _scan_failure(s.name, res["findings"])
     if not res.get("files"):
-        raise KnowledgeError(f"知识源 {s.name} 过滤后没有文件（{s.repo}@{s.ref}）")
+        raise KnowledgeError(f"Knowledge source {s.name} has no files after filtering ({s.repo}@{s.ref})")
     version = res["version"]
     if version not in known:
         store.knowledge_adopt_job(key, s.name, version, KEEP_VERSIONS)
@@ -443,11 +443,11 @@ def refresh(store, kb_root: Path, project: str | None, names: list[str] | None, 
             r = sync(store, kb_root, n, project, job_runner)
         except KnowledgeError as e:
             if s.kind == "git" and versions:
-                notes.append(f"知识源 {n} 同步失败，用上一次的快照 {versions[0]['version']}：{e}")
+                notes.append(f"Knowledge source {n} failed to sync; using the last snapshot {versions[0]['version']}: {e}")
                 continue
             raise
         if not r.get("unchanged"):
-            notes.append(f"知识源 {n} 有变化，已同步：{r['version']}（{r['files']} 个文件）")
+            notes.append(f"Knowledge source {n} changed and was synced: {r['version']} ({r['files']} files)")
     return notes
 
 
@@ -463,17 +463,17 @@ def resolve(store, kb_root: Path, project: str | None, names: list[str] | None) 
     for n in names:
         s = sources.get(n)
         if s is None:
-            raise KnowledgeError(f"知识源 {n} 没有登记，或者项目 {project or '（无）'} 不能用它")
+            raise KnowledgeError(f"Knowledge source {n} is not registered, or project {project or '(none)'} cannot use it")
         if s.kind == "mcp":
             if s.problems():
-                raise KnowledgeError(f"知识源 {n} 不能挂载：{'；'.join(s.problems())}")
+                raise KnowledgeError(f"Knowledge source {n} cannot be mounted: {'; '.join(s.problems())}")
             refs.append(KnowledgeRef(name=n, kind="mcp", index=s.index, url=s.url, provider=s.provider,
                                      token_env=s.token_env, auth=s.auth, email=s.email, tools=s.tools))
             continue
         versions = store.knowledge_versions(n)
         if not versions:
-            raise KnowledgeError(f"知识源 {n} 没有快照（同步没有成功）：myorch knowledge sync {n}"
-                                 + (f" --project {project}" if s.level != "global" else "") + " 可以看到原因")
+            raise KnowledgeError(f"Knowledge source {n} has no snapshot (sync did not succeed): myorch knowledge sync {n}"
+                                 + (f" --project {project}" if s.level != "global" else "") + " shows why")
         refs.append(KnowledgeRef(name=n, kind=s.kind, version=versions[0]["version"], index=s.index))
     return refs
 
@@ -543,13 +543,13 @@ def registry_file(kb_root: Path, name: str, project: str | None) -> Path:
         return kb_root / SOURCES / f"{name}.yaml"
     d = projects.project_dir(kb_root, project)
     if not (d / "project.yaml").is_file():
-        raise KnowledgeError(f"没有项目 {project}")
+        raise KnowledgeError(f"No project {project}")
     return d / "sources" / f"{name}.yaml"
 
 
 def _clean(kind: str, data: dict[str, Any]) -> dict[str, Any]:
     if kind not in FIELDS:
-        raise KnowledgeError(f"类型只能是 dir、git 或 mcp，不是 {kind!r}")
+        raise KnowledgeError(f"kind must be dir, git or mcp, not {kind!r}")
     out: dict[str, Any] = {"kind": kind}
     for k in FIELDS[kind]:
         v = data.get(k)
@@ -578,9 +578,9 @@ def check(kb_root: Path, name: str, project: str | None, data: dict[str, Any]) -
         files, findings, total = collect(expand_path(s.path), s.include, s.exclude, s.allow_findings, s.max_size)
         out.update(files=len(files), bytes=total, findings=findings[:30], sample=files[:15])
         if findings:
-            out["problems"].append(f"扫描到 {len(findings)} 处疑似密钥，同步会失败。删掉这些内容，或者把误报的「文件:行号」写进 allow_findings")
+            out["problems"].append(f"The scan found {len(findings)} possible secrets; sync will fail. Remove them, or add \"file:line\" of false positives to allow_findings")
         elif not files:
-            out["problems"].append("过滤后没有文件")
+            out["problems"].append("No files after filtering")
     return out
 
 
@@ -606,7 +606,7 @@ def register(kb_root: Path, name: str, project: str | None, data: dict[str, Any]
     result = check(kb_root, name, project, data)
     f = registry_file(kb_root, name, project)
     if f.exists() and not replace:
-        raise KnowledgeError(f"{f.relative_to(kb_root)} 已经存在。要改它，在它的页面上点「编辑」")
+        raise KnowledgeError(f"{f.relative_to(kb_root)} already exists. To change it, click Edit on its page")
     f.parent.mkdir(parents=True, exist_ok=True)
     f.write_text(f"# Registered in the console by {by}. Fields: myorch/knowledge.py Source.\n" + result["yaml"])
     rel = str(f.relative_to(kb_root))
@@ -619,7 +619,7 @@ def unregister(kb_root: Path, name: str, project: str | None, by: str) -> dict[s
     keep their record); new runs can no longer mount the source."""
     f = registry_file(kb_root, name, project)
     if not f.is_file():
-        raise KnowledgeError(f"没有登记 {f.relative_to(kb_root)}")
+        raise KnowledgeError(f"{f.relative_to(kb_root)} is not registered")
     rel = str(f.relative_to(kb_root))
     f.unlink()
     return {"file": rel, "commit": _commit(kb_root, rel, f"knowledge: remove {name}" + (f" ({project})" if project else ""), by)}

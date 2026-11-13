@@ -1,36 +1,36 @@
-# 用 docker compose 运行 myorch
+# Running myorch with docker compose
 
-服务之间的调用关系和启动顺序见 [2. 服务和依赖](../docs/02-services.md#docker-compose-里的服务) 里的图。
+For how the services call each other and the order they start in, see the diagram in [2. Services and dependencies](../docs/02-services.md#services-in-docker-compose).
 
-状态：**2026-11-05 起是日常环境（macOS，Docker Desktop）**。冒烟测试通过，8 个凭证都从 sandbox 里测过（包括 github.com 的 git 读取）。Linux 主机还没有测。调研结果见 [docs/notes/2026-11-04-gateway-in-docker.md](../docs/notes/2026-11-04-gateway-in-docker.md)。
+Status: **the everyday environment since 2026-11-05 (macOS, Docker Desktop)**. The smoke test passes. All 8 credentials were tested from a sandbox (including git reads from github.com). Linux hosts are not tested yet. For the investigation, see [docs/notes/2026-11-04-gateway-in-docker.md](../docs/notes/2026-11-04-gateway-in-docker.md).
 
-compose 里有这些服务：
+compose has these services:
 
-| 服务 | 内容 |
+| Service | What it does |
 |---|---|
-| `temporal` | `temporal server start-dev`，数据库是数据目录里的 `temporal.db` |
-| `gateway-init` | 每次 `up` 跑一次：没有密钥时，生成 gateway 签发 sandbox 凭证用的 Ed25519 密钥 |
-| `gateway` | OpenShell gateway 官方镜像，docker driver |
-| `providers` | 每次 `up` 跑一次：从凭证文件导入 provider profile 和凭证（`deploy/provision.py`） |
-| `init` | 每次 `up` 跑一次：执行 `myorch init`，建 volume、打审批标签、装 `tools/` |
-| `worker` | `myorch worker`。`init` 和 `providers` 成功以后才启动 |
-| `ui` | `myorch ui`：控制台，以及 Slack 适配器和 watchdog |
+| `temporal` | `temporal server start-dev`. Its database is `temporal.db` in the data directory |
+| `gateway-init` | Runs once on every `up`: if there is no key yet, it generates the Ed25519 key the gateway uses to sign sandbox credentials |
+| `gateway` | The official OpenShell gateway image, docker driver |
+| `providers` | Runs once on every `up`: imports provider profiles and credentials from the credentials file (`deploy/provision.py`) |
+| `init` | Runs once on every `up`: runs `myorch init`, which creates the volume, adds the approval labels and installs `tools/` |
+| `worker` | `myorch worker`. Starts only after `init` and `providers` succeed |
+| `ui` | `myorch ui`: the console, plus the Slack adapter and the watchdog |
 
-worker 和 ui 挂载宿主机的 `myorch-data/`（`/data`）、`myorch-knowledge/`（`/knowledge`）、`channels.yaml`（只读），以及本机目录知识源的根目录 `MYORCH_KB_ROOT`（只读，默认 `~/orca/kb`，容器内外路径相同）。
+worker and ui mount the host's `myorch-data/` (`/data`), `myorch-knowledge/` (`/knowledge`), `channels.yaml` (read-only), and `MYORCH_KB_ROOT`, the root of local directory knowledge sources (read-only, default `~/orca/kb`, same path inside and outside the container).
 
-sandbox 仍然是宿主机 Docker 上的容器，和这些服务平级。gateway 和 worker 通过挂进来的 `/var/run/docker.sock` 操作宿主机的 Docker，不是 Docker-in-Docker。挂 docker.sock 等于给这些容器宿主机的 root 权限。sandbox 的隔离不受影响，但这套服务本身不是隔离边界。
+Sandboxes are still containers on the host's Docker, next to these services. The gateway and the worker control the host's Docker through the mounted `/var/run/docker.sock`; this is not Docker-in-Docker. Mounting docker.sock gives these containers root on the host. Sandbox isolation is not affected, but this set of services is not an isolation boundary itself.
 
-## 安装
+## Installation
 
-所有命令都在 `myorch/` 目录下执行。
+Run every command from the `myorch/` directory.
 
-### ① 目录
+### ① Directories
 
-`myorch/`、`myorch-knowledge/`、`myorch-data/` 放在同一个父目录下，和 [4. 安装和启动](../docs/04-setup.md) 一样。放在别处时，复制 `deploy/.env.example` 为 `deploy/.env`，改里面的路径。`deploy/.env` 里还可以设端口、卷名、时区、`MYORCH_KB_ROOT`，以及控制台和 CLI 以谁的名义操作（`MYORCH_USER`，必须是 `channels.yaml` 里的人；不设时用宿主机的 `$USER`）。
+Put `myorch/`, `myorch-knowledge/` and `myorch-data/` in the same parent directory, as in [4. Setup](../docs/04-setup.md). If they are somewhere else, copy `deploy/.env.example` to `deploy/.env` and change the paths in it. In `deploy/.env` you can also set the ports, the volume name, the time zone, `MYORCH_KB_ROOT`, and on whose behalf the console and the CLI act (`MYORCH_USER`, which must be a person in `channels.yaml`; if unset, the host's `$USER` is used).
 
-### ② 凭证文件
+### ② Credentials file
 
-凭证写在 `deploy/secrets/providers.yaml` 里。每次 `docker compose up`，`providers` 服务读这个文件，写进 gateway：
+Credentials go in `deploy/secrets/providers.yaml`. On every `docker compose up`, the `providers` service reads this file and writes it into the gateway:
 
 ```sh
 mkdir -p deploy/secrets
@@ -38,196 +38,196 @@ cp deploy/providers.example.yaml deploy/secrets/providers.yaml
 chmod 600 deploy/secrets/providers.yaml
 ```
 
-用编辑器填入 token。格式见 `deploy/providers.example.yaml` 里的注释：
+Fill in the tokens with an editor. For the format, see the comments in `deploy/providers.example.yaml`:
 
 ```yaml
-github_profiles: [blog]              # 要生成 GitHub profile 的项目
+github_profiles: [blog]              # projects to generate a GitHub profile for
 providers:
-  claude:                            # 名字必须是 claude
+  claude:                            # the name must be claude
     type: claude-code-oauth
     credentials:
-      CLAUDE_CODE_OAUTH_TOKEN: "..."   # claude setup-token 生成的 token
+      CLAUDE_CODE_OAUTH_TOKEN: "..."   # the token from claude setup-token
   github-blog:
     type: github-blog
     credentials:
       GITHUB_TOKEN: "..."
 ```
 
-- `credentials` 的键是 provider profile 里声明的环境变量名（`env_vars`）。
-- `deploy/secrets/` 在 `.gitignore` 和 `.dockerignore` 里，不会提交，也不会打进镜像。只有 `providers` 服务挂载它，worker、控制台和 sandbox 都看不到。
-- 值只通过子进程的环境变量交给 `openshell`，不出现在命令行参数和日志里。
-- 不管文件里有没有列出，这些 provider profile 都会导入：`openshell/providers/*.yaml`，以及 `myorch-knowledge/<项目>/providers/*.yaml`。gateway 里已有的 profile 按文件更新。
-- gateway 里有、文件里没有的 provider 保持不变，日志里会列出来。
-- 文件不存在时，`providers` 服务什么也不做。
-- 改了 token 以后，执行 `docker compose -f deploy/compose.yaml run --rm providers` 就能生效，不用重启其他服务。
-- provider 的值全部为空时跳过，日志里写 `skipped, no value yet`，可以以后再填。
-- 改了 provider 的 `type`（比如 `claude` 从 `claude-code-oauth` 换成 `claude-code-vertex`）时，先删掉旧的再按新类型建。
-- 有 `refresh:` 的 provider，由 gateway 自己换取短期 token：`service_account_json:` 指向 secrets 目录里的 GCP service account JSON key，`client_email` 和 `private_key` 作为刷新材料交给 gateway（私钥只在 gateway 里），然后立即换一次 token。key 不对或没有权限时，`providers` 在这一步失败。
-- 用 Vertex AI 时（`claude` 的类型是 `claude-code-vertex`），还要在 `deploy/.env` 里设 `MYORCH_VERTEX_PROJECT`（和 `MYORCH_VERTEX_REGION`，默认 `global`），写法见 `deploy/providers.example.yaml`。
-- 文件写错（只填了一部分值、类型不存在）时，`providers` 以失败退出，worker 不启动。用 `docker compose -f deploy/compose.yaml logs providers` 查看原因。
+- The keys of `credentials` are the environment variable names declared in the provider profile (`env_vars`).
+- `deploy/secrets/` is in `.gitignore` and `.dockerignore`. It is never committed and never built into an image. Only the `providers` service mounts it; the worker, the console and sandboxes cannot see it.
+- Values reach `openshell` only through a child process's environment variables. They never appear in command-line arguments or logs.
+- These provider profiles are always imported, whether or not the file lists them: `openshell/providers/*.yaml` and `myorch-knowledge/<project>/providers/*.yaml`. Profiles already in the gateway are updated from the files.
+- Providers that are in the gateway but not in the file are left unchanged. The log lists them.
+- If the file does not exist, the `providers` service does nothing.
+- After changing a token, run `docker compose -f deploy/compose.yaml run --rm providers` to apply it. Other services do not need a restart.
+- A provider whose values are all empty is skipped. The log says `skipped, no value yet`. You can fill it in later.
+- When a provider's `type` changes (for example `claude` from `claude-code-oauth` to `claude-code-vertex`), the old one is deleted first and then created with the new type.
+- For a provider with `refresh:`, the gateway obtains short-lived tokens itself. `service_account_json:` points to a GCP service account JSON key in the secrets directory. Its `client_email` and `private_key` are handed to the gateway as refresh material (the private key stays only in the gateway), and a token is obtained once right away. If the key is wrong or lacks permissions, `providers` fails at this point.
+- With Vertex AI (`claude` has the type `claude-code-vertex`), also set `MYORCH_VERTEX_PROJECT` in `deploy/.env` (and `MYORCH_VERTEX_REGION`, default `global`). See `deploy/providers.example.yaml` for how.
+- If the file is wrong (only some values filled in, a type that does not exist), `providers` exits with a failure and the worker does not start. Use `docker compose -f deploy/compose.yaml logs providers` to see why.
 
-gateway 的状态（凭证、provider profile）在 volume `<项目名>_gateway-state` 里（默认 `myorch_gateway-state`）。
+The gateway's state (credentials, provider profiles) is in the volume `<project name>_gateway-state` (default `myorch_gateway-state`).
 
-### ③ 构建镜像
+### ③ Build the images
 
 ```sh
-docker build -t openshell-claude-code:latest images/claude-code    # 默认 sandbox 镜像
-docker compose -f deploy/compose.yaml build                          # myorch 镜像
+docker build -t openshell-claude-code:latest images/claude-code    # default sandbox image
+docker compose -f deploy/compose.yaml build                          # myorch image
 ```
 
-项目的开发镜像用项目包里的 `image/` 构建，见 [4. 安装和启动 · 项目的开发镜像](../docs/04-setup.md#项目的开发镜像)。
+A project's development image is built from `image/` in its project pack; see [4. Setup · Project development images](../docs/04-setup.md#project-development-images).
 
-### ④ 启动
+### ④ Start
 
 ```sh
 docker compose -f deploy/compose.yaml up -d
-docker compose -f deploy/compose.yaml ps -a     # gateway-init、providers、init 是 exited (0)，其他是 running
+docker compose -f deploy/compose.yaml ps -a     # gateway-init, providers, init are exited (0); the others are running
 ```
 
-### ⑤ 冒烟测试
+### ⑤ Smoke test
 
-不需要凭证，也不调用模型：
+It needs no credentials and calls no model:
 
 ```sh
 docker compose -f deploy/compose.yaml exec worker myorch run deploy/smoke.yaml --wait
 ```
 
-两个步骤都是 `succeeded`，第二步的摘要是 `upstream said: hello from ...`。
+Both steps are `succeeded`, and the second step's summary is `upstream said: hello from ...`.
 
-### ⑥ 项目包和知识源
+### ⑥ Project packs and knowledge sources
 
-下面的命令用一个 shell 函数（bash 和 zsh 都能用）：
+The commands below use a shell function (works in bash and zsh):
 
 ```sh
 mo() { docker compose -f deploy/compose.yaml exec worker "$@"; }
 mo myorch project sync <name>
 ```
 
-知识源不用手动同步：发起运行时自动同步。要提前同步时用 `mo myorch knowledge sync <名字> --project <name>`。
+Knowledge sources do not need a manual sync: they are synced when a run starts. To sync ahead of time, use `mo myorch knowledge sync <source> --project <name>`.
 
-然后打开控制台：http://127.0.0.1:8800/
+Then open the console: http://127.0.0.1:8800/
 
-## 新机器
+## New machine
 
-用于长期运行的机器，例如 Mac mini。
+For a machine that runs for a long time, for example a Mac mini.
 
-新机器从零开始，不带旧机器的历史（以前运行的工作区、评测案例、Temporal 记录）。learn、eval 在新机器上从头积累。
+A new machine starts from scratch. It does not bring the old machine's history (workspaces of earlier runs, eval cases, Temporal records). learn and eval build up again from the start on the new machine.
 
-### 旧机器上先做
+### First, on the old machine
 
-1. myorch 和 myorch-knowledge 都已经推到 GitHub（myorch-knowledge 是私有仓库 `leweii/myorch-knowledge`）。在两个目录里各执行一次 `git status`，确认没有没提交的改动。
-2. 准备好凭证文件 `deploy/secrets/providers.yaml`（和 `slack.env`，如果新机器要跑 Slack）。用 AirDrop 或 `scp` 传过去，不要经过聊天或邮件。
+1. myorch and myorch-knowledge are both pushed to GitHub (myorch-knowledge is the private repository `leweii/myorch-knowledge`). Run `git status` once in each directory and check that there are no uncommitted changes.
+2. Have the credentials file `deploy/secrets/providers.yaml` ready (and `slack.env` if the new machine will run Slack). Copy them over with AirDrop or `scp`, not through chat or email.
 
-### 新机器上
+### On the new machine
 
-1. 装 Docker Desktop，启动它，并在设置里打开「登录时启动」。没有 git 时执行 `xcode-select --install`。装 Homebrew，再 `brew install gh`，然后 `gh auth login`（账号 `leweii`）。
-2. 克隆 myorch，把凭证文件放进 `deploy/secrets/`：
+1. Install Docker Desktop, start it, and turn on "Start when you sign in" in its settings. If there is no git, run `xcode-select --install`. Install Homebrew, then `brew install gh`, then `gh auth login` (account `leweii`).
+2. Clone myorch and put the credentials files into `deploy/secrets/`:
    ```sh
    mkdir -p ~/orca/projects && gh repo clone leweii/myorch ~/orca/projects/myorch
-   mkdir -p ~/orca/projects/myorch/deploy/secrets   # 把 providers.yaml（和 slack.env）放进这里
+   mkdir -p ~/orca/projects/myorch/deploy/secrets   # put providers.yaml (and slack.env) here
    ```
-3. 运行安装脚本：
+3. Run the install script:
    ```sh
    bash ~/orca/projects/myorch/deploy/bootstrap-mac.sh
    ```
-   它会克隆 myorch-knowledge、建 `myorch-data`、构建所有镜像（第一次要下载几 GB）、起服务、同步项目包、跑冒烟测试。三个目录默认放在 `~/orca/projects/` 下，用 `MYORCH_ROOT` 改。哪一步需要你动手，它会停下来说明。可以反复运行：已经做好的步骤会跳过。`FORCE=1` 强制重建镜像。
-4. 新机器的登录名不是 `jakobhe` 时，按脚本的提示加上 `MYORCH_USER=jakobhe` 再运行。这个值写进 `deploy/.env`，控制台和 CLI 以这个人的名义操作。
+   It clones myorch-knowledge, creates `myorch-data`, builds all images (the first time downloads several GB), starts the services, syncs the project packs and runs the smoke test. The three directories go under `~/orca/projects/` by default; change that with `MYORCH_ROOT`. Where a step needs you to act, it stops and says so. You can run it again and again: steps that are done are skipped. `FORCE=1` forces the images to be rebuilt.
+4. If the login name on the new machine is not `jakobhe`, follow the script's hint and run it again with `MYORCH_USER=jakobhe`. The value is written to `deploy/.env`, and the console and the CLI act on behalf of this person.
 
-### 长期运行
+### Running for a long time
 
-- **不要睡眠**：系统设置 → 能耗，打开「防止自动进入睡眠」。
-- 服务设成 `restart: unless-stopped`，Docker Desktop 启动后自动起来。
-- **Slack 只能在一台机器上跑**：两台机器用同一个令牌连 Slack 时，Slack 会把事件随机分给两边。新机器起 Slack 之前，先在旧机器上停掉：删掉旧机器的 `deploy/secrets/slack.env`，再执行 `docker compose -f deploy/compose.yaml up -d --force-recreate ui`。
-- **myorch-knowledge 以新机器为准**：learn、onboard、postmortem 采纳的建议会提交到新机器上的副本。在新机器上推到 GitHub，其他地方只拉取。
+- **No sleep**: System Settings → Energy, turn on "Prevent automatic sleeping".
+- The services are set to `restart: unless-stopped`, so they come up when Docker Desktop starts.
+- **Slack may run on one machine only**: when two machines connect to Slack with the same token, Slack hands events to either side at random. Before the new machine starts Slack, stop it on the old machine: delete the old machine's `deploy/secrets/slack.env`, then run `docker compose -f deploy/compose.yaml up -d --force-recreate ui`.
+- **The new machine's myorch-knowledge is the source of truth**: suggestions adopted by learn, onboard and postmortem are committed to the copy on the new machine. Push to GitHub from the new machine; everywhere else only pulls.
 
-### 从另一台电脑使用
+### Using it from another computer
 
-myorch 只监听 `127.0.0.1`，并且只接受 Host 是 `127.0.0.1:8800` 或 `localhost:8800` 的请求（防 DNS rebinding），不要改成对外开放。在新机器上打开「远程登录」（系统设置 → 通用 → 共享），然后在你用的电脑上开一个 SSH 端口转发：
+myorch listens only on `127.0.0.1` and accepts only requests whose Host is `127.0.0.1:8800` or `localhost:8800` (against DNS rebinding). Do not open it up. On the new machine, turn on "Remote Login" (System Settings → General → Sharing). Then open an SSH port forward on the computer you use:
 
 ```sh
-ssh -N -L 8800:127.0.0.1:8800 <用户>@<新机器>.local
+ssh -N -L 8800:127.0.0.1:8800 <user>@<new machine>.local
 ```
 
-之后这台电脑上的 http://127.0.0.1:8800/ 就是新机器的控制台。Claude Code channel 也一样：它在你用的电脑上运行（需要 myorch 仓库和 uv），连的 `127.0.0.1:8800` 经过转发到达新机器。
+After that, http://127.0.0.1:8800/ on this computer is the new machine's console. The Claude Code channel works the same way: it runs on the computer you use (it needs the myorch repository and uv), and the `127.0.0.1:8800` it connects to reaches the new machine through the forward.
 
 ## Slack
 
-Slack 适配器（`src/myorch/channels/slack.py`）在控制台进程里运行：私信发起人、回答提问、审批、`/myorch` 发起运行。设计见 [docs/notes/2026-11-05-slack-adapter.md](../docs/notes/2026-11-05-slack-adapter.md)。
+The Slack adapter (`src/myorch/channels/slack.py`) runs in the console process: it sends direct messages to initiators, and handles answers to questions, approvals, and `/myorch` to start a run. For the design, see [docs/notes/2026-11-05-slack-adapter.md](../docs/notes/2026-11-05-slack-adapter.md).
 
-1. 建应用：打开 https://api.slack.com/apps → Create New App → From a manifest → 选 workspace → 粘贴 `deploy/slack-app-manifest.yaml`。
-2. 安装：OAuth & Permissions → Install to Workspace。复制 **Bot User OAuth Token**（`xoxb-` 开头）。
-3. 建 app-level token：Basic Information → App-Level Tokens → Generate，scope 选 `connections:write`。复制它（`xapp-` 开头）。
-4. 写令牌：
+1. Create the app: open https://api.slack.com/apps → Create New App → From a manifest → pick the workspace → paste `deploy/slack-app-manifest.yaml`.
+2. Install it: OAuth & Permissions → Install to Workspace. Copy the **Bot User OAuth Token** (starts with `xoxb-`).
+3. Create an app-level token: Basic Information → App-Level Tokens → Generate, with the scope `connections:write`. Copy it (starts with `xapp-`).
+4. Write the tokens:
    ```sh
    cp deploy/slack.env.example deploy/secrets/slack.env && chmod 600 deploy/secrets/slack.env
    ```
-   用编辑器填入两个令牌。`deploy/secrets/` 不进 git，也不进镜像。只有 `ui` 服务读取它。
-5. 登记自己：在 Slack 里打开自己的资料 → ⋮ → Copy member ID，写进 `channels.yaml`：`jakobhe: {github: leweii, slack: U...}`。
-6. 生效：`docker compose -f deploy/compose.yaml up -d --force-recreate ui`。`docker compose -f deploy/compose.yaml logs ui` 里出现 `slack: connected (Socket Mode)`。
-7. 试一下：在 Slack 里给 myorch 发私信，或者输入 `/myorch`。
+   Fill in the two tokens with an editor. `deploy/secrets/` is not in git and not in images. Only the `ui` service reads it.
+5. Register yourself: in Slack, open your profile → ⋮ → Copy member ID, and write it into `channels.yaml`: `jakobhe: {github: leweii, slack: U...}`.
+6. Apply: `docker compose -f deploy/compose.yaml up -d --force-recreate ui`. `docker compose -f deploy/compose.yaml logs ui` shows `slack: connected (Socket Mode)`.
+7. Try it: send myorch a direct message in Slack, or type `/myorch`.
 
-没登记的人给 bot 发消息时，bot 回复他的 member ID，不执行任何操作。
+When someone who is not registered messages the bot, the bot replies with their member ID and does nothing else.
 
 ## Claude Code
 
-本机的 Claude Code 会话可以收到 myorch 的结果（成功、失败、提问、审批），并用工具读日志、发起流程。设计见 [docs/notes/2026-11-05-claude-code-channel.md](../docs/notes/2026-11-05-claude-code-channel.md)。
+A local Claude Code session can receive myorch's results (succeeded, failed, questions, approvals), and read logs and start flows with tools. For the design, see [docs/notes/2026-11-05-claude-code-channel.md](../docs/notes/2026-11-05-claude-code-channel.md).
 
-1. 在 `myorch/` 目录下启动会话（`.mcp.json` 注册了服务器 `myorch`）：
+1. Start the session in the `myorch/` directory (`.mcp.json` registers the server `myorch`):
    ```sh
    claude --dangerously-load-development-channels server:myorch
    ```
-   第一次会有两个确认：开发用 channel 的警告（选 I am using this for local development），以及新的 MCP 服务器（选 Use this MCP server）。
-2. 启动横幅下面出现 `Channels (experimental) messages from server:myorch ...`，说明 channel 生效了。`/mcp` 能看到 `myorch` 和它的工具。
-3. 运行结束、提问、审批时，会话里会收到 `<channel source="myorch" ...>` 消息。
+   The first time there are two confirmations: the warning about development channels (choose I am using this for local development), and the new MCP server (choose Use this MCP server).
+2. When `Channels (experimental) messages from server:myorch ...` appears below the startup banner, the channel is active. `/mcp` shows `myorch` and its tools.
+3. When a run finishes, asks a question or needs an approval, the session receives a `<channel source="myorch" ...>` message.
 
-- 订阅范围用 `.mcp.json` 里的 `MYORCH_SCOPE` 设置：`mine`（默认）、`session`、`all`。`MYORCH_PROJECTS=blog,mdm` 限定项目。
-- 在别的目录也想用时，加到用户级配置：`claude mcp add --scope user myorch -- uv run --quiet --project <myorch 的绝对路径> python -m myorch.channels.claude_code`，启动命令不变。
-- Agent 不能审批。审批在控制台或 Slack 里做。
-- **channel 只支持 Anthropic 认证**（claude.ai 账号或 Console API key），不支持 Vertex AI、Bedrock、Foundry：在这些提供方上，客户端会静默丢弃通知。这时可以用轮询代替：定时读 `GET http://127.0.0.1:8800/channel/events.json?after=<seq>`，自己记住游标。channel 和轮询不要同时用，同一个事件会被处理两次。
+- Set the subscription scope with `MYORCH_SCOPE` in `.mcp.json`: `mine` (default), `session`, `all`. `MYORCH_PROJECTS=blog,mdm` limits it to some projects.
+- To use it from other directories too, add it to the user-level configuration: `claude mcp add --scope user myorch -- uv run --quiet --project <absolute path of myorch> python -m myorch.channels.claude_code`. The start command stays the same.
+- Agents cannot approve. Approve in the console or in Slack.
+- **Channels only work with Anthropic authentication** (a claude.ai account or a Console API key), not with Vertex AI, Bedrock or Foundry: with those providers the client silently drops the notifications. Use polling instead: read `GET http://127.0.0.1:8800/channel/events.json?after=<seq>` on a timer and keep the cursor yourself. Do not use the channel and polling at the same time, or each event is handled twice.
 
-## 常用命令
-
-```sh
-docker compose -f deploy/compose.yaml logs -f worker            # worker 日志
-docker compose -f deploy/compose.yaml up -d --build worker ui   # 改了 src/ 以后
-docker compose -f deploy/compose.yaml exec worker myorch list   # 任何 myorch 命令都这样执行
-docker compose -f deploy/compose.yaml down                      # 停止。数据保留在数据目录和 volume 里
-```
-
-- 从容器里发起的运行，发起人是 `deploy/.env` 的 `MYORCH_USER`（不设时是宿主机的 `$USER`），不是 root。要以别人的名义发起时加 `--as <名字>`。
-
-## 发布 origin/main
+## Common commands
 
 ```sh
-deploy/update.sh --check   # 要发布哪些提交、会等什么
-deploy/update.sh           # 快进 main → 等没有正在执行的步骤 → 重建并重启 worker 和控制台 → 冒烟 → 打 tag deploy-<时间>
+docker compose -f deploy/compose.yaml logs -f worker            # worker log
+docker compose -f deploy/compose.yaml up -d --build worker ui   # after changing src/
+docker compose -f deploy/compose.yaml exec worker myorch list   # run any myorch command like this
+docker compose -f deploy/compose.yaml down                      # stop. Data stays in the data directory and the volumes
 ```
 
-- 只在 `main` 分支上运行，只能快进。
-- 重启会打断正在执行的步骤，所以先等到没有步骤在执行（最多 `WAIT_MAX` 秒，默认 6 小时）。等回答、等审批的运行可以留着。它通过控制台的接口（`MYORCH_URL`，默认 `http://127.0.0.1:8800`）看运行的状态。
-- 改了 `src/myorch/engines/` 或 `src/myorch/core/run.py` 时，等所有未结束的运行结束（Temporal 用新代码重放未结束的运行）。
-- 镜像从目标提交的干净检出（临时 git worktree）构建，不用工作区：工作区里别人未提交或已暂存的改动不会进镜像。改了 `images/claude-code/` 时也重建 sandbox 镜像。
-- 冒烟失败时自动重建上一次发布的提交，失败的提交记在 `deploy/.failed`，origin/main 有新提交之前不会再发布它。
-- 开发评测的调度 agent 合并白名单里的改动以后，也用它发布。
-- Temporal UI：http://127.0.0.1:8233/
+- For runs started from inside a container, the initiator is `MYORCH_USER` from `deploy/.env` (if unset, the host's `$USER`), not root. To start a run on someone else's behalf, add `--as <name>`.
 
-## 端口
+## Release origin/main
 
-全部只发布在 `127.0.0.1`。
+```sh
+deploy/update.sh --check   # which commits would be released, and what it would wait for
+deploy/update.sh           # fast-forward main → wait until no step is running → rebuild and restart worker and console → smoke test → tag deploy-<time>
+```
 
-| 端口 | 服务 | 能不能改 |
+- Runs only on the `main` branch, fast-forward only.
+- A restart interrupts the steps that are running, so it first waits until no step is running (at most `WAIT_MAX` seconds, default 6 hours). Runs waiting for an answer or an approval may stay. It reads the state of the runs through the console's API (`MYORCH_URL`, default `http://127.0.0.1:8800`).
+- When `src/myorch/engines/` or `src/myorch/core/run.py` changed, it waits until no run is unfinished (Temporal replays unfinished runs against the new code).
+- The images are built from a clean checkout of the target commit (a temporary git worktree), not from the work tree: uncommitted or staged changes someone has in the work tree do not end up in the image. When `images/claude-code/` changed, the sandbox image is rebuilt too.
+- If the smoke test fails, the previously released commit is rebuilt automatically. The failed commit is recorded in `deploy/.failed` and is not released again until origin/main has a newer commit.
+- The development-eval orchestrator agent also releases with it after it merges a whitelisted change.
+- Temporal UI: http://127.0.0.1:8233/
+
+## Ports
+
+All are published on `127.0.0.1` only.
+
+| Port | Service | Can it change |
 |---|---|---|
-| 8800 | 控制台 | `MYORCH_UI_PORT`。容器内外用同一个端口，因为控制台只接受 Host 为 `127.0.0.1:<它自己的端口>` 或 `localhost:<它自己的端口>` 的请求（防 DNS rebinding） |
+| 8800 | Console | `MYORCH_UI_PORT`. The same port is used inside and outside the container, because the console accepts only requests whose Host is `127.0.0.1:<its own port>` or `localhost:<its own port>` (against DNS rebinding) |
 | 7233 / 8233 | Temporal / Temporal UI | `TEMPORAL_PORT` / `TEMPORAL_UI_PORT` |
-| 17671 | gateway | 固定。sandbox 的 supervisor 经宿主机回连这个端口，`gateway.toml` 的 `grpc_endpoint` 写死了它。要改就两处一起改 |
+| 17671 | gateway | Fixed. Sandbox supervisors connect back to this port through the host, and `grpc_endpoint` in `gateway.toml` hard-codes it. To change it, change both places |
 
-gateway 没有 TLS，也没有用户认证。能连到 17671 的人都能操作它，所以只能发布在 `127.0.0.1`。
+The gateway has no TLS and no user authentication. Anyone who can reach 17671 can control it, so it may only be published on `127.0.0.1`.
 
-## 已知限制
+## Known limitations
 
-- **本机克隆的 seed 不生效。** `myorch-data/local-repos.yaml` 里写的是宿主机路径（例如 `~/Github/...`），容器里没有这些路径，所以 seed 跳过，`sync-master` 从 GitHub 完整克隆。seed 失败不影响运行。要用 seed，克隆要按宿主机的同一个绝对路径挂进 worker，因为 `seed_repo` 把这个路径交给宿主机的 Docker 解析（`src/myorch/storage/docker_volume.py` 的 `seed_repo`）。
-- **`dir` 类型的知识源** 的文件夹要放在 `MYORCH_KB_ROOT`（默认 `~/orca/kb`）下面。compose 只把这个目录挂进控制台和 worker，别处的文件夹在控制台里会报问题。
-- **Linux 主机没有测。** supervisor 通过 `host.docker.internal` 回连 gateway。在 Linux 上它指向 docker0 网桥，发布在 `127.0.0.1` 的端口从网桥连不到。见调研笔记的「supervisor 回连 gateway 的路线」。
-- `myorch review` 会调用 macOS 的 `open`，在容器里没有这个命令。用 `--no-open`。
-- **宿主机上的进程不要直接打开 `myorch-data/events.db`**：它会让容器里的查询报 `disk I/O error`。宿主机上的 CLI 经过控制台读事件，见 [2. 服务和依赖](../docs/02-services.md#文件和配置的读写方)。
-- sandbox 镜像和项目开发镜像不在 compose 里，要单独构建。
+- **Seeding from local clones has no effect.** `myorch-data/local-repos.yaml` holds host paths (for example `~/Github/...`), which do not exist in the container. So the seed is skipped and `sync-master` clones fully from GitHub. A failed seed does not affect the run. To use seeding, mount the clone into the worker at the same absolute path as on the host, because `seed_repo` hands that path to the host's Docker to resolve (`seed_repo` in `src/myorch/storage/docker_volume.py`).
+- **Knowledge sources of kind `dir`** must have their folder under `MYORCH_KB_ROOT` (default `~/orca/kb`). compose mounts only this directory into the console and the worker; folders elsewhere are reported as a problem in the console.
+- **Linux hosts are not tested.** The supervisor connects back to the gateway through `host.docker.internal`. On Linux this points to the docker0 bridge, and ports published on `127.0.0.1` cannot be reached from the bridge. See "How the supervisor connects back to the gateway" in the [investigation note](../docs/notes/2026-11-04-gateway-in-docker.md#3-how-the-supervisor-connects-back-to-the-gateway).
+- `myorch review` calls macOS `open`, which does not exist in the container. Use `--no-open`.
+- **Processes on the host must not open `myorch-data/events.db` directly**: it makes queries in the container fail with `disk I/O error`. The CLI on the host reads events through the console; see [2. Services and dependencies](../docs/02-services.md#who-reads-and-writes-files-and-configuration).
+- The sandbox image and project development images are not in compose and must be built separately.

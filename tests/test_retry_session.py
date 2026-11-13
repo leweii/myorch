@@ -177,7 +177,7 @@ def box(attempt, turn=1):
     return sandbox_name(StepKey(run_id="r1", step_id="develop", attempt=attempt, turn=turn))
 
 
-DEV = STEP.model_copy(update={"id": "develop", "outputs": {}, "prompt": "实现需求"})
+DEV = STEP.model_copy(update={"id": "develop", "outputs": {}, "prompt": "implement the requirement"})
 ASKS = DEV.model_copy(update={"interaction": "allowed"})
 
 
@@ -207,13 +207,13 @@ async def test_a_retry_after_an_interruption_continues_the_interrupted_session(c
     store = SessionStore([sid(1)])
     t = await run_turn(config_dir, store, 2, **INTERRUPTED)
     assert t.session == ("--resume", sid(1)) and t.result.session_id == sid(1)
-    assert t.prompt.startswith("上一次执行被平台中断了（activity Heartbeat timeout）")
-    assert "git status" in t.prompt and "/sandbox/out 已经清空" in t.prompt
-    assert "实现需求" not in t.prompt  # the session has the task already
+    assert t.prompt.startswith("The platform interrupted the previous attempt (activity Heartbeat timeout)")
+    assert "git status" in t.prompt and "/sandbox/out has been emptied" in t.prompt
+    assert "implement the requirement" not in t.prompt  # the session has the task already
     assert t.os.listed == [{"myorch.run": "r1", "myorch.step": "develop"}]  # confirmed nothing else runs
     # a later turn of the same attempt (after a question) goes on in the session turn 1 reported
     store.lookups.clear()
-    t = await run_turn(config_dir, store, 2, turn=2, step=ASKS, reply="用红色", session_id=sid(1), **INTERRUPTED)
+    t = await run_turn(config_dir, store, 2, turn=2, step=ASKS, reply="use red", session_id=sid(1), **INTERRUPTED)
     assert t.session == ("--resume", sid(1)) and store.lookups == []
 
 
@@ -231,7 +231,7 @@ async def test_the_interrupted_sandbox_is_deleted_before_its_session_is_continue
 async def test_without_confirming_the_old_sandbox_is_gone_a_new_session_starts(config_dir, os_):
     t = await run_turn(config_dir, SessionStore([sid(1)]), 2, os_=os_, **INTERRUPTED)
     assert t.session == ("--session-id", sid(2)) and t.result.session_id == sid(2)
-    assert "## 这是一次重试" in t.prompt and "activity Heartbeat timeout" in t.prompt
+    assert "## This is a retry" in t.prompt and "activity Heartbeat timeout" in t.prompt
     assert len(os_.listed) == 4  # STOP_CHECKS
 
 
@@ -239,15 +239,15 @@ async def test_without_the_old_session_a_new_one_starts_with_the_same_note(confi
     store = SessionStore()  # attempt 1 never got its sandbox running
     t = await run_turn(config_dir, store, 2, **INTERRUPTED)
     assert t.session == ("--session-id", sid(2))
-    assert t.prompt.startswith("实现需求") and "## 这是一次重试" in t.prompt and "git status" in t.prompt
+    assert t.prompt.startswith("implement the requirement") and "## This is a retry" in t.prompt and "git status" in t.prompt
     assert "activity Heartbeat timeout" in t.prompt
 
 
 async def test_a_later_turn_without_a_reported_session_looks_it_up(config_dir):
     store = SessionStore([sid(1), sid(2)])  # e.g. a hint after turn 1's activity was lost
-    t = await run_turn(config_dir, store, 2, turn=2, step=ASKS, reply="好", **INTERRUPTED)
+    t = await run_turn(config_dir, store, 2, turn=2, step=ASKS, reply="ok", **INTERRUPTED)
     assert t.session == ("--resume", sid(2))
-    t = await run_turn(config_dir, SessionStore([sid(1)]), 2, turn=2, step=ASKS, reply="好", **INTERRUPTED)
+    t = await run_turn(config_dir, SessionStore([sid(1)]), 2, turn=2, step=ASKS, reply="ok", **INTERRUPTED)
     assert t.session == ("--resume", sid(1))
 
 
@@ -262,7 +262,7 @@ async def test_an_ordinary_attempt_starts_its_own_session_and_sets_a_stale_one_a
     store = SessionStore([sid(1)])  # left from an earlier visit that also numbered this attempt 1
     t = await run_turn(config_dir, store, 1)
     assert t.session == ("--session-id", sid(1)) and store.set_aside == [f"{sid(1)}.jsonl", sid(1)]
-    assert "这是一次重试" not in t.prompt and t.os.listed == []  # an ordinary attempt lists nothing
+    assert "This is a retry" not in t.prompt and t.os.listed == []  # an ordinary attempt lists nothing
     store = SessionStore([sid(2), sid(1)])  # stale own id beside the one to continue
     assert (await run_turn(config_dir, store, 2, **INTERRUPTED)).session == ("--resume", sid(1))
     assert store.set_aside == [f"{sid(2)}.jsonl", sid(2)]
@@ -270,7 +270,7 @@ async def test_an_ordinary_attempt_starts_its_own_session_and_sets_a_stale_one_a
 
 async def test_an_ordinary_later_turn_looks_nothing_up(config_dir):
     store = SessionStore()
-    assert (await run_turn(config_dir, store, 1, turn=2, step=ASKS, reply="好")).session == ("--resume", sid(1))
+    assert (await run_turn(config_dir, store, 1, turn=2, step=ASKS, reply="ok")).session == ("--resume", sid(1))
     assert store.lookups == []
 
 
@@ -278,7 +278,7 @@ async def test_a_lookup_is_tried_again_then_fails_the_activity_instead_of_guessi
     store = SessionStore([sid(1)], fail=2)
     assert (await run_turn(config_dir, store, 2, **INTERRUPTED)).session == ("--resume", sid(1))
     assert len(store.lookups) == 3
-    for turn, kw in [(1, {}), (2, dict(step=ASKS, reply="好", **INTERRUPTED))]:
+    for turn, kw in [(1, {}), (2, dict(step=ASKS, reply="ok", **INTERRUPTED))]:
         os_ = SessionOpenShell()
         runner = StepRunner(SessionStore([sid(1)], fail=3), default_harnesses(), config_dir, openshell=os_,
                             poll_interval=0, store_retry_delay=0)
@@ -324,10 +324,10 @@ def test_claude_code_on_vertex_sends_the_token_placeholder_itself():
 
 def test_prompts_name_the_interruption():
     p = build_interrupted_prompt(DEV, "timed out\nafter 2h")
-    assert "（timed out after 2h）" in p and "myorch-ask" not in p  # interaction never: no asking
+    assert "(timed out after 2h)" in p and "myorch-ask" not in p  # interaction never: no asking
     p = build_prompt(DEV, CTX, {}, interrupted="x" * 400)
-    assert p.index("## 这是一次重试") < p.index("## 输出要求") and "x" * 300 + "…" in p
-    assert "这是一次重试" not in build_prompt(DEV, CTX, {})
+    assert p.index("## This is a retry") < p.index("## Output requirements") and "x" * 300 + "…" in p
+    assert "This is a retry" not in build_prompt(DEV, CTX, {})
 
 
 # ---- change requests keep counting attempts ---------------------------------------------------------
@@ -335,7 +335,7 @@ def test_prompts_name_the_interruption():
 def test_a_change_request_keeps_counting_the_attempts_of_the_steps_it_resets():
     s = at_gate()
     s.instances["risk"].attempts = 2  # risk was retried once on its first visit
-    s.request_changes("human", "ann", "改一下", "t", keep_attempts=True)
+    s.request_changes("human", "ann", "change this", "t", keep_attempts=True)
     risk = s.instances["risk"]
     assert risk.attempts == 0 and risk.attempts_before == 2  # people still see attempt 1 of this visit
     assert key_attempt(risk, 1) == 3  # but its logs and session are turn-3-*, not turn-1-* again
@@ -348,12 +348,12 @@ def test_a_change_request_keeps_counting_the_attempts_of_the_steps_it_resets():
     finish(s, "risk", head="bbb")
     assert started(s.plan()) == ["human"]
     s.instances["human"].status = "waiting_approval"
-    s.request_changes("human", "ann", "再改", "t2", keep_attempts=True)
+    s.request_changes("human", "ann", "change it again", "t2", keep_attempts=True)
     assert risk.attempts_before == 3
 
 
 def test_runs_from_before_number_attempts_from_one_again():
     s = at_gate()
     s.instances["risk"].attempts = 2
-    s.request_changes("human", "ann", "改一下", "t")
+    s.request_changes("human", "ann", "change this", "t")
     assert s.instances["risk"].attempts == 0 and key_attempt(s.instances["risk"], 1) == 1

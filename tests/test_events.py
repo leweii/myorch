@@ -21,18 +21,18 @@ def test_events_follow_the_state_and_have_stable_keys():
     s.plan()
     assert [(e.key, e.kind) for e in derive_events(s)] == [("started", "run_started")]
     a = s.instances["analyze"]
-    a.status, a.turns, a.attempts, a.question = "waiting_input", 1, 1, Question(question="放哪里？", options=["A", "B"])
+    a.status, a.turns, a.attempts, a.question = "waiting_input", 1, 1, Question(question="Where should it go?", options=["A", "B"])
     ask = derive_events(s)[1]
-    assert ask.key == "ask:analyze:1" and ask.data == {"question": "放哪里？", "options": ["A", "B"]}
+    assert ask.key == "ask:analyze:1" and ask.data == {"question": "Where should it go?", "options": ["A", "B"]}
     a.status, a.question = "succeeded", None
-    s.instances["risk-rules"].manifest = Manifest(step_id="risk-rules", summary="medium，需要 1 人审批")
+    s.instances["risk-rules"].manifest = Manifest(step_id="risk-rules", summary="medium, needs 1 approval")
     s.instances["open-draft-pr"].manifest = Manifest(
         step_id="open-draft-pr", outputs={"pr_url": "https://github.com/o/r/pull/5", "draft": True})
     hr = s.instances["human-review"]
     hr.status, hr.approvals_needed = "waiting_approval", 1
     by_key = {e.key: e for e in derive_events(s)}
-    assert by_key["approve:human-review"].data == {"needed": 1, "risk": "medium，需要 1 人审批",
-                                                   "actions": ["approve", "reject"], "missing": "还需要 1 人批准"}
+    assert by_key["approve:human-review"].data == {"needed": 1, "risk": "medium, needs 1 approval",
+                                                   "actions": ["approve", "reject"], "missing": "1 more approval(s) needed"}
     assert by_key["pr:5"].data == {"url": "https://github.com/o/r/pull/5", "repo": "o/r", "number": 5}
     for i in s.instances.values():
         i.status = "succeeded"

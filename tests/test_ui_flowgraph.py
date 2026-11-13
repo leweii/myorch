@@ -87,7 +87,7 @@ def test_version_changes_when_a_file_changes(tmp_path: Path) -> None:
 
 def test_errors_are_reported_not_raised(tmp_path: Path) -> None:
     defs = make(tmp_path)
-    assert "没有这个流程" in defs.graph("../etc", None, {})["error"]
+    assert "No such flow" in defs.graph("../etc", None, {})["error"]
     assert "preset" in defs.graph("demo", None, {"depth": "huge"})["error"]
     (tmp_path / "flows" / "demo.yaml").write_text(FLOW.replace("lib/rounds.yaml", "lib/missing.yaml"))
     assert "missing" in defs.graph("demo", None, {})["error"]
@@ -99,4 +99,4 @@ def test_overview_has_role_label_and_projects_for_the_list(tmp_path: Path) -> No
     defs = make(tmp_path)
     (tmp_path / "flows" / "x-review.yaml").write_text("# Review.\nflow: x-review\nrole: review\nprojects: [x]\nsteps: []\n")
     flow = next(f for f in defs.overview()["flows"] if f["flow"] == "x-review")
-    assert (flow["role"], flow["label"], flow["projects"], flow["order"]) == ("review", "评审 PR", ["x"], 1)
+    assert (flow["role"], flow["label"], flow["projects"], flow["order"]) == ("review", "Review PR", ["x"], 1)

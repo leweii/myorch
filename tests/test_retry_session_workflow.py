@@ -172,11 +172,11 @@ async def test_a_retry_after_the_harness_failed_or_its_own_timeout_starts_fresh(
 
 async def test_later_turns_of_a_continuing_attempt_use_the_session_turn_one_reported(client):
     runner = Runner([LOST, OK, OK])
-    store = Store([None, Question(question="红色还是蓝色？", options=["红", "蓝"])])  # attempt 2 asks on turn 1
+    store = Store([None, Question(question="Red or blue?", options=["red", "blue"])])  # attempt 2 asks on turn 1
 
     async def answer(h):
         await wait_for(h, lambda s: s.instances["develop"].status == "waiting_input")
-        await h.signal(FlowWorkflow.reply, ReplyInput(step_id="develop", text="红"))
+        await h.signal(FlowWorkflow.reply, ReplyInput(step_id="develop", text="red"))
 
     state, history = await run_flow(client, runner, store=store, drive=answer)
     assert state.instances["develop"].status == "succeeded"
@@ -188,7 +188,7 @@ async def test_later_turns_of_a_continuing_attempt_use_the_session_turn_one_repo
 async def send_back_once(h):
     """Request changes at the gate, then approve the second visit."""
     await wait_for(h, lambda s: s.instances["human"].status == "waiting_approval")
-    await h.signal(FlowWorkflow.request_changes, ChangesInput(step_id="human", approver="ann", text="再改改"))
+    await h.signal(FlowWorkflow.request_changes, ChangesInput(step_id="human", approver="ann", text="change it a bit more"))
     def back_at_gate(s):
         record = s.approvals.get("human")
         return s.instances["human"].status == "waiting_approval" and record is not None and len(record.changes) == 1

@@ -59,17 +59,17 @@ def _print_instance(state, inst, indent: str) -> None:
     if err:
         print(f"{pad}error: {err[:300]}")
     if inst.status == "waiting_approval":
-        missing = state.approval_missing(inst.id, set(inst.approvals)) or f"需要 {inst.approvals_needed} 人批准"
+        missing = state.approval_missing(inst.id, set(inst.approvals)) or f"{inst.approvals_needed} approval(s) needed"
         print(f"{pad}{missing} → myorch approve {state.run_id} {inst.id}")
         approval = state.step_of(inst.id).approval
         if approval is not None and approval.changes is not None:
-            print(f'{pad}要修改 → myorch changes {state.run_id} {inst.id} "<修改意见>"')
+            print(f'{pad}to request changes → myorch changes {state.run_id} {inst.id} "<requested changes>"')
     if inst.question is not None:
         print(f"{pad}question: " + inst.question.question.replace("\n", f"\n{pad}          "))
         for i, opt in enumerate(inst.question.options, 1):
             print(f"{pad}  {i}. {opt}")
         if inst.status == "waiting_input":
-            print(f'{pad}→ myorch reply {state.run_id} {inst.id} "<回复>"')
+            print(f'{pad}→ myorch reply {state.run_id} {inst.id} "<reply>"')
 
 
 def _print_state(state) -> None:
@@ -82,14 +82,14 @@ def _print_state(state) -> None:
     if state.mandate is not None:
         m = state.mandate
         proj = f"{m.project['name']}@{m.project.get('version', '').removeprefix('sha256:')[:8]}" if m.project else "-"
-        print(f"  mandate: 发起人 {m.initiator} · {m.requested_at} · flow {m.flow['sha256'][:8]} · project {proj}")
+        print(f"  mandate: initiator {m.initiator} · {m.requested_at} · flow {m.flow['sha256'][:8]} · project {proj}")
     for step_id, a in state.approvals.items():
-        who = (f"驳回：{a.rejected_by}" if a.rejected_by else "还没有决定" if a.at is None
-               else f"批准：{', '.join(a.approvers) or '无需人工'}")
+        who = (f"rejected: {a.rejected_by}" if a.rejected_by else "not decided yet" if a.at is None
+               else f"approved: {', '.join(a.approvers) or 'no person needed'}")
         subject = f" · subject {a.subject[:12]}" if a.subject else ""
         print(f"  approval {step_id}: {who}{subject}")
         for c in a.changes:
-            print(f"    修改意见 {c.by} · {c.at} → 第 {c.round} 轮：{c.text.splitlines()[0][:80] if c.text else ''}")
+            print(f"    changes requested {c.by} · {c.at} → round {c.round}: {c.text.splitlines()[0][:80] if c.text else ''}")
     for item in state.flow.steps:
         if isinstance(item, Loop):
             lr = state.loops[item.id]
@@ -100,7 +100,7 @@ def _print_state(state) -> None:
                 print("      question: " + lr.question.question.replace("\n", "\n                "))
                 for i, opt in enumerate(lr.question.options, 1):
                     print(f"        {i}. {opt}")
-                print(f'      → myorch reply {state.run_id} {item.id} "<编号>"')
+                print(f'      → myorch reply {state.run_id} {item.id} "<number>"')
             for inst in state.instances.values():
                 if inst.loop_id == item.id:
                     _print_instance(state, inst, "      ")
@@ -164,10 +164,10 @@ def _auto_runs(records, project: str | None, role: str | None = "learn") -> str:
     if role == "postmortem":
         return ",".join(r.run_id for r in select_for_postmortem(records, project))
     picked, last = select_for_learn(records, project)
-    since = f"上次 learn {last.run_id}（{_local_time(last.requested_at)}）之后" if last else "还没有 learn 过，全部"
+    since = f"since the last learn {last.run_id} ({_local_time(last.requested_at)})" if last else "all (no learn run yet)"
     if not picked:
-        raise ValueError(f"project {project}: {since}没有新的已结束的 development / review run")
-    print(f"learn 的输入：{project} {since}的 {len(picked)} 个 run：", file=sys.stderr)
+        raise ValueError(f"project {project}: no new finished development / review runs, {since}")
+    print(f"learn input: {project}, {len(picked)} runs, {since}:", file=sys.stderr)
     for r in picked:
         print(f"  {_local_time(r.requested_at)}  {r.flow:<12} {r.run_id}  {r.pr_url}", file=sys.stderr)
     return ",".join(r.run_id for r in picked)
@@ -213,15 +213,15 @@ def _continue_from(log, inputs: dict[str, str], project: str | None, declared: d
         events = log.read(run_id=check_id(rid, "run id"), limit=5000)
         started = next((e.data for e in events if e.kind == "run_started"), None)
         if started is None:
-            raise ValueError(f"没有这个运行：{rid}")
+            raise ValueError(f"No such run: {rid}")
         role = spec.get("role")
         if role and role_of(started.get("flow") or "", started.get("role")) != role:
-            raise ValueError(f"{rid} 不是 {role} 运行，不能接着它做")
+            raise ValueError(f"{rid} is not a {role} run; cannot continue from it")
         if (started.get("project") or None) != project:
-            raise ValueError(f"{rid} 属于项目 {started.get('project')}，不是 {project}")
+            raise ValueError(f"{rid} belongs to project {started.get('project')}, not {project}")
         last = [e.kind for e in events if e.kind in ("run_finished", "run_resumed")]
         if not last or last[-1] != "run_finished":
-            raise ValueError(f"{rid} 还没有结束。等它结束，或者先取消它")
+            raise ValueError(f"{rid} has not finished yet. Wait for it to finish, or cancel it first")
         old = started.get("inputs") or {}
         for k in spec.get("carry") or []:
             if not inputs.get(k) and old.get(k):
@@ -249,10 +249,10 @@ async def _review(client, store, kb_root: Path, data_root: Path, args: argparse.
     state = await tc.get_status(client, args.run_id)
     for inst in (state.instances.values() if state else []):
         if inst.status == "waiting_approval":
-            waiting = f"{inst.id}：" + (state.approval_missing(inst.id, set(inst.approvals)) or f"需要 {inst.approvals_needed} 人批准")
+            waiting = f"{inst.id}: " + (state.approval_missing(inst.id, set(inst.approvals)) or f"{inst.approvals_needed} approval(s) needed")
             source = mandate.get("source") or ""
-            where = f'，或在 <a href="{html.escape(source)}">{html.escape(source)}</a> 回复 <code>/approve</code> / <code>/reject</code>' if source.startswith("http") else ""
-            hint = (f'<p>在本机：<code class="cmd">uv run myorch approve {args.run_id} {inst.id}</code>'
+            where = f', or reply <code>/approve</code> / <code>/reject</code> at <a href="{html.escape(source)}">{html.escape(source)}</a>' if source.startswith("http") else ""
+            hint = (f'<p>On this machine: <code class="cmd">uv run myorch approve {args.run_id} {inst.id}</code>'
                     f'<code class="cmd">uv run myorch reject {args.run_id} {inst.id}</code>{where}</p>')
     out = data_root / "reviews" / f"{args.run_id}.html"
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -303,14 +303,14 @@ def _knowledge_check(store, root: Path, args: argparse.Namespace) -> int:
 
     s = kb.load_sources(root, args.project).get(args.name)
     if s is None:
-        raise ValueError(f"知识源 {args.name} 没有登记" + (f"，或者项目 {args.project} 不能用它" if args.project else "（项目的知识源要加 --project）"))
+        raise ValueError(f"Knowledge source {args.name} is not registered" + (f", or project {args.project} cannot use it" if args.project else " (a project's knowledge source needs --project)"))
     if s.kind != "mcp":
-        raise ValueError(f"{args.name} 是 {s.kind}，只有 mcp 知识源能检查连接。dir 和 git 用 myorch knowledge sync")
+        raise ValueError(f"{args.name} is {s.kind}. Only mcp knowledge sources can check a connection. For dir and git use myorch knowledge sync")
     for problem in s.problems():
-        print(f"! {problem}（运行时不能挂载；检查照样做）")
+        print(f"! {problem} (a run cannot mount it; the check runs anyway)")
     image = args.image or (projects.load_project(root, args.project).image if args.project else "")
     if not image:
-        raise ValueError("要知道用哪个镜像：加 --project <项目> 或 --image <镜像>")
+        raise ValueError("Which image to use? Add --project <project> or --image <image>")
     spec = {"servers": [{"name": s.name, "url": s.url, "token_env": s.token_env, "auth": s.auth, "email": s.email,
                          "tools": list(s.tools)}]}
     check = "python3 /sandbox/bin/myorch-mcp --check /tmp/spec.json"
@@ -320,7 +320,7 @@ def _knowledge_check(store, root: Path, args: argparse.Namespace) -> int:
     script = f"echo {base64.b64encode(json.dumps(spec).encode()).decode()} | base64 -d > /tmp/spec.json && {check}"
     name = f"kcheck-{secrets.token_hex(4)}"
     mounts = [Mount(source=store.tools_source(), target="/sandbox/bin", read_only=True)]
-    print(f"在 sandbox {name} 里检查（镜像 {image}，provider {s.provider}）……", flush=True)
+    print(f"Checking in sandbox {name} (image {image}, provider {s.provider})...", flush=True)
     try:
         r = subprocess.run(["openshell", "sandbox", "create", "--name", name, "--from", image, "--no-tty", "--no-auto-providers",
                             "--provider", s.provider, "--driver-config-json", docker_driver_config(mounts), "--", "sh", "-c", script],
@@ -557,7 +557,7 @@ async def _main(args: argparse.Namespace) -> int:
             inputs = _parse_inputs(args.input)
             meta = flow_meta(Path(args.flow))
             if meta["projects"] and args.project not in meta["projects"]:
-                raise ValueError(f"流程 {meta['flow']} 只给项目 {', '.join(meta['projects'])} 用，--project 要写其中一个")
+                raise ValueError(f"Flow {meta['flow']} is only for projects {', '.join(meta['projects'])}; --project must be one of them")
             declared = _flow_inputs(Path(args.flow), _project_public(kb_root, args.project))
             _normalize_inputs(declared, inputs)
             if inputs.get("runs") == "auto" or ("runs" in declared and "runs" not in inputs):
@@ -616,7 +616,7 @@ async def _main(args: argparse.Namespace) -> int:
                     if st is not None:
                         waiting = [i.id for i in st.instances.values() if i.status in ("waiting_input", "waiting_approval")]
                         waiting += [lp.id for lp in st.loops.values() if lp.status == "waiting_input"]
-                        hint = f"等你处理: {', '.join(waiting)}" if waiting else hint
+                        hint = f"waiting on you: {', '.join(waiting)}" if waiting else hint
                 when = _local_time(r.requested_at)
                 tags = ",".join(r.labels) or "-"
                 print(f"{when}  {(r.project or '-'):<9} {r.flow:<12} {r.status:<10} {r.run_id:<34} {tags:<12} {hint}")
@@ -649,8 +649,8 @@ async def _eval_cmd(client, store, config: Path, kb_root: Path, data_root: Path,
         new = evals.collect(store, kb_root, data_root)
         for c in new:
             print(f"{c['id']:<34} {c['project']:<9} {len(c['findings'])} findings  head {c['head_sha'][:8]}"
-                  + ("（head 是推断的）" if c["head_guessed"] else ""))
-        print(f"{len(new)} new candidates; confirm them in the console (流程 → 评测集)")
+                  + (" (head is guessed)" if c["head_guessed"] else ""))
+        print(f"{len(new)} new candidates; confirm them in the console (Flows → Eval set)")
         return 0
     if args.eval_cmd == "list":
         for c in evals.list_cases(data_root):

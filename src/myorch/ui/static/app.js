@@ -42,7 +42,7 @@ async function api(path, opts = {}) {
 const fmtTime = (iso) => { if (!iso) return ""; try { const d = new Date(iso); if (isNaN(d)) return ""; return `${d.getMonth() + 1}-${d.getDate()} ${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`; } catch { return ""; } };
 const enc = encodeURIComponent;
 
-const EXEC = { agent: ["AI", "agent"], script: ["SH", "脚本"], approval: ["USR", "人工审批"], host: ["HOST", "宿主机动作"] };
+const EXEC = { agent: ["AI", "agent"], script: ["SH", "script"], approval: ["USR", "human approval"], host: ["HOST", "host action"] };
 const ACTIVE = new Set(["running", "waiting_input", "waiting_approval"]);
 
 function toggle(panel, show) { panel.hidden = show === undefined ? !panel.hidden : !show; }
@@ -52,7 +52,7 @@ document.addEventListener("click", (e) => {
 
 // ---- side bar: three views; clicking the shown view's icon folds the side bar ---------------------
 
-const VIEWS = { runs: "运行", inbox: "等你处理", flows: "流程定义" };
+const VIEWS = { runs: "Runs", inbox: "Waiting on you", flows: "Flow definitions" };
 function showView(name, fold = false) {
   const off = document.body.classList.contains("side-off");
   if (fold && S.view === name && !off) { document.body.classList.add("side-off"); store.set("myorch.side", "off"); return; }
@@ -79,13 +79,13 @@ async function loadRuns() {
   let data;
   const q = S.q;
   try { data = await api(`/api/runs?limit=80${S.project ? `&project=${enc(S.project)}` : ""}${q ? `&label=${enc(q)}` : ""}`); }
-  catch (e) { $("#runs").replaceChildren(el("div", { class: "muted small pad", text: `读取运行列表失败：${e.message}。请检查 Temporal 是否在运行。` })); return; }
+  catch (e) { $("#runs").replaceChildren(el("div", { class: "muted small pad", text: `Could not read the run list: ${e.message}. Check that Temporal is running.` })); return; }
   const warn = $("#volumeWarn");
-  warn.textContent = data.volume_error ? "读不到运行数据卷：文档、日志、发起人和开始时间暂时看不到" : "";
-  warn.title = data.volume_error ? `Docker 可能没有运行。现在只显示 Temporal 里的运行。\n${data.volume_error}` : "";
+  warn.textContent = data.volume_error ? "Cannot read the run data volume: docs, logs, initiators and start times are not shown for now" : "";
+  warn.title = data.volume_error ? `Docker may not be running. Only the runs in Temporal are shown now.\n${data.volume_error}` : "";
   renderInbox(data);
   if (q !== S.q) return;  // the search changed while this one was on its way
-  $("#runCount").textContent = q ? `找到 ${data.runs.length} 个` : `${data.runs.length} 个`;
+  $("#runCount").textContent = q ? `${data.runs.length} found` : `${data.runs.length}`;
   S.lastRuns = data;
   renderRunTree();
   renderTabbar();
@@ -97,32 +97,32 @@ async function loadRuns() {
   }
 }
 
-const INBOX_KIND = { approval: ["审批", "wait"], loop: ["循环跑满", "wait"], watchdog: ["watchdog", "bad"] };
+const INBOX_KIND = { approval: ["approval", "wait"], loop: ["loop full", "wait"], watchdog: ["watchdog", "bad"] };
 function renderInbox(data) {
   const items = data.inbox;
   const title = (id) => data.runs.find((r) => r.run_id === id)?.labels?.[0] || id;
   $("#inbox").replaceChildren(...(items.length ? items.map((w) => {
-    const [kind, cls] = INBOX_KIND[w.kind] || ["回复", "wait"];
+    const [kind, cls] = INBOX_KIND[w.kind] || ["reply", "wait"];
     return el("div", { class: "ibx", title: w.run_id, onclick: () => openTab({ kind: "run", run: w.run_id }) },
       el("div", { class: "ibx1" }, el("span", { class: `tag ${cls}`, text: kind }), el("span", { class: "id", text: title(w.run_id) }),
         el("span", { class: "spacer" }), el("span", { class: "muted small", text: w.project || "" })),
-      el("div", { class: "ibx2" }, el("b", { text: w.step }), el("span", { class: "muted", text: { approval: " 在等审批", loop: " 跑满了轮数，等你决定", watchdog: " watchdog 提醒" }[w.kind] || " 在问" })),
+      el("div", { class: "ibx2" }, el("b", { text: w.step }), el("span", { class: "muted", text: { approval: " waits for approval", loop: " ran all its rounds, waits for your decision", watchdog: " watchdog alert" }[w.kind] || " asks" })),
       w.text ? el("div", { class: "ibxq", text: w.text.slice(0, 280) }) : null);
-  }) : [el("div", { class: "muted small pad", text: "没有等你处理的事。" })]));
+  }) : [el("div", { class: "muted small pad", text: "Nothing is waiting on you." })]));
   $("#inboxCount").textContent = items.length || "";
-  $("#stInbox").textContent = items.length ? `${items.length} 个等你处理` : "没有等你处理的事";
+  $("#stInbox").textContent = items.length ? `${items.length} waiting on you` : "Nothing waiting on you";
   $("#stInbox").classList.toggle("hot", items.length > 0);
   S.inboxRuns = new Set(items.map((w) => w.run_id));
 }
 
 function renderStatus() {
   const n = (S.lastRuns?.runs || []).filter((r) => r.status === "RUNNING").length;
-  $("#stRuns").textContent = n ? `${n} 个运行中` : "";
+  $("#stRuns").textContent = n ? `${n} running` : "";
 }
 
 // The tree: project › run › the run's steps. A project opens by default when it holds the shown run or
 // a running one; a run opens when it has a tab; the user's toggles are kept.
-const NO_PROJECT = "（无项目）";
+const NO_PROJECT = "(no project)";
 const EXP = new Set(store.get("myorch.tree.runs", []));  // runs whose steps are shown
 function saveExp() { store.set("myorch.tree.runs", [...EXP].slice(-30)); }
 function toggleExpand(id) { if (EXP.has(id)) EXP.delete(id); else EXP.add(id); saveExp(); renderRunTree(); }
@@ -145,8 +145,8 @@ function renderRunTree() {
     nodes.push(el("div", { class: "tr tp", role: "treeitem", "aria-expanded": String(open), style: "--d:0",
       onclick: () => { const s = store.get("myorch.runs.open", {}); s[project] = !open; store.set("myorch.runs.open", s); renderRunTree(); } },
       el("span", { class: "caret", text: open ? "▾" : "▸" }), el("span", { class: "nm", text: project }),
-      waiting ? el("span", { class: "tag wait", text: `${waiting} 等你` }) : null,
-      running ? el("span", { class: "tag", text: `${running} 运行中` }) : null,
+      waiting ? el("span", { class: "tag wait", text: `${waiting} waiting` }) : null,
+      running ? el("span", { class: "tag", text: `${running} running` }) : null,
       el("span", { class: "meta", text: String(runs.length) })));
     if (!open) continue;
     for (const r of runs) {
@@ -166,7 +166,7 @@ function runRow(r) {
   return el("div", { class: `tr trun${sel ? " sel" : ""}`, role: "treeitem", style: "--d:1",
     title: [r.run_id, r.labels?.join(" "), r.initiator, fmtTime(r.requested_at)].filter(Boolean).join("\n"),
     onclick: () => openTab({ kind: "run", run: r.run_id }) },
-    el("span", { class: "caret", text: open ? "▾" : "▸", title: open ? "收起步骤" : "展开步骤",
+    el("span", { class: "caret", text: open ? "▾" : "▸", title: open ? "Collapse steps" : "Expand steps",
       onclick: (e) => { e.stopPropagation(); toggleExpand(r.run_id); } }),
     st(status), el("span", { class: "nm", text: r.labels?.[0] || r.run_id }),
     el("span", { class: "sub", text: r.labels?.[0] ? r.flow : "" }),
@@ -177,7 +177,7 @@ function runRow(r) {
 // of its shown round, a step with replicas has one row per replica.
 function stepRows(run) {
   const d = DETAIL.get(run);
-  if (!d) { loadDetail(run); return [el("div", { class: "tr ghost", style: "--d:2", text: "读取中…" })]; }
+  if (!d) { loadDetail(run); return [el("div", { class: "tr ghost", style: "--d:2", text: "Loading…" })]; }
   const at = activeTab();
   const selId = at?.kind === "step" && at.run === run ? at.step : null;
   const rows = [];
@@ -192,8 +192,8 @@ function stepRows(run) {
     const id = one ? one.id : insts[0]?.id || meta.id;
     const model = (one?.model || meta.model || "").replace("claude-", "");
     const out = [row(depth, { status, exec: meta.exec, name: meta.id, par, idle: !insts.length, click: open(id),
-      sel: selId === id || selId === meta.id, title: meta.when ? `条件：${meta.when}` : "",
-      meta: one?.attempts > 1 ? `第 ${one.attempts} 次` : insts.length > 1 ? `×${insts.length}` : model })];
+      sel: selId === id || selId === meta.id, title: meta.when ? `Condition: ${meta.when}` : "",
+      meta: one?.attempts > 1 ? `attempt ${one.attempts}` : insts.length > 1 ? `×${insts.length}` : model })];
     if (insts.length > 1) {
       for (const i of insts) out.push(row(depth + 1, { status: i.status, name: `x${i.replica || "?"}`, sel: selId === i.id, click: open(i.id), title: i.summary || "" }));
     }
@@ -205,8 +205,8 @@ function stepRows(run) {
   for (const t of byStage(d.tree, (x) => x.stage)) {
     if (t.kind !== "loop") { rows.push(...instRows(2, t, t.instances, isPar(t))); continue; }
     const insts = loopRoundInstances(run, t);
-    rows.push(row(2, { status: t.status, name: `↻ ${t.id}`, meta: `${t.round}/${t.max_rounds} 轮`, par: isPar(t), sel: selId === t.id,
-      click: open(t.id), title: `循环，直到 ${t.until}` }));
+    rows.push(row(2, { status: t.status, name: `↻ ${t.id}`, meta: `round ${t.round}/${t.max_rounds}`, par: isPar(t), sel: selId === t.id,
+      click: open(t.id), title: `Loop until ${t.until}` }));
     const lp = parallel(t.steps, (s) => t.stages[s.id]);
     for (const s of byStage(t.steps, (x) => t.stages[x.id])) rows.push(...instRows(3, s, insts.filter((i) => i.step === s.id), lp(s)));
   }
@@ -223,7 +223,7 @@ function loopRoundInstances(run, t) {
 
 // Labels (Jira tickets …) as small chips; a click searches for that label.
 function labelChips(labels) {
-  return (labels || []).map((l) => el("span", { class: "tag label", title: `搜「${l}」`, text: l,
+  return (labels || []).map((l) => el("span", { class: "tag label", title: `Search "${l}"`, text: l,
     onclick: (e) => { e.stopPropagation(); showView("runs"); setSearch(l); } }));
 }
 function setSearch(q) { S.q = q.trim(); $("#runSearch").value = S.q; loadRuns(); }
@@ -322,16 +322,16 @@ function tabInfo(t) {
   const d = t.run ? DETAIL.get(t.run) : null, rl = t.run ? runLabel(t.run) : "";
   const icon = (text) => el("span", { class: "ti", text });
   switch (t.kind) {
-    case "run": return { icon: st(d?.status || runOf(t.run)?.status || "pending"), title: rl, tip: `${t.run} · 对话` };
+    case "run": return { icon: st(d?.status || runOf(t.run)?.status || "pending"), title: rl, tip: `${t.run} · conversation` };
     case "step": {
       const i = d && findInstanceIn(d, t.step), loop = d?.tree.find((x) => x.kind === "loop" && x.id === t.step);
       return { icon: st(i?.status || loop?.status || "pending"), title: t.step, sub: rl, tip: `${t.run} · ${t.step}` };
     }
-    case "changes": return { icon: icon("±"), title: "改动", sub: rl, tip: `${t.run} · 改动和 review 结论` };
-    case "docs": return { icon: icon("▤"), title: "文档", sub: rl, tip: `${t.run} · docs/` };
-    case "file": return { icon: icon("▢"), title: t.log ? `${t.step} · 日志` : t.path.split("/").pop(), sub: rl, tip: `${t.run} · ${t.log ? `${t.step} 最后一轮的日志` : t.path}` };
-    case "new": return { icon: icon("＋"), title: "新运行", tip: "新运行" };
-    case "flow": return { icon: icon("⑂"), title: t.ref.t === "kbform" ? "登记知识源" : t.ref.id, sub: { frag: "片段", kb: "知识库", ev: "评测" }[t.ref.t] || "", tip: t.ref.id || "" };
+    case "changes": return { icon: icon("±"), title: "Changes", sub: rl, tip: `${t.run} · changes and review verdict` };
+    case "docs": return { icon: icon("▤"), title: "Docs", sub: rl, tip: `${t.run} · docs/` };
+    case "file": return { icon: icon("▢"), title: t.log ? `${t.step} · log` : t.path.split("/").pop(), sub: rl, tip: `${t.run} · ${t.log ? `${t.step} log of the last turn` : t.path}` };
+    case "new": return { icon: icon("+"), title: "New run", tip: "New run" };
+    case "flow": return { icon: icon("⑂"), title: t.ref.t === "kbform" ? "Register knowledge source" : t.ref.id, sub: { frag: "fragment", kb: "knowledge", ev: "eval" }[t.ref.t] || "", tip: t.ref.id || "" };
     default: return { icon: icon("·"), title: t.kind };
   }
 }
@@ -346,8 +346,8 @@ function renderTabbar() {
       ondblclick: () => { t.preview = false; renderTabbar(); saveTabs(); },
       onauxclick: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.key); } } },
       info.icon, el("span", { class: "tt", text: info.title }), info.sub ? el("span", { class: "ts", text: info.sub }) : null,
-      el("button", { type: "button", class: "tx", title: "关闭（中键也行）", text: "×", onclick: (e) => { e.stopPropagation(); closeTab(t.key); } }));
-  }), el("button", { type: "button", class: "tnew", title: "新运行", text: "＋", onclick: () => openNewRun() }));
+      el("button", { type: "button", class: "tx", title: "Close (middle click works too)", text: "×", onclick: (e) => { e.stopPropagation(); closeTab(t.key); } }));
+  }), el("button", { type: "button", class: "tnew", title: "New run", text: "+", onclick: () => openNewRun() }));
   bar.querySelector(".etab.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
 
@@ -402,11 +402,11 @@ function leavePane(t) {
 
 function renderEmpty() {
   $("#pane-empty").replaceChildren(el("div", { class: "welcome" },
-    el("h2", { text: "myorch 控制台" }),
-    el("p", { class: "muted", text: "在左边选一个运行，或者发起新运行。点运行看对话，展开看步骤；步骤在执行时，底部会显示它的实时输出。" }),
-    el("div", { class: "row" }, el("button", { text: "＋ 新运行", onclick: () => openNewRun() }),
-      el("button", { class: "ghost", text: "等你处理", onclick: () => showView("inbox") }),
-      el("button", { class: "ghost", text: "流程定义", onclick: () => showView("flows") }))));
+    el("h2", { text: "myorch console" }),
+    el("p", { class: "muted", text: "Pick a run on the left, or start a new run. Click a run to see its conversation; expand it to see its steps. While a step runs, its live output shows at the bottom." }),
+    el("div", { class: "row" }, el("button", { text: "+ New run", onclick: () => openNewRun() }),
+      el("button", { class: "ghost", text: "Waiting on you", onclick: () => showView("inbox") }),
+      el("button", { class: "ghost", text: "Flow definitions", onclick: () => showView("flows") }))));
 }
 
 // ---- run detail ----------------------------------------------------------------------------------------
@@ -420,7 +420,7 @@ async function loadDetail(run = S.run) {
   catch (e) {
     if (run === S.run) {
       const t = activeTab();
-      const msg = el("p", { class: "muted pad", text: `读取 ${run} 失败：${e.message}` });
+      const msg = el("p", { class: "muted pad", text: `Could not read ${run}: ${e.message}` });
       if (t?.kind === "run") $("#messages").replaceChildren(msg);
       if (t?.kind === "step") $("#pane-step").replaceChildren(msg);
     }
@@ -489,26 +489,26 @@ function renderRunHead(d) {
   const btn = (text, title, fn) => el("button", { type: "button", class: "ghost small", text, title, onclick: fn });
   $("#runHead").replaceChildren(...[
     el("div", { class: "rh1" }, st(d.status), el("b", { text: d.labels?.[0] || d.flow }),
-      el("span", { class: "muted", text: `${d.labels?.[0] ? `${d.flow} · ` : ""}${d.project || "无项目"}` }),
+      el("span", { class: "muted", text: `${d.labels?.[0] ? `${d.flow} · ` : ""}${d.project || "no project"}` }),
       ...labelChips((d.labels || []).slice(1)),
       el("span", { class: "spacer" }),
-      btn("改动", "相对 base 的 diff、review 结论、风险判定", () => openTab({ kind: "changes", run: d.run_id })),
-      btn("文档", "工作区的 docs/", () => openTab({ kind: "docs", run: d.run_id })),
-      btn("流程定义", `${d.flow} 的定义`, () => openFlows(d.flow))),
+      btn("Changes", "Diff against base, review verdict, risk verdict", () => openTab({ kind: "changes", run: d.run_id })),
+      btn("Docs", "The workspace's docs/", () => openTab({ kind: "docs", run: d.run_id })),
+      btn("Flow definition", `Definition of ${d.flow}`, () => openFlows(d.flow))),
     el("div", { class: "rh2" }, el("span", { class: "mono", text: d.run_id }),
-      m.initiator ? el("span", { text: `发起人 ${m.initiator}` }) : null, m.requested_at ? el("span", { text: fmtTime(m.requested_at) }) : null,
-      el("span", { text: `${done}/${all.length} 步已完成` }),
-      ...(d.knowledge || []).map((k) => el("span", { class: `tag k-${k.kind}`, title: `知识库，启动时固定：${k.kind === "mcp" ? k.url : k.version}`,
+      m.initiator ? el("span", { text: `initiator ${m.initiator}` }) : null, m.requested_at ? el("span", { text: fmtTime(m.requested_at) }) : null,
+      el("span", { text: `${done}/${all.length} steps done` }),
+      ...(d.knowledge || []).map((k) => el("span", { class: `tag k-${k.kind}`, title: `Knowledge, fixed at start: ${k.kind === "mcp" ? k.url : k.version}`,
         text: k.kind === "mcp" ? `${k.name} · mcp` : `${k.name} · ${k.version.replace("sha256:", "").slice(0, 7)}` }))),
     inputs.length ? el("details", { class: "inputs", open: store.get("myorch.inputs.open", false) || null,
       ontoggle: (e) => store.set("myorch.inputs.open", e.currentTarget.open) },
-      el("summary", { text: `输入 · ${inputs.map(([k, v]) => `${k}=${String(v).slice(0, 24)}`).join("  ")}` }),
+      el("summary", { text: `Inputs · ${inputs.map(([k, v]) => `${k}=${String(v).slice(0, 24)}`).join("  ")}` }),
       el("div", { class: "igrid" }, inputs.map(([k, v]) => [el("span", { class: "muted", text: k }), el("span", { class: "pre", text: String(v).slice(0, 2000) })]))) : null]
     .filter(Boolean));
 }
 
-const WHO = { request: "你（发起）", reply: "你", approve: "你", reject: "你", cancel: "你" };
-const WHAT = { approve: "批准", reject: "驳回", cancel: "取消了运行", changes: "提了修改意见给", resume: "重新执行了" };
+const WHO = { request: "You (started)", reply: "You", approve: "You", reject: "You", cancel: "You" };
+const WHAT = { approve: "approved", reject: "rejected", cancel: "cancelled the run", changes: "requested changes for", resume: "re-ran" };
 
 // The instances a resume would run again (RunState.reopen): failed or cancelled, in a run that ended so.
 function resumable(d) {
@@ -518,13 +518,13 @@ function resumable(d) {
 
 // A failed or cancelled run continues: the same run, its failed steps again (relay.resume).
 async function resumeRun(steps) {
-  const what = steps ? `步骤 ${steps.join("、")}` : "所有失败和取消的步骤";
-  if (!confirm(`接着执行 ${S.run}：重新执行${what}，以及被它们挡住的后续步骤。已经成功的步骤保留结果。`)) return;
+  const what = steps ? `step ${steps.join(", ")}` : "all failed and cancelled steps";
+  if (!confirm(`Continue ${S.run}: re-run ${what}, and the later steps they blocked. Steps that succeeded keep their results.`)) return;
   $("#sendError").textContent = "";
   try {
     await api(`/api/runs/${enc(S.run)}/do/resume`, { method: "POST", body: steps ? { steps } : {} });
     S.convKey = null; loadDetail(); loadRuns();
-  } catch (e) { const m = `没有接着执行：${e.message}`; $("#sendError").textContent = m; if (activeTab()?.kind !== "run") alert(m); }
+  } catch (e) { const m = `Not continued: ${e.message}`; $("#sendError").textContent = m; if (activeTab()?.kind !== "run") alert(m); }
 }
 
 function renderConversation(d) {
@@ -547,50 +547,50 @@ function bubble(cls, who, ...kids) {
 }
 
 function renderItem(it) {
-  if (it.kind === "request") return bubble("user", `${WHO.request}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}`, el("div", { class: "pre", text: it.text || "（没有记录原文）" }));
+  if (it.kind === "request") return bubble("user", `${WHO.request}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}`, el("div", { class: "pre", text: it.text || "(the original text was not recorded)" }));
   if (it.kind === "step") {
     const [icon] = EXEC[it.exec] || ["·"];
     const insts = it.instances;
     const status = aggStatus(insts);
-    const name = `${it.step}${it.round ? ` · 第 ${it.round} 轮` : ""}`;
-    return el("div", { class: `event s-${status}`, title: "打开这一步", onclick: () => openTab({ kind: "step", run: S.run, step: insts[0].id }, { preview: true }) },
+    const name = `${it.step}${it.round ? ` · round ${it.round}` : ""}`;
+    return el("div", { class: `event s-${status}`, title: "Open this step", onclick: () => openTab({ kind: "step", run: S.run, step: insts[0].id }, { preview: true }) },
       el("div", { class: "eh" }, st(status), el("span", { class: `ic k-${it.exec}`, text: icon }), el("b", { text: name }),
         insts[0].model ? el("span", { class: "tag", text: insts[0].model.replace("claude-", "") }) : null,
-        insts.length > 1 ? el("span", { class: "muted small", text: ` ×${insts.length} 并行` }) : null,
-        status === "running" ? el("button", { type: "button", class: "ghost small", text: "实时输出", title: "在底部面板看它的输出",
+        insts.length > 1 ? el("span", { class: "muted small", text: ` ×${insts.length} parallel` }) : null,
+        status === "running" ? el("button", { type: "button", class: "ghost small", text: "Live output", title: "See its output in the bottom panel",
           onclick: (e) => { e.stopPropagation(); panelOpen(S.run, insts.find((i) => i.status === "running")?.id || insts[0].id); } }) : null),
       insts.map((i) => (i.summary || i.error) ? el("div", { class: "es" }, insts.length > 1 ? el("span", { class: "muted", text: `x${i.replica} ` }) : null,
         el("span", { class: i.error ? "err" : "", text: i.error || i.summary })) : null));
   }
   if (it.kind === "question") {
-    return bubble(`agent${it.answered ? " answered" : " asking"}`, `${it.step}${it.answered ? "" : " · 在等你回复"}`,
+    return bubble(`agent${it.answered ? " answered" : " asking"}`, `${it.step}${it.answered ? "" : " · waiting for your reply"}`,
       el("div", { class: "pre", text: it.text }),
       it.options?.length ? el("ol", { class: "opts" }, it.options.map((o) => el("li", { text: o }))) : null);
   }
   if (it.kind === "said") {
-    const text = it.what === "reply" ? it.text : `${WHAT[it.what] || it.what} ${it.step || ""}${it.text ? `：${it.text}` : ""}`;
-    return bubble("user", `${WHO[it.what] || "你"}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}${it.what === "reply" ? ` → ${it.step}` : ""}`, el("div", { class: "pre", text }));
+    const text = it.what === "reply" ? it.text : `${WHAT[it.what] || it.what} ${it.step || ""}${it.text ? `: ${it.text}` : ""}`;
+    return bubble("user", `${WHO[it.what] || "You"}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}${it.what === "reply" ? ` → ${it.step}` : ""}`, el("div", { class: "pre", text }));
   }
   if (it.kind === "approval") {
-    return bubble("agent asking", `${it.step} · 等你审批`, el("div", { text: it.missing || `需要 ${it.needed} 人批准` }),
-      el("div", { class: "small muted", text: `已批准：${it.approvals.join(", ") || "无"}` }),
-      el("button", { class: "ghost small", text: "看改动和 review 结论", onclick: () => openTab({ kind: "changes", run: S.run }) }));
+    return bubble("agent asking", `${it.step} · waiting for your approval`, el("div", { text: it.missing || `${it.needed} approval(s) needed` }),
+      el("div", { class: "small muted", text: `Approved by: ${it.approvals.join(", ") || "nobody"}` }),
+      el("button", { class: "ghost small", text: "See changes and review verdict", onclick: () => openTab({ kind: "changes", run: S.run }) }));
   }
-  if (it.kind === "pr") return el("div", { class: "event s-succeeded" }, el("div", { class: "eh" }, el("span", { class: "ic k-pr", text: "PR" }), el("b", { text: "PR 已创建 " }), el("a", { href: it.url, target: "_blank", rel: "noopener", text: it.url })));
+  if (it.kind === "pr") return el("div", { class: "event s-succeeded" }, el("div", { class: "eh" }, el("span", { class: "ic k-pr", text: "PR" }), el("b", { text: "PR opened " }), el("a", { href: it.url, target: "_blank", rel: "noopener", text: it.url })));
   if (it.kind === "watchdog") {  // myorch/watchdog.py: alive but not getting anywhere; the user decides
     return bubble("agent asking watchdog", `WATCHDOG · ${it.step} · ${it.label}`,
       el("div", { class: "pre", text: it.reason }),
       it.evidence ? el("pre", { class: "small", text: it.evidence }) : null,
-      el("div", { class: "small muted", text: "watchdog 只提醒，不处置。可以取消这个运行，或者等它继续。" }),
-      el("button", { class: "ghost small", text: "知道了", onclick: async () => {
+      el("div", { class: "small muted", text: "The watchdog only alerts; it takes no action. You can cancel this run or let it go on." }),
+      el("button", { class: "ghost small", text: "Got it", onclick: async () => {
         try { await api(`/api/runs/${enc(S.run)}/do/dismiss`, { method: "POST", body: { text: it.alert } }); S.convKey = null; loadDetail(); loadRuns(); }
         catch (e) { $("#sendError").textContent = e.message; }
       } }));
   }
   if (it.kind === "end") {
-    const line = el("div", { class: `endline s-${it.status}`, text: { succeeded: "✓ 运行完成", failed: "✗ 运行失败", cancelled: "⊘ 运行已取消" }[it.status] || it.status });
+    const line = el("div", { class: `endline s-${it.status}`, text: { succeeded: "✓ Run succeeded", failed: "✗ Run failed", cancelled: "⊘ Run cancelled" }[it.status] || it.status });
     const buttons = [
-      resumable(S.detail).length ? el("button", { class: "ghost small", text: "重新执行失败的步骤", title: "同一个运行接着跑：失败和取消的步骤重新执行，已经成功的保留结果",
+      resumable(S.detail).length ? el("button", { class: "ghost small", text: "Re-run failed steps", title: "The same run goes on: failed and cancelled steps run again; succeeded steps keep their results",
         onclick: () => resumeRun(null) }) : null,
       canContinue(S.detail) ? el("button", { class: "ghost small", text: continueLabel(S.detail), title: continuation(S.detail).spec.continue.title || "",
         onclick: continueRun }) : null].filter(Boolean);  // newrun.js
@@ -607,30 +607,30 @@ function renderComposer(d, target) {
   $("#cancelRunBtn").hidden = d.status !== "running";
   const retry = resumable(d);
   $("#resumeRunBtn").hidden = !retry.length;
-  $("#resumeRunBtn").title = retry.length ? `重新执行：${retry.join("、")}，以及被它们挡住的后续步骤` : "";
+  $("#resumeRunBtn").title = retry.length ? `Re-run: ${retry.join(", ")}, and the later steps they blocked` : "";
   $("#continueRunBtn").hidden = !canContinue(d);  // newrun.js: a flow input with a `continue` spec
   if (canContinue(d)) $("#continueRunBtn").textContent = continueLabel(d);
   let label, placeholder, can = true;
   if (target.mode === "reply") {
-    label = `发给 → ${target.step}（在等你回复）`;
-    placeholder = target.options?.length ? `回复原样发给 ${target.step}。可以回选项编号，也可以写自己的回答。` : `回复原样发给 ${target.step}，它会接着原来的会话继续。`;
-    hint.textContent = target.others?.length ? `还有：${target.others.join("、")} 也在等你，回复完这一个再处理。` : "Enter 发送，Shift+Enter 换行。";
+    label = `To → ${target.step} (waiting for your reply)`;
+    placeholder = target.options?.length ? `The reply goes verbatim to ${target.step}. Reply with an option number or write your own answer.` : `The reply goes verbatim to ${target.step}. It continues its earlier session.`;
+    hint.textContent = target.others?.length ? `Also waiting on you: ${target.others.join(", ")}. Handle them after this one.` : "Enter sends. Shift+Enter adds a new line.";
   } else if (target.mode === "approve") {
-    label = `${target.step} 在等你审批：${target.missing}`;
-    placeholder = "审批备注（可选），随批准或驳回一起记录。";
-    hint.textContent = "先看「改动」再决定。";
+    label = `${target.step} waits for your approval: ${target.missing}`;
+    placeholder = "Approval note (optional). Recorded with the approval or rejection.";
+    hint.textContent = "Look at Changes before you decide.";
     can = false;
   } else if (target.mode === "busy") {
-    label = `正在执行：${target.running.join("、") || "调度中"}`;
-    placeholder = "运行中的步骤不能对话。等它提问、要审批或结束后再发。";
+    label = `Running: ${target.running.join(", ") || "scheduling"}`;
+    placeholder = "You cannot talk to a running step. Send when it asks, needs approval or ends.";
     hint.textContent = "";
     can = false;
   } else {
-    label = `运行已结束（${target.status}）`;
-    placeholder = retry.length ? `失败的步骤：${retry.join("、")}。排除原因后，点右下「重新执行失败的步骤」，在这个运行里接着执行。`
+    label = `Run ended (${target.status})`;
+    placeholder = retry.length ? `Failed steps: ${retry.join(", ")}. Fix the cause, then click "Re-run failed steps" at the bottom right to continue this run.`
       : canContinue(d) && continueEnded(d) ? continueEnded(d)
-      : "这个运行已经结束。要继续改，点「＋」发起新运行。";
-    hint.textContent = retry.length ? "已经成功的步骤保留结果，不会再执行。" : "";
+      : "This run has ended. To make more changes, click \"+\" to start a new run.";
+    hint.textContent = retry.length ? "Steps that succeeded keep their results and do not run again." : "";
     can = false;
   }
   $("#target").textContent = label;
@@ -650,26 +650,26 @@ async function sendMessage() {
     $("#input").value = ""; delete DRAFT[S.run];
     S.convKey = null;
     await loadDetail();
-  } catch (e) { $("#sendError").textContent = `没有发出：${e.message}`; }
+  } catch (e) { $("#sendError").textContent = `Not sent: ${e.message}`; }
   $("#sendBtn").disabled = false;
 }
 
 async function decideApproval(action) {
   if (!S.run || S.target?.mode !== "approve") return;
-  if (action === "reject" && !confirm(`驳回 ${S.target.step}？驳回后运行会终止。`)) return;
+  if (action === "reject" && !confirm(`Reject ${S.target.step}? The run ends after a rejection.`)) return;
   $("#sendError").textContent = "";
   try {
     await api(`/api/runs/${enc(S.run)}/do/${action}`, { method: "POST", body: { step: S.target.step, text: $("#input").value } });
     $("#input").value = ""; delete DRAFT[S.run];
     S.convKey = null;
     await loadDetail(); loadRuns();
-  } catch (e) { $("#sendError").textContent = `没有完成：${e.message}`; }
+  } catch (e) { $("#sendError").textContent = `Not done: ${e.message}`; }
 }
 
 async function cancelRun() {
-  if (!S.run || !confirm(`取消运行 ${S.run}？正在执行的步骤会被停止。`)) return;
+  if (!S.run || !confirm(`Cancel run ${S.run}? Running steps are stopped.`)) return;
   try { await api(`/api/runs/${enc(S.run)}/do/cancel`, { method: "POST", body: {} }); S.convKey = null; loadDetail(); loadRuns(); }
-  catch (e) { $("#sendError").textContent = `没有取消：${e.message}`; }
+  catch (e) { $("#sendError").textContent = `Not cancelled: ${e.message}`; }
 }
 
 // ---- step pane -----------------------------------------------------------------------------------------
@@ -693,7 +693,7 @@ function stepKnowledge(run, i) {
 
 function renderStep() {
   const pane = $("#pane-step"), d = S.detail, run = S.run;
-  if (!d) { pane.replaceChildren(el("p", { class: "muted pad", text: "正在读取…" })); return; }
+  if (!d) { pane.replaceChildren(el("p", { class: "muted pad", text: "Loading…" })); return; }
   const i = findInstance(S.step);
   const loop = d.tree.find((t) => t.kind === "loop" && t.id === S.step);
   if (loop) return renderLoop(pane, run, loop);
@@ -701,8 +701,8 @@ function renderStep() {
     const meta = stepMeta(d, S.step);
     pane.replaceChildren(el("div", { class: "page" }, meta
       ? [el("div", { class: "ph" }, st("pending"), el("span", { class: `ic k-${meta.exec}`, text: (EXEC[meta.exec] || ["·"])[0] }), el("h2", { text: meta.id })),
-        kv([["状态", "还没开始"], ["执行者", (EXEC[meta.exec] || [])[1]], ["模型", meta.model], ["条件", meta.when], ["依赖", (meta.needs || []).join(", ")]])]
-      : el("p", { class: "muted", text: `这个运行里没有步骤 ${S.step}。` })));
+        kv([["Status", "not started"], ["Executor", (EXEC[meta.exec] || [])[1]], ["Model", meta.model], ["Condition", meta.when], ["Needs", (meta.needs || []).join(", ")]])]
+      : el("p", { class: "muted", text: `This run has no step ${S.step}.` })));
     return;
   }
   const btn = (text, fn, cls = "ghost small", title) => el("button", { type: "button", class: cls, text, title, onclick: fn });
@@ -710,33 +710,33 @@ function renderStep() {
   const head = el("div", { class: "ph" }, st(i.status), exec ? el("span", { class: `ic k-${exec}`, text: (EXEC[exec] || ["·"])[0] }) : null,
     el("h2", { text: i.id }), i.model ? el("span", { class: "tag", text: i.model.replace("claude-", "") }) : null,
     el("span", { class: "muted small", text: i.status }), el("span", { class: "spacer" }),
-    btn("实时输出", () => panelOpen(run, i.id), "ghost small", "在底部面板看这一步的输出"),
-    i.status === "waiting_approval" ? btn("看改动和 review 结论", () => openTab({ kind: "changes", run })) : null,
+    btn("Live output", () => panelOpen(run, i.id), "ghost small", "See this step's output in the bottom panel"),
+    i.status === "waiting_approval" ? btn("See changes and review verdict", () => openTab({ kind: "changes", run })) : null,
     (i.status === "failed" || i.status === "cancelled") && (d.status === "failed" || d.status === "cancelled")
-      ? btn("从这一步重新执行", () => resumeRun([i.id]), "ghost small", "只重新执行这一步，以及被它挡住的后续步骤") : null,
-    btn("对话", () => openTab({ kind: "run", run }), "ghost small", "回到这个运行的对话"));
+      ? btn("Re-run from this step", () => resumeRun([i.id]), "ghost small", "Re-run only this step and the later steps it blocked") : null,
+    btn("Conversation", () => openTab({ kind: "run", run }), "ghost small", "Back to this run's conversation"));
   const main = [];
-  if (i.error) main.push(el("h4", { text: "错误" }), el("pre", { class: "err", text: i.error }));
-  if (i.question) main.push(el("h4", { text: "提问" }), el("pre", { text: i.question.question + (i.question.options.length ? "\n" + i.question.options.map((o, n) => `${n + 1}. ${o}`).join("\n") : "") }));
-  if (i.summary) main.push(el("h4", { text: "摘要" }), el("div", { class: "pre", text: i.summary }));
+  if (i.error) main.push(el("h4", { text: "Error" }), el("pre", { class: "err", text: i.error }));
+  if (i.question) main.push(el("h4", { text: "Question" }), el("pre", { text: i.question.question + (i.question.options.length ? "\n" + i.question.options.map((o, n) => `${n + 1}. ${o}`).join("\n") : "") }));
+  if (i.summary) main.push(el("h4", { text: "Summary" }), el("div", { class: "pre", text: i.summary }));
   if (i.notes) main.push(el("h4", { text: "notes" }), el("div", { class: "pre small", text: i.notes }));
   if (Object.keys(i.outputs || {}).length) main.push(el("h4", { text: "outputs" }), fileView({ path: "outputs.json", title: `${i.id} · outputs`, text: JSON.stringify(i.outputs, null, 2), html: null }));
-  if (!main.length) main.push(el("p", { class: "muted small", text: i.status === "running" ? "正在执行。输出在底部的实时输出里，结束后这里显示摘要。" : "没有摘要。" }));
+  if (!main.length) main.push(el("p", { class: "muted small", text: i.status === "running" ? "Running. The output is in the live output at the bottom; the summary shows here when it ends." : "No summary." }));
 
-  const files = el("div", { class: "filelist" }, el("div", { class: "muted small", text: "读取中（约 2 秒）…" }));
-  const side = [el("h4", { text: "状态" }), kv([["状态", i.status], ["模型", i.model], ["尝试次数", i.attempts > 1 ? i.attempts : null], ["对话轮数", i.turns > 1 ? i.turns : null],
-    ["退出码", i.exit_code], ["manifest", i.manifest_status !== "ok" ? i.manifest_status : null],
-    ["审批", i.approvals_needed ? `${i.approvals.length}/${i.approvals_needed}：${i.approvals.join(", ") || "无"}` : null]]),
-    el("h4", { text: "产物和日志" }), files];
+  const files = el("div", { class: "filelist" }, el("div", { class: "muted small", text: "Loading (about 2 s)…" }));
+  const side = [el("h4", { text: "Status" }), kv([["Status", i.status], ["Model", i.model], ["Attempts", i.attempts > 1 ? i.attempts : null], ["Turns", i.turns > 1 ? i.turns : null],
+    ["Exit code", i.exit_code], ["manifest", i.manifest_status !== "ok" ? i.manifest_status : null],
+    ["Approvals", i.approvals_needed ? `${i.approvals.length}/${i.approvals_needed}: ${i.approvals.join(", ") || "none"}` : null]]),
+    el("h4", { text: "Artifacts and logs" }), files];
   let kbox = null;
-  if ((d.knowledge || []).length && exec === "agent") { kbox = el("div", { class: "kuse" }, el("div", { class: "muted small", text: "读取中…" })); side.push(el("h4", { text: "知识库读取" }), kbox); }
+  if ((d.knowledge || []).length && exec === "agent") { kbox = el("div", { class: "kuse" }, el("div", { class: "muted small", text: "Loading…" })); side.push(el("h4", { text: "Knowledge reads" }), kbox); }
   pane.replaceChildren(el("div", { class: "page" }, head, el("div", { class: "pgrid" }, el("div", { class: "pmain" }, main), el("div", { class: "pside" }, side))));
 
   const still = () => activeTab()?.kind === "step" && S.run === run && S.step === i.id;
   stepFiles(run, i).then((f) => {
     if (!still()) return;
     files.replaceChildren(
-      el("div", { class: "f", title: "最后一轮的完整日志", onclick: () => openTab({ kind: "file", run, step: i.id, log: true }, { preview: true }) }, el("span", { class: "fi", text: "≡" }), "日志（最后一轮）"),
+      el("div", { class: "f", title: "The full log of the last turn", onclick: () => openTab({ kind: "file", run, step: i.id, log: true }, { preview: true }) }, el("span", { class: "fi", text: "≡" }), "Log (last turn)"),
       ...f.outputs.map((p) => el("div", { class: "f", title: p, onclick: () => openTab({ kind: "file", run, path: `${f.out_dir}/${p}` }, { preview: true }) }, el("span", { class: "fi", text: "▢" }), p)));
   }).catch((e) => { if (still()) files.replaceChildren(el("div", { class: "muted small", text: e.message })); });
   if (kbox && typeof renderKnowledgeUse === "function") {  // knowledge.js
@@ -749,11 +749,11 @@ function renderLoop(pane, run, t) {
   const shown = loopShownRound(run, t);
   const insts = loopRoundInstances(run, t);
   pane.replaceChildren(el("div", { class: "page" },
-    el("div", { class: "ph" }, st(t.status), el("span", { class: "ic k-loop", text: "LOOP" }), el("h2", { text: t.id }), el("span", { class: "muted small", text: `第 ${t.round}/${t.max_rounds} 轮` })),
-    kv([["状态", t.status], ["轮次", `${t.round}/${t.max_rounds}`], ["结束条件", t.until], ["错误", t.error]]),
-    t.question ? [el("h4", { text: "等你决定" }), el("pre", { text: t.question.question + "\n" + t.question.options.map((o, n) => `${n + 1}. ${o}`).join("\n") }),
-      el("button", { class: "ghost small", text: "去对话里回复", onclick: () => openTab({ kind: "run", run }) })] : null,
-    t.rounds.length ? el("div", { class: "rtabs" }, t.rounds.map((r) => el("button", { type: "button", class: `rtab${r.round === shown ? " on" : ""}`, text: `第 ${r.round} 轮`,
+    el("div", { class: "ph" }, st(t.status), el("span", { class: "ic k-loop", text: "LOOP" }), el("h2", { text: t.id }), el("span", { class: "muted small", text: `round ${t.round}/${t.max_rounds}` })),
+    kv([["Status", t.status], ["Round", `${t.round}/${t.max_rounds}`], ["Until", t.until], ["Error", t.error]]),
+    t.question ? [el("h4", { text: "Waiting for your decision" }), el("pre", { text: t.question.question + "\n" + t.question.options.map((o, n) => `${n + 1}. ${o}`).join("\n") }),
+      el("button", { class: "ghost small", text: "Reply in the conversation", onclick: () => openTab({ kind: "run", run }) })] : null,
+    t.rounds.length ? el("div", { class: "rtabs" }, t.rounds.map((r) => el("button", { type: "button", class: `rtab${r.round === shown ? " on" : ""}`, text: `round ${r.round}`,
       onclick: () => { S.loopRound[`${run}/${t.id}`] = r.round; renderLoop(pane, run, t); renderRunTree(); } }))) : null,
     el("div", { class: "filelist" }, t.steps.map((s) => {
       const si = insts.filter((i) => i.step === s.id);
@@ -825,16 +825,16 @@ function renderPanelBar() {
   $("#ptabs").replaceChildren(...PANEL.tabs.map((t) => el("div", { class: `ptab${t.key === PANEL.active ? " on" : ""}`, title: `${t.run} · ${t.step}`,
     onclick: () => { PANEL.active = t.key; panelSave(); renderPanel(); }, onauxclick: (e) => { if (e.button === 1) panelClose(t.key); } },
     st(panelStatus(t)), el("span", { class: "tt", text: t.step }), el("span", { class: "ts", text: runLabel(t.run) }),
-    el("button", { type: "button", class: "tx", text: "×", title: "关闭", onclick: (e) => { e.stopPropagation(); panelClose(t.key); } }))),
-    ...(PANEL.tabs.length ? [] : [el("span", { class: "muted small", text: "实时输出：打开一个正在执行的步骤，或者点它的「实时输出」。" })]));
+    el("button", { type: "button", class: "tx", text: "×", title: "Close", onclick: (e) => { e.stopPropagation(); panelClose(t.key); } }))),
+    ...(PANEL.tabs.length ? [] : [el("span", { class: "muted small", text: "Live output: open a running step, or click its \"Live output\"." })]));
   const t = PANEL.tabs.find((x) => x.key === PANEL.active);
   const b = (text, title, fn, on) => el("button", { type: "button", class: `vbtn${on ? " on" : ""}`, text, title, onclick: fn });
   $("#pactions").replaceChildren(...[
-    t ? b("打开步骤", "在编辑区打开这一步", () => openTab({ kind: "step", run: t.run, step: t.step })) : null,
-    t ? b("完整日志", "最后一轮的完整日志", () => openTab({ kind: "file", run: t.run, step: t.step, log: true })) : null,
-    b("换行", "长行自动换行", () => { PANEL.wrap = !PANEL.wrap; PANEL.body?.classList.toggle("nowrap", !PANEL.wrap); renderPanelBar(); }, PANEL.wrap),
-    b(PANEL.max ? "⤡ 还原" : "⤢ 最大化", PANEL.max ? "还原（Esc）" : "占满编辑区", () => setPanelMax(!PANEL.max)),
-    b("⌄", "收起", () => setPanelOpen(false))].filter(Boolean));
+    t ? b("Open step", "Open this step in the editor area", () => openTab({ kind: "step", run: t.run, step: t.step })) : null,
+    t ? b("Full log", "The full log of the last turn", () => openTab({ kind: "file", run: t.run, step: t.step, log: true })) : null,
+    b("Wrap", "Wrap long lines", () => { PANEL.wrap = !PANEL.wrap; PANEL.body?.classList.toggle("nowrap", !PANEL.wrap); renderPanelBar(); }, PANEL.wrap),
+    b(PANEL.max ? "⤡ Restore" : "⤢ Maximise", PANEL.max ? "Restore (Esc)" : "Fill the editor area", () => setPanelMax(!PANEL.max)),
+    b("⌄", "Hide", () => setPanelOpen(false))].filter(Boolean));
 }
 
 function panelConnect(key) {
@@ -844,7 +844,7 @@ function panelConnect(key) {
   if (!key) { box.replaceChildren(); return; }
   const t = PANEL.tabs.find((x) => x.key === key);
   const body = el("div", { class: `liveout${PANEL.wrap ? "" : " nowrap"}` },
-    el("div", { class: "lo-meta", text: panelStatus(t) === "running" ? "等待输出…" : "读取输出记录…（输出保留 7 天；没有记录时点「完整日志」）" }));
+    el("div", { class: "lo-meta", text: panelStatus(t) === "running" ? "Waiting for output…" : "Reading the output record… (output is kept 7 days; if there is none, click \"Full log\")" }));
   body.addEventListener("scroll", () => { PANEL.stick = body.scrollTop + body.clientHeight >= body.scrollHeight - 24; });
   PANEL.body = body;
   box.replaceChildren(body);
@@ -872,7 +872,7 @@ function appendLiveOutput(c) {
   const turn = `${c.attempt}/${c.turn}`;
   if (turn !== PANEL.turn) {
     if (PANEL.partial) { box.append(el("div", { text: PANEL.partial })); PANEL.partial = ""; }
-    if (PANEL.turn) box.append(el("div", { class: "lo-sep", text: `—— 第 ${c.attempt} 次尝试 · 第 ${c.turn} 轮 ——` }));
+    if (PANEL.turn) box.append(el("div", { class: "lo-sep", text: `—— attempt ${c.attempt} · turn ${c.turn} ——` }));
     PANEL.turn = turn;
   }
   const lines = (PANEL.partial + c.text).split("\n");
@@ -891,21 +891,21 @@ async function loadDocs(force = false) {
   if (!run) return;
   if (!force && pane.dataset.run === run && pane.childElementCount) return;
   pane.dataset.run = run;
-  const viewer = el("div", { class: "dview" }, el("p", { class: "muted small pad", text: "在左边选一个文件。" }));
-  const list = el("div", { class: "dlist" }, el("div", { class: "muted small", text: "读取中…" }));
+  const viewer = el("div", { class: "dview" }, el("p", { class: "muted small pad", text: "Pick a file on the left." }));
+  const list = el("div", { class: "dlist" }, el("div", { class: "muted small", text: "Loading…" }));
   pane.replaceChildren(list, viewer);
   try {
     const files = await api(`/api/runs/${enc(run)}/files?dir=docs`);
     if (run !== S.run) return;
-    list.replaceChildren(el("div", { class: "row" }, el("h4", { text: "docs/" }), el("span", { class: "spacer" }), el("button", { class: "ghost small", text: "刷新", onclick: () => loadDocs(true) })),
+    list.replaceChildren(el("div", { class: "row" }, el("h4", { text: "docs/" }), el("span", { class: "spacer" }), el("button", { class: "ghost small", text: "Refresh", onclick: () => loadDocs(true) })),
       el("div", { class: "filelist" }, files.length ? files.map((p) => el("div", { class: "f", title: p, text: p.replace(/^docs\//, ""), onclick: (e) => {
         list.querySelectorAll(".f.on").forEach((x) => x.classList.remove("on")); e.currentTarget.classList.add("on"); showFile(p, viewer);
-      } })) : el("div", { class: "muted small", text: "还没有文档。" })));
+      } })) : el("div", { class: "muted small", text: "No docs yet." })));
   } catch (e) { list.replaceChildren(el("p", { class: "muted small", text: e.message })); }
 }
 
 async function showFile(path, target) {
-  target.replaceChildren(el("div", { class: "muted small pad", text: `正在读取 ${path} …` }));
+  target.replaceChildren(el("div", { class: "muted small pad", text: `Loading ${path} …` }));
   try {
     const f = await api(`/api/runs/${enc(S.run)}/file?path=${enc(path)}`);
     target.replaceChildren(fileView(f));
@@ -914,14 +914,14 @@ async function showFile(path, target) {
 
 async function loadFileTab(t) {
   const pane = $("#pane-file"), key = t.key;
-  pane.replaceChildren(el("div", { class: "muted small pad", text: t.log ? "正在读取日志（约 2 秒）…" : `正在读取 ${t.path} …` }));
+  pane.replaceChildren(el("div", { class: "muted small pad", text: t.log ? "Loading the log (about 2 s)…" : `Loading ${t.path} …` }));
   try {
     let f;
     if (t.log) {
       if (!DETAIL.get(t.run)) await loadDetail(t.run);
       const i = DETAIL.get(t.run) && findInstanceIn(DETAIL.get(t.run), t.step);
       const sf = i ? await stepFiles(t.run, i) : await api(`/api/runs/${enc(t.run)}/steps/${enc(t.step)}`);
-      f = { path: "step.log", title: `${t.step} · 日志（最后一轮）`, text: sf.log || "（没有日志）", html: null };
+      f = { path: "step.log", title: `${t.step} · log (last turn)`, text: sf.log || "(no log)", html: null };
     } else f = await api(`/api/runs/${enc(t.run)}/file?path=${enc(t.path)}`);
     if (TABS.active === key) pane.replaceChildren(fileView(f));
   } catch (e) { if (TABS.active === key) pane.replaceChildren(el("div", { class: "muted small pad", text: e.message })); }
@@ -980,11 +980,11 @@ function formatText(text, lang, path) {
   if (/\.(jsonl|ndjson)$/i.test(path)) {
     let bad = 0;
     const out = text.split("\n").filter((l) => l.trim()).map((l) => { if (!parsesAsJson(l)) { bad++; return l; } return prettyJson(l); });
-    return { text: out.join("\n"), note: bad ? `已格式化，${bad} 行不是合法 JSON，保留原文` : "已格式化" };
+    return { text: out.join("\n"), note: bad ? `Formatted. ${bad} lines are not valid JSON and stay as they are` : "Formatted" };
   }
-  if (!parsesAsJson(text)) return { text, note: "不是合法 JSON，显示原文" };
+  if (!parsesAsJson(text)) return { text, note: "Not valid JSON. Showing the original text" };
   const out = prettyJson(text);
-  return { text: out, note: out === text.trim() ? "" : "已格式化" };
+  return { text: out, note: out === text.trim() ? "" : "Formatted" };
 }
 
 function highlighted(text, lang) {
@@ -1027,23 +1027,23 @@ function fileView(f, opts = {}) {
     }
     const btn = (label, on, fn, title) => el("button", { type: "button", class: `vbtn${on ? " on" : ""}`, title, text: label, onclick: fn });
     const set = (k, v) => () => { st[k] = v; draw(); };
-    const copy = btn("复制", false, async (e) => {
+    const copy = btn("Copy", false, async (e) => {
       const b = e.currentTarget;
-      try { await navigator.clipboard.writeText(rendered ? f.text : shown.text); b.textContent = "已复制"; }
-      catch { b.textContent = "复制失败"; }
-      setTimeout(() => { b.textContent = "复制"; }, 1200);
-    }, "复制当前显示的内容");
+      try { await navigator.clipboard.writeText(rendered ? f.text : shown.text); b.textContent = "Copied"; }
+      catch { b.textContent = "Copy failed"; }
+      setTimeout(() => { b.textContent = "Copy"; }, 1200);
+    }, "Copy what is shown now");
     const bar = el("div", { class: "vbar" },
       el("span", { class: "vpath", title: f.path, text: f.title || f.path }),
       el("span", { class: "tag vlang", text: lang === "plaintext" ? "text" : lang }),
       shown.note && !rendered ? el("span", { class: "vnote", text: shown.note }) : null,
       el("span", { class: "spacer" }),
-      isMd ? el("span", { class: "seg" }, btn("渲染", st.mode === "render", set("mode", "render")), btn("源码", st.mode === "source", set("mode", "source"))) : null,
-      lang === "json" ? btn("格式化", st.fmt, set("fmt", !st.fmt), "格式化 / 显示原文") : null,
-      rendered ? null : btn("换行", st.wrap, set("wrap", !st.wrap), "长行自动换行"),
+      isMd ? el("span", { class: "seg" }, btn("Rendered", st.mode === "render", set("mode", "render")), btn("Source", st.mode === "source", set("mode", "source"))) : null,
+      lang === "json" ? btn("Format", st.fmt, set("fmt", !st.fmt), "Format / show the original text") : null,
+      rendered ? null : btn("Wrap", st.wrap, set("wrap", !st.wrap), "Wrap long lines"),
       copy,
-      st.full ? btn("关闭", false, () => $("#viewerDlg").close(), "关闭（Esc）")
-        : btn("⤢ 全屏", false, () => openFull(f, st), "在弹窗里全屏查看"));
+      st.full ? btn("Close", false, () => $("#viewerDlg").close(), "Close (Esc)")
+        : btn("⤢ Full screen", false, () => openFull(f, st), "View full screen in a dialog"));
     box.replaceChildren(bar, body);
   };
   draw();
@@ -1056,13 +1056,13 @@ function imageView(f, opts = {}) {
   const btn = (label, fn, title) => el("button", { type: "button", class: "vbtn", title, text: label, onclick: fn });
   const img = el("img", { class: "vimg", src: f.image, alt: f.path });
   const body = el("div", { class: "vbody image" }, img);
-  img.addEventListener("error", () => body.replaceChildren(el("div", { class: "muted small", text: `读取失败：${f.path}` })));
+  img.addEventListener("error", () => body.replaceChildren(el("div", { class: "muted small", text: `Could not load: ${f.path}` })));
   const bar = el("div", { class: "vbar" },
     el("span", { class: "vpath", title: f.path, text: f.title || f.path }),
     el("span", { class: "tag vlang", text: "image" }),
     el("span", { class: "spacer" }),
-    el("a", { class: "vbtn", href: f.image, target: "_blank", rel: "noopener", text: "原图" }),
-    full ? btn("关闭", () => $("#viewerDlg").close(), "关闭（Esc）") : btn("⤢ 全屏", () => openFull(f, {}), "在弹窗里全屏查看"));
+    el("a", { class: "vbtn", href: f.image, target: "_blank", rel: "noopener", text: "Original" }),
+    full ? btn("Close", () => $("#viewerDlg").close(), "Close (Esc)") : btn("⤢ Full screen", () => openFull(f, {}), "View full screen in a dialog"));
   return el("div", { class: `viewer${full ? " full" : ""}` }, bar, body);
 }
 
@@ -1078,7 +1078,7 @@ function openFull(f, st) {
 const MAX = { box: null, scrim: null, watch: null };
 
 function maxButton(box) {
-  return el("button", { type: "button", class: "vbtn maxbtn", text: "⤢ 最大化", title: "铺满窗口查看（Esc 还原）",
+  return el("button", { type: "button", class: "vbtn maxbtn", text: "⤢ Maximise", title: "Fill the window (Esc restores)",
     onclick: () => setMax(box, MAX.box !== box) });
 }
 
@@ -1087,7 +1087,7 @@ function setMax(box, on) {
   if (!on && MAX.box !== box) return;
   box.classList.toggle("maxed", on);
   const b = box.querySelector(":scope > * > .maxbtn");
-  if (b) { b.textContent = on ? "⤡ 还原" : "⤢ 最大化"; b.title = on ? "还原（Esc）" : "铺满窗口查看（Esc 还原）"; }
+  if (b) { b.textContent = on ? "⤡ Restore" : "⤢ Maximise"; b.title = on ? "Restore (Esc)" : "Fill the window (Esc restores)"; }
   if (!MAX.scrim) {
     MAX.scrim = el("div", { class: "maxscrim", hidden: true, onclick: () => MAX.box && setMax(MAX.box, false) });
     document.body.append(MAX.scrim);
@@ -1109,26 +1109,26 @@ document.addEventListener("keydown", (e) => {
 });
 
 
-// The changes tab: one drawn page per run, kept until 刷新 (the diff takes a helper container, ~2 s).
+// The changes tab: one drawn page per run, kept until Refresh (the diff takes a helper container, ~2 s).
 const CH = new Map();
 async function loadChanges(force = false) {
   const pane = $("#pane-changes"), runId = S.run;
   if (!runId) return;
   if (!force && CH.has(runId)) { pane.replaceChildren(CH.get(runId)); return; }
-  pane.replaceChildren(el("p", { class: "muted small pad", text: "正在读取改动（约 2 秒）…" }));
+  pane.replaceChildren(el("p", { class: "muted small pad", text: "Loading the changes (about 2 s)…" }));
   let d;
   try { d = await api(`/api/runs/${enc(runId)}/changes`); }
-  catch (e) { if (runId === S.run) pane.replaceChildren(el("p", { class: "muted small pad", text: `读取改动失败：${e.message}` })); return; }
-  const kids = [el("div", { class: "row" }, el("h4", { text: `相对 ${d.base} 的改动` }), el("span", { class: "spacer" }),
-    el("button", { class: "ghost small", text: "刷新", onclick: () => loadChanges(true) }))];
+  catch (e) { if (runId === S.run) pane.replaceChildren(el("p", { class: "muted small pad", text: `Could not read the changes: ${e.message}` })); return; }
+  const kids = [el("div", { class: "row" }, el("h4", { text: `Changes against ${d.base}` }), el("span", { class: "spacer" }),
+    el("button", { class: "ghost small", text: "Refresh", onclick: () => loadChanges(true) }))];
   if (d.no_diff_reason || !d.files.length) {
-    kids.push(el("p", { class: "muted small", text: d.no_diff_reason ? "这个运行没有代码仓库，或者还没有拉取代码。" : "没有改动。" }));
+    kids.push(el("p", { class: "muted small", text: d.no_diff_reason ? "This run has no code repository, or has not fetched the code yet." : "No changes." }));
   } else {
     const added = d.files.reduce((n, f) => n + f.added, 0), removed = d.files.reduce((n, f) => n + f.removed, 0);
     const diffs = el("div", { class: "diffs" });
     for (const f of d.files) diffs.append(renderDiff(f));
     const box = el("div", { class: "diffbox" });
-    box.append(el("div", { class: "dbar" }, el("span", { class: "small muted", text: `${d.files.length} 个文件，+${added} −${removed}` }),
+    box.append(el("div", { class: "dbar" }, el("span", { class: "small muted", text: `${d.files.length} files, +${added} −${removed}` }),
       el("span", { class: "spacer" }), maxButton(box)),
     el("div", { class: "dbody" },
       d.log ? el("pre", { class: "small", text: d.log }) : null,
@@ -1138,14 +1138,14 @@ async function loadChanges(force = false) {
     kids.push(box);
   }
   if (d.review_round) {
-    kids.push(el("h4", { text: `Review 结论（第 ${d.review_round} 轮）` }));
+    kids.push(el("h4", { text: `Review verdict (round ${d.review_round})` }));
     if (d.summary_html) kids.push(Object.assign(el("div", { class: "md small" }), { innerHTML: d.summary_html }));
     const open = d.findings.filter((f) => f.status !== "fixed");
-    if (open.length) kids.push(el("table", { class: "findings" }, el("tr", {}, ["严重程度", "位置", "问题"].map((h) => el("th", { text: h }))),
+    if (open.length) kids.push(el("table", { class: "findings" }, el("tr", {}, ["Severity", "Location", "Problem"].map((h) => el("th", { text: h }))),
       open.map((f) => el("tr", {}, el("td", { class: `sev-${f.severity}`, text: f.severity || "" }), el("td", { text: `${f.file || ""}${f.line ? `:${f.line}` : ""}` }),
         el("td", {}, el("div", { text: f.title || "" }), f.evidence ? el("div", { class: "muted", text: f.evidence }) : null)))));
   }
-  if (d.risk_html) kids.push(el("h4", { text: "风险判定" }), Object.assign(el("div", { class: "md small" }), { innerHTML: d.risk_html }));
+  if (d.risk_html) kids.push(el("h4", { text: "Risk verdict" }), Object.assign(el("div", { class: "md small" }), { innerHTML: d.risk_html }));
   const page = el("div", { class: "page wide" }, kids);
   CH.set(runId, page);
   if (runId === S.run && activeTab()?.kind === "changes") pane.replaceChildren(page);
@@ -1172,7 +1172,7 @@ $("#input").addEventListener("input", (e) => { if (S.run) DRAFT[S.run] = e.targe
 $("#approveBtn").addEventListener("click", () => decideApproval("approve"));
 $("#rejectBtn").addEventListener("click", () => decideApproval("reject"));
 $("#changesBtn").addEventListener("click", () => {
-  if (!$("#input").value.trim()) { $("#sendError").textContent = "先在输入框里写修改意见。"; $("#input").focus(); return; }
+  if (!$("#input").value.trim()) { $("#sendError").textContent = "Write your change requests in the input box first."; $("#input").focus(); return; }
   decideApproval("changes");
 });
 $("#seeChanges").addEventListener("click", () => openTab({ kind: "changes", run: S.run }));
@@ -1265,8 +1265,8 @@ function connectLive(after) {
     }
   };
   for (const k of EVENT_KINDS) es.addEventListener(k, on);
-  es.onopen = () => { LIVE.ok = true; $("#meta").classList.add("live-on"); $("#meta").title = "事件流已连接"; };
-  es.onerror = () => { LIVE.ok = false; $("#meta").classList.remove("live-on"); $("#meta").title = "事件流断开，正在重连"; };
+  es.onopen = () => { LIVE.ok = true; $("#meta").classList.add("live-on"); $("#meta").title = "Event stream connected"; };
+  es.onerror = () => { LIVE.ok = false; $("#meta").classList.remove("live-on"); $("#meta").title = "Event stream disconnected, reconnecting"; };
 }
 
 (async () => {

@@ -135,7 +135,7 @@ async def test_an_infrastructure_failure_of_a_skip_step_is_skipped_too(client):
             history = await h.fetch_history()
     takeaway = state.instances["takeaway"]
     assert state.status == "succeeded" and takeaway.status == "skipped" and takeaway.skipped_after_failure
-    assert "平台错误" in takeaway.error
+    assert "platform error" in takeaway.error
     assert "takeaway" not in ran(runner) and state.instances["risk-rules"].status == "succeeded"
     await replay(history)
 

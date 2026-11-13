@@ -9,7 +9,7 @@
 # copies credentials; it only checks that deploy/secrets/ has the files.
 #
 # Steps: tools → directories (myorch, myorch-knowledge, myorch-data) → credential files → images →
-# compose up → project packs → smoke test. Details: deploy/README.md「新机器」.
+# compose up → project packs → smoke test. Details: deploy/README.md, "New machine".
 set -euo pipefail
 
 ROOT="${MYORCH_ROOT:-$HOME/orca/projects}"   # the parent of myorch/, myorch-knowledge/, myorch-data/
@@ -113,7 +113,7 @@ say "7. Smoke test (two script steps, no model, about 20 seconds)"
 
 say "Done"
 cat <<EOF
-   Still to do by hand (deploy/README.md「新机器」):
+   Still to do by hand (deploy/README.md, "New machine"):
    - Energy: prevent automatic sleep; Docker Desktop: start at login.
    - Remote Login (System Settings → General → Sharing) if you use this Mac from another one:
        ssh -N -L 8800:127.0.0.1:8800 $(id -un)@$(scutil --get LocalHostName 2>/dev/null || hostname).local

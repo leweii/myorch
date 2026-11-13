@@ -26,8 +26,8 @@ role: learn
 inputs:
   runs:
     type: string
-    label: 要学习的运行
-    hint: 可选。逗号分隔的运行 ID；留空时自动选上次 learn 之后的运行
+    label: Runs to learn from
+    hint: Optional. Comma-separated run IDs; when empty, the runs since the last learn are picked
 image: "{{project.image}}"
 model: claude-sonnet-5-5
 
@@ -40,7 +40,7 @@ steps:
     profile: dev-git
     observe_runs: "{{inputs.runs}}"
     outputs:
-      findings: "收集到的发现条数"
+      findings: "Number of findings collected"
     limits: { timeout: 10m, retries: 1 }
     prompt: |
       set -euo pipefail
@@ -104,7 +104,17 @@ steps:
                           "pr_state": (pr_info or {}).get("state"), "merged": (pr_info or {}).get("merged")})
 
       # Everything else the runs tell: decisions, rework, failures (docs/learn/signals.json / .md).
+      # Runs from before myorch went English-only wrote these headings in Chinese; still read them.
+      LEGACY = {
+          "Assumptions": "\u5047\u8bbe",
+          "Differences from the requirements": "\u548c\u9700\u6c42\u6587\u6863\u7684\u5dee\u5f02",
+          "Differences from the design": "\u548c\u8bbe\u8ba1\u7684\u5dee\u5f02",
+          "Problems encountered": "\u9047\u5230\u7684\u95ee\u9898",
+          "Missing knowledge": "\u7f3a\u4e86\u4ec0\u4e48\u77e5\u8bc6",
+          "Suggestions for the flow or platform": "\u5bf9\u6d41\u7a0b\u6216\u5e73\u53f0\u7684\u5efa\u8bae",
+      }
       def section(t, name):
+          names = [name] + ([LEGACY[name]] if name in LEGACY else [])
           out, level = [], 0
           for line in t.splitlines():
               m = re.match(r"^(#+)\s+(.*)", line)
@@ -112,7 +122,7 @@ steps:
                   break
               if level:
                   out.append(line)
-              elif m and name in m.group(2):
+              elif m and any(n in m.group(2) for n in names):
                   level = len(m.group(1))
           return "\n".join(out).strip()[:2000]
       trail = {t["run"]: t for t in (load(f"{ws}/docs/learn/trail.json", []) or [])}
@@ -126,8 +136,8 @@ steps:
               if r.get("failed"):
                   ci_failed.append({"round": int(re.search(r"round-(\d+)", p)[1]), "failed": r.get("failed")})
           sig = {"run": run, **{k: v for k, v in trail.get(run, {}).items() if k != "run"},
-                 "assumptions": section(impl, "假设"), "off_requirement": section(impl, "和需求文档的差异"),
-                 "off_design": section(impl, "和设计的差异"), "ci_failed": ci_failed,
+                 "assumptions": section(impl, "Assumptions"), "off_requirement": section(impl, "Differences from the requirements"),
+                 "off_design": section(impl, "Differences from the design"), "ci_failed": ci_failed,
                  "continued_because": text(f"{d}/docs/external/request.md")[:2000] if text(f"{d}/docs/previous/RUN") else "",
                  "postmortem": text(f"{d}/docs/postmortem/postmortem.md")[:4000],
                  "postmortem_follow_ups": text(f"{d}/docs/postmortem/follow-ups.md")[:2000]}
@@ -156,7 +166,7 @@ steps:
       except (subprocess.CalledProcessError, OSError) as e:
           # Never the command line or git's stderr: the auth header carries the token's placeholder.
           code = getattr(e, "returncode", None)
-          listing, takeaway_note = [], "读不到仓库的 myorch/" + (f"（git 退出码 {code}）" if code is not None else f"（{type(e).__name__}）")
+          listing, takeaway_note = [], "cannot read the repository's myorch/" + (f" (git exit code {code})" if code is not None else f" ({type(e).__name__})")
       try:
           learned = set(json.load(open(f"{ws}/docs/learn/takeaways-learned.json", encoding="utf-8")))
       except (OSError, ValueError, TypeError):
@@ -191,57 +201,57 @@ steps:
               open(f"{ws}/docs/learn/takeaways/{name}/{f}", "w", encoding="utf-8").write(t)
           t = files.get("takeaway.md", "")
           picked.append({"run": run_id, "date": date, "dir": f"docs/learn/takeaways/{name}",
-                         "problems": section(t, "遇到的问题"), "missing": section(t, "缺了什么知识"),
-                         "suggestions": section(t, "对流程或平台的建议")})
+                         "problems": section(t, "Problems encountered"), "missing": section(t, "Missing knowledge"),
+                         "suggestions": section(t, "Suggestions for the flow or platform")})
       left = len(entries) - len(picked) - len(unreadable)
       if unreadable:
-          takeaway_note = (takeaway_note + "；" if takeaway_note else "") + f"{len(unreadable)} 条读不到 takeaway.md，下次再试"
+          takeaway_note = (takeaway_note + "; " if takeaway_note else "") + f"{len(unreadable)} takeaway.md files could not be read, trying again next time"
       json.dump({"picked": picked, "left": left, "unreadable": unreadable, "note": takeaway_note},
                 open(f"{ws}/docs/learn/takeaways.json", "w"), ensure_ascii=False, indent=1)
       with open(f"{ws}/docs/learn/signals.md", "w", encoding="utf-8") as out:
-          out.write("# 过程中的信号（除了 review 的发现）\n\n")
+          out.write("# Signals from the runs (besides review findings)\n\n")
           for g in signals:
-              out.write(f"## {g['run']}（{g.get('flow') or '?'}，{g.get('status') or '?'}）\n\n")
+              out.write(f"## {g['run']} ({g.get('flow') or '?'}, {g.get('status') or '?'})\n\n")
               if g.get("continued_from"):
-                  out.write(f"- 接着 {g['continued_from']} 改。原因（这次的请求）：{g['continued_because'][:400] or '（没有写）'}\n")
+                  out.write(f"- Continued from {g['continued_from']}. Reason (this request): {g['continued_because'][:400] or '(not given)'}\n")
               for q in g.get("qa") or []:
-                  out.write(f"- 问（{q['step']}）：{q['question'][:300]}\n  答：{q['answer'][:300]}\n")
+                  out.write(f"- Question ({q['step']}): {q['question'][:300]}\n  Answer: {q['answer'][:300]}\n")
               for c in g.get("changes") or []:
-                  out.write(f"- 修改意见（{c['by']}）：{c['text'][:300]}\n")
+                  out.write(f"- Change request ({c['by']}): {c['text'][:300]}\n")
               for r in g.get("rejected") or []:
-                  out.write(f"- 审批被驳回：{r['step']}，{r['by']}\n")
+                  out.write(f"- Approval rejected: {r['step']}, {r['by']}\n")
               for f in g.get("failures") or []:
-                  out.write(f"- 步骤失败：{f['step']}（第 {f.get('attempts')} 次）：{(f.get('error') or '')[:200]}\n")
+                  out.write(f"- Step failed: {f['step']} (attempt {f.get('attempts')}): {(f.get('error') or '')[:200]}\n")
               for c in g["ci_failed"]:
-                  out.write(f"- CI 第 {c['round']} 轮失败：{', '.join(map(str, c['failed']))}\n")
-              for k, label in (("assumptions", "实现时的假设"), ("off_requirement", "和需求的差异"), ("off_design", "和设计的差异")):
-                  if g[k] and g[k].strip() not in ("无", "无。"):
-                      out.write(f"- {label}：{g[k][:400]}\n")
+                  out.write(f"- CI failed in round {c['round']}: {', '.join(map(str, c['failed']))}\n")
+              for k, label in (("assumptions", "Assumptions in the implementation"), ("off_requirement", "Differences from the requirements"), ("off_design", "Differences from the design")):
+                  if g[k] and g[k].strip().lower() not in ("none", "none."):
+                      out.write(f"- {label}: {g[k][:400]}\n")
               if g["postmortem"]:
-                  out.write(f"- 复盘结论：见 observed/{g['run']}/docs/postmortem/postmortem.md\n")
+                  out.write(f"- Postmortem conclusion: see observed/{g['run']}/docs/postmortem/postmortem.md\n")
               out.write("\n")
           if picked:
-              out.write(f"# 仓库里的 takeaway（{len(picked)} 条，全文在 docs/learn/takeaways/" + (f"；还有 {left} 条留给下次" if left else "") + "）\n\n")
+              out.write(f"# Takeaways in the repository ({len(picked)}, full text in docs/learn/takeaways/" + (f"; {left} more left for next time" if left else "") + ")\n\n")
               for k in picked:
-                  out.write(f"## {k['run']}（{k['date']}，{k['dir']}）\n\n")
-                  for key, label in (("problems", "遇到的问题"), ("missing", "缺了什么知识"), ("suggestions", "对流程或平台的建议")):
-                      if k[key] and k[key].strip() not in ("无", "无。"):
-                          out.write(f"- {label}：{k[key][:600]}\n")
+                  out.write(f"## {k['run']} ({k['date']}, {k['dir']})\n\n")
+                  for key, label in (("problems", "Problems encountered"), ("missing", "Missing knowledge"), ("suggestions", "Suggestions for the flow or platform")):
+                      if k[key] and k[key].strip().lower() not in ("none", "none."):
+                          out.write(f"- {label}: {k[key][:600]}\n")
                   out.write("\n")
       json.dump({"runs": per_run, "findings": findings}, open(f"{ws}/docs/learn/findings.json", "w"), ensure_ascii=False, indent=1)
       counts = {}
       for f in findings:
           counts[f["outcome"]] = counts.get(f["outcome"], 0) + 1
       with open(f"{ws}/docs/learn/outcomes.md", "w", encoding="utf-8") as out:
-          out.write(f"# 发现与处理结果（{len(runs)} 次运行，{len(findings)} 条）\n\n")
-          out.write("| 处理结果 | 条数 |\n|---|---|\n" + "".join(f"| {k} | {v} |\n" for k, v in sorted(counts.items())))
-          out.write("\n| run | flow | 轮数 | PR | 状态 |\n|---|---|---|---|---|\n")
+          out.write(f"# Findings and outcomes ({len(runs)} runs, {len(findings)} findings)\n\n")
+          out.write("| Outcome | Count |\n|---|---|\n" + "".join(f"| {k} | {v} |\n" for k, v in sorted(counts.items())))
+          out.write("\n| run | flow | rounds | PR | state |\n|---|---|---|---|---|\n")
           out.write("".join(f"| {r['run']} | {r['flow']} | {r['rounds']} | {r['pr'] or '-'} | {'merged' if r['merged'] else (r['pr_state'] or '-')} |\n" for r in per_run))
       n_qa = sum(len(g.get("qa") or []) for g in signals)
       n_rework = sum(1 for g in signals if g.get("continued_from")) + sum(1 for g in signals if g["postmortem"])
-      json.dump({"status": "ok", "summary": f"{len(runs)} 次运行，{len(findings)} 条发现（" + "、".join(f"{k} {v}" for k, v in sorted(counts.items()))
-                 + f"），{n_qa} 个人回答过的问题，{n_rework} 次返工或复盘，仓库里 {len(picked)} 条新 takeaway"
-                 + (f"（还有 {left} 条留给下次）" if left else "") + (f"；{takeaway_note}" if takeaway_note else ""),
+      json.dump({"status": "ok", "summary": f"{len(runs)} runs, {len(findings)} findings (" + ", ".join(f"{k} {v}" for k, v in sorted(counts.items()))
+                 + f"), {n_qa} questions answered by people, {n_rework} reworks or postmortems, {len(picked)} new takeaways in the repository"
+                 + (f" ({left} more left for next time)" if left else "") + (f"; {takeaway_note}" if takeaway_note else ""),
                  "outputs": {"findings": len(findings), "outcomes": counts, "answers": n_qa, "rework": n_rework,
                              "takeaways": len(picked), "takeaways_left": left}},
                 open("/sandbox/out/manifest.json", "w"), ensure_ascii=False)
@@ -254,58 +264,59 @@ steps:
     needs: [collect]
     observe_runs: "{{inputs.runs}}"
     outputs:
-      proposals: "提出的知识库修改建议条数（0 到 5）"
-      follow_ups: "不自动应用、需要另起 development 的建议条数"
+      proposals: "Number of proposed knowledge changes (0 to 5)"
+      follow_ups: "Number of proposals that are not applied automatically and need a separate development run"
     limits: { timeout: 20m }
     prompt: |
-      你负责从过往运行中沉淀知识，让下一次运行一开始就知道这次学到的东西。不要修改任何东西，只写建议文件。
+      You distil knowledge from past runs, so the next run knows from the start what these runs learned. Do not change anything; only write proposal files.
+      Write everything in English.
 
-      ## 输入
-      - docs/learn/findings.json 和 outcomes.md：各次运行核实过的 review 发现，以及之后的处理结果
-        （fixed 修了 / rebutted 被反驳 / merged_unchanged 没改就合并 / not_required 不阻塞 / open、closed、unknown）。
-      - docs/learn/signals.md 和 signals.json：review 以外的信号——人回答过的问题（决定）、修改意见、驳回、
-        失败的步骤、CI 失败、实现时的假设和偏差、为什么在分支上接着改（第一次漏了什么）、复盘结论。
-      - docs/learn/takeaways/<日期>-<run_id>/ 和 takeaways.json：开发运行自己写下的任务信息（task.md）和经验
-        （takeaway.md：遇到的问题、缺了什么知识、对流程或平台的建议），随 PR 合并进了仓库。这些运行不一定在 observed/ 里。
-        当作信号，和其他证据一样核实：只采纳能推广到以后的项目知识，同一条在几次运行里都出现更可信。
-        只对某个工单成立的内容不要采纳。流程、平台、环境类的建议写进 flow-proposals.md。
-        引用时证据写 "<run_id>: takeaway"。没有这个目录就是没有新的 takeaway。
-      - observed/<run_id>/docs/：每次运行的需求、设计、实现记录、各轮 review、风险判定、复盘，需要细节时去读。
-      - project/guide/：这个项目当前的知识（myorch 维护），这是你要改进的主要对象。
-      - project/checks.sh、project/checks.env：每次运行都跑的确定性检查。project/risk-rules.yaml、project/security.md 只读参考。
-      - 仓库自带的知识（见工作区说明）只读，不要重复里面已有的内容。
+      ## Input
+      - docs/learn/findings.json and outcomes.md: the verified review findings of each run, and what happened to them afterwards
+        (fixed / rebutted / merged_unchanged: merged without a change / not_required: does not block / open, closed, unknown).
+      - docs/learn/signals.md and signals.json: signals besides review: questions people answered (decisions), change requests, rejections,
+        failed steps, CI failures, assumptions and deviations in the implementation, why a run was continued on its branch (what the first run missed), postmortem conclusions.
+      - docs/learn/takeaways/<date>-<run_id>/ and takeaways.json: the task info (task.md) and lessons
+        (takeaway.md: problems encountered, missing knowledge, suggestions for the flow or platform) that development runs wrote themselves; they were merged into the repository with the PR. These runs are not necessarily in observed/.
+        Treat them as signals and verify them like any other evidence: adopt only project knowledge that applies to later work. The same point in several runs is more credible.
+        Do not adopt content that only holds for one ticket. Suggestions about the flow, platform or environment go into flow-proposals.md.
+        When you cite one, write the evidence as "<run_id>: takeaway". No such directory means there are no new takeaways.
+      - observed/<run_id>/docs/: each run's requirements, design, implementation record, review rounds, risk verdict and postmortem. Read them when you need details.
+      - project/guide/: this project's current knowledge (maintained by myorch). This is the main thing you improve.
+      - project/checks.sh, project/checks.env: the deterministic checks every run executes. project/risk-rules.yaml and project/security.md are read-only references.
+      - The repository's own knowledge (see the workspace notes) is read-only. Do not repeat what it already says.
 
-      ## 找这几类知识，每条都要有证据（哪次运行、哪一轮、哪条发现、哪个回答，或哪条 takeaway）
-      1. 人做过的决定（kind: record-decision）：需求分析或设计时人回答的问题，以后同类问题照这个做，就不用再问。
-         写进 project/guide/decisions.md：一条一项，写清楚「什么情况 → 怎么做 → 为什么（人的原话或理由）→ 出处」。
-         只记能推广到以后的决定。只对这一次有效的选择（例如这次改哪一篇）不要记。
-      2. 返工的原因（kind: fill-gap）：在分支上接着改的原因、复盘结论、实现偏离需求或设计、实现时不得不做的假设。
-         问一句：如果知识库里早写了什么，第一次就能做对？把它写进 development.md、design 相关的指南，或 writing-conventions.md。
-      3. 反复出现的同类问题（kind: add-rule）：至少 2 次运行，或 1 次但影响大。写进实现时要避开的规则，或者 review-guide.md 让 reviewer 识别。
-      4. 太严或判错的规则（kind: relax-rule）：反复被反驳、或没改就合并的意见，放宽 review-guide.md。
-      5. 确定性检查（kind: add-check）：反复出现、能用脚本判断的问题，或者反复失败的 CI 检查。
-         改 project/checks.sh（或 checks.env）。遵守 checks.sh 文件开头写的约定（输入、report.md、result.json、退出码）。
-         只加确定性的检查，会误报的只报警告，不要让检查失败。不确定怎么写对时，写进 follow-ups，不要改脚本。
-      6. 流程问题：步骤的顺序、提问的时机、某一步总是失败或总是多余。不能自动应用，写进 docs/learn/flow-proposals.md。
-      不要重复知识库里已经写了的内容；措辞简短，沿用现有文件的风格；最多 8 条。没有足够证据就少提甚至不提。
+      ## Look for these kinds of knowledge; each item needs evidence (which run, which round, which finding, which answer, or which takeaway)
+      1. Decisions people made (kind: record-decision): questions people answered during requirement analysis or design. Later questions of the same kind follow the answer and need not be asked again.
+         Write them into project/guide/decisions.md: one item per decision, stating "situation → what to do → why (the person's words or reason) → source".
+         Record only decisions that apply to later work. Do not record choices that only held this once (for example which post to change this time).
+      2. Causes of rework (kind: fill-gap): why a run was continued on its branch, postmortem conclusions, an implementation that deviated from the requirements or design, assumptions the implementation had to make.
+         Ask: what, written in the knowledge earlier, would have made the first attempt right? Write it into development.md, the design guides, or writing-conventions.md.
+      3. Problems of the same kind that recur (kind: add-rule): at least 2 runs, or 1 run with a large impact. Write a rule to avoid during implementation, or add it to review-guide.md so reviewers spot it.
+      4. Rules that are too strict or wrong (kind: relax-rule): comments that were rebutted repeatedly, or merged without a change. Relax review-guide.md.
+      5. Deterministic checks (kind: add-check): recurring problems a script can decide, or CI checks that fail repeatedly.
+         Change project/checks.sh (or checks.env). Follow the conventions at the top of checks.sh (input, report.md, result.json, exit code).
+         Add only deterministic checks. Checks that may give false positives only warn; they must not make the checks fail. When you are not sure how to write one correctly, put it in follow-ups and do not change the script.
+      6. Flow problems: the order of steps, when questions are asked, a step that always fails or is always unnecessary. These cannot be applied automatically; write them into docs/learn/flow-proposals.md.
+      Do not repeat what the knowledge already says. Keep the wording short and follow the style of the existing files. At most 8 items. Without enough evidence, propose fewer, or none.
 
-      ## 写这些文件
-      - docs/learn/proposals.json：JSON 数组，每项
-        {"id": 1, "title": "一句话", "kind": "record-decision|fill-gap|add-rule|relax-rule|add-check", "evidence": ["<run_id>: <出处>", ...],
-         "changes": [{"file": "project/guide/<文件>", "edits": [{"old": "<文件里恰好出现一次的原文>", "new": "<替换后>"}]}
-                     或 {"file": "project/guide/<文件>", "append": "<追加到文件末尾的 markdown>"}]}
-        old 必须从当前文件里逐字复制，并且在文件里只出现一次；不确定就用 append。
-        只能改 project/guide/ 下的文件（可以新建，用 append）和 project/checks.sh、project/checks.env。
-        guide/decisions.md 不存在时，第一条 record-decision 用 append 新建，开头写「# 已经决定的事」和一句说明：需求分析和技术设计遇到同类问题时照这里做，不再问人。
-      - docs/learn/proposals.md：给人看的版本，每条：编号、类型、标题、证据数量、具体改什么（几行以内）。
-      - docs/learn/follow-ups.md：要改项目仓库本身的建议（lint 规则、CI 配置、测试），要另起 development。可以为空。
-      - docs/learn/flow-proposals.md：对 myorch 流程的建议（第 6 类）。可以为空。
+      ## Write these files
+      - docs/learn/proposals.json: a JSON array, each item
+        {"id": 1, "title": "one sentence", "kind": "record-decision|fill-gap|add-rule|relax-rule|add-check", "evidence": ["<run_id>: <source>", ...],
+         "changes": [{"file": "project/guide/<file>", "edits": [{"old": "<text that occurs exactly once in the file>", "new": "<replacement>"}]}
+                     or {"file": "project/guide/<file>", "append": "<markdown appended to the end of the file>"}]}
+        Copy old verbatim from the current file; it must occur exactly once in the file. When unsure, use append.
+        Only files under project/guide/ (new files are allowed, with append) and project/checks.sh, project/checks.env can be changed.
+        When guide/decisions.md does not exist, the first record-decision creates it with append. It starts with "# Decisions already made" and one sentence: requirement analysis and technical design follow these for questions of the same kind and do not ask people again.
+      - docs/learn/proposals.md: the version for people. Each item: number, kind, title, number of pieces of evidence, what exactly changes (a few lines at most).
+      - docs/learn/follow-ups.md: proposals that change the project repository itself (lint rules, CI configuration, tests). They need a separate development run. May be empty.
+      - docs/learn/flow-proposals.md: proposals for the myorch flows (kind 6). May be empty.
 
   - use: lib/choose-proposals.yaml
     id: choose
     needs: [analyze]
     when: "steps.analyze.outputs.proposals > 0"
-    with: {dir: docs/learn, what: 知识库修改建议}
+    with: {dir: docs/learn, what: knowledge change proposals}
 
   # Host action: validates every change (managed files only, each edit matches exactly once),
   # writes all or nothing, commits to the myorch-knowledge git repo, then re-syncs the snapshot.

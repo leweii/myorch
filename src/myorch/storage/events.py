@@ -156,8 +156,8 @@ class HttpEventLog:
             with urllib.request.urlopen(f"{self.url}/channel/events.json?{urllib.parse.urlencode(q)}", timeout=30) as r:
                 return [LoggedEvent.model_validate(e) for e in json.loads(r.read())]
         except (urllib.error.URLError, OSError) as e:
-            raise RuntimeError(f"读不到事件日志：控制台（{self.url}）没有响应（{e}）。宿主机上的命令通过控制台读事件，"
-                               "不直接打开 events.db；先启动控制台，或者在容器里执行这个命令") from e
+            raise RuntimeError(f"cannot read the event log: the console ({self.url}) does not answer ({e}). Commands on the host read events "
+                               "through the console and do not open events.db directly. Start the console first, or run this command in the container") from e
 
 
 def open_event_log(data_root: Path, url: str | None = None):

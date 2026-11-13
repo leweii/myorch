@@ -1,51 +1,51 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>myorch 控制台</title>
+<title>myorch console</title>
 <link rel="stylesheet" href="/static/app.css">
 <script src="/static/theme.js"></script>
 </head>
 <body class="wb">
 <!-- A workbench: activity bar | side bar (runs, waiting for you, flows) | tabs over the editor, the
      live-output panel below | status bar. Ids and classes are the contract with the scripts. -->
-<nav class="activity" aria-label="视图">
-  <button type="button" data-view="runs" title="运行">
+<nav class="activity" aria-label="Views">
+  <button type="button" data-view="runs" title="Runs">
     <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="16" height="4" rx="1.5"/><rect x="4" y="10" width="16" height="4" rx="1.5"/><rect x="4" y="16" width="16" height="4" rx="1.5"/></svg></button>
-  <button type="button" data-view="inbox" title="等你处理">
+  <button type="button" data-view="inbox" title="Waiting on you">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 13l2.5-8h11L20 13v6H4z"/><path d="M4 13h5l1 2h4l1-2h5"/></svg><span class="count" id="inboxCount"></span></button>
-  <button type="button" data-view="flows" title="流程定义、评测集、知识库">
+  <button type="button" data-view="flows" title="Flow definitions, eval set, knowledge">
     <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="12" r="2"/><path d="M6 7v10M6 12h4a4 4 0 004-4V8M14 12h2"/></svg></button>
   <span class="spacer"></span>
   <div class="pick">
-    <button type="button" id="userBtn" title="主题">
+    <button type="button" id="userBtn" title="Theme">
       <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/></svg></button>
     <div id="userPanel" class="dropdown up" hidden>
-      <div class="dhead">主题</div>
-      <div class="themes" role="radiogroup" aria-label="主题">
-        <button type="button" data-theme-pick="light">浅色</button>
-        <button type="button" data-theme-pick="dark">深色</button>
-        <button type="button" data-theme-pick="auto">跟随系统</button>
+      <div class="dhead">Theme</div>
+      <div class="themes" role="radiogroup" aria-label="Theme">
+        <button type="button" data-theme-pick="light">Light</button>
+        <button type="button" data-theme-pick="dark">Dark</button>
+        <button type="button" data-theme-pick="auto">System</button>
       </div>
     </div>
   </div>
 </nav>
 
 <aside class="side" id="side">
-  <div class="side-head"><span id="sideTitle">运行</span><span class="spacer"></span>
-    <button type="button" id="newRunBtn" class="iconbtn" title="新运行">＋</button></div>
+  <div class="side-head"><span id="sideTitle">Runs</span><span class="spacer"></span>
+    <button type="button" id="newRunBtn" class="iconbtn" title="New run">+</button></div>
   <div id="view-runs" class="view">
     <div class="side-search">
-      <input id="runSearch" type="search" placeholder="搜标签或 run id，例如 MD-18700" title="按标签（Jira 工单等，不分大小写，只写数字也行）或 run id 的一部分搜全部运行">
-      <div class="row"><select id="projectFilter" class="small"><option value="">全部项目</option></select><span class="muted small" id="runCount"></span></div>
+      <input id="runSearch" type="search" placeholder="Search labels or run id, e.g. MD-18700" title="Search all runs by label (a Jira ticket etc.; case-insensitive; the number alone works too) or by part of a run id">
+      <div class="row"><select id="projectFilter" class="small"><option value="">All projects</option></select><span class="muted small" id="runCount"></span></div>
     </div>
     <div id="runs" class="tree" role="tree"></div>
   </div>
   <div id="view-inbox" class="view" hidden><div id="inbox" class="inbox"></div></div>
   <div id="view-flows" class="view" hidden><div id="flowList" class="fd-list"></div></div>
 </aside>
-<div class="gutter" data-side="side" role="separator" aria-orientation="vertical" tabindex="0" title="拖动调整宽度，双击恢复默认"></div>
+<div class="gutter" data-side="side" role="separator" aria-orientation="vertical" tabindex="0" title="Drag to resize. Double-click to reset."></div>
 
 <main class="work" id="work">
   <div class="tabbar" id="tabbar" role="tablist"></div>
@@ -59,19 +59,19 @@
       <form id="composer" class="composer">
         <div class="target" id="target"></div>
         <div id="approveBar" class="approvebar" hidden>
-          <button type="button" id="approveBtn">批准</button>
-          <button type="button" id="rejectBtn" class="danger">驳回</button>
-          <button type="button" id="changesBtn" class="ghost" hidden>提修改意见</button>
-          <button type="button" id="seeChanges" class="ghost">看改动和 review 结论</button>
+          <button type="button" id="approveBtn">Approve</button>
+          <button type="button" id="rejectBtn" class="danger">Reject</button>
+          <button type="button" id="changesBtn" class="ghost" hidden>Request changes</button>
+          <button type="button" id="seeChanges" class="ghost">See changes and review verdict</button>
         </div>
         <textarea id="input" rows="3"></textarea>
         <div class="row">
           <span class="muted small" id="composerHint"></span>
           <span class="spacer"></span>
-          <button type="button" id="continueRunBtn" class="ghost small" hidden>在这个分支上接着改</button>
-          <button type="button" id="resumeRunBtn" class="small" hidden>重新执行失败的步骤</button>
-          <button type="button" id="cancelRunBtn" class="ghost danger small" hidden>取消这个运行</button>
-          <button type="submit" id="sendBtn">发送</button>
+          <button type="button" id="continueRunBtn" class="ghost small" hidden>Continue on this branch</button>
+          <button type="button" id="resumeRunBtn" class="small" hidden>Re-run failed steps</button>
+          <button type="button" id="cancelRunBtn" class="ghost danger small" hidden>Cancel this run</button>
+          <button type="submit" id="sendBtn">Send</button>
         </div>
         <div id="sendError" class="warn small"></div>
       </form>
@@ -86,31 +86,31 @@
     <!-- a new run (newrun.js): the project, the task, its fields and the first message; the steps it will run on the right -->
     <div id="pane-new" class="pane-x newpane" hidden>
       <div class="np-form">
-        <div class="np-title">新运行</div>
+        <div class="np-title">New run</div>
         <div id="nrNote" class="nr-note"></div>
         <div class="nr-block">
-          <div class="nr-k">项目</div><div class="nr-v"><select id="sfProject"></select></div>
-          <div class="nr-k">任务</div><div class="nr-v"><div id="sfTasks" class="tasks" role="tablist"></div></div>
+          <div class="nr-k">Project</div><div class="nr-v"><select id="sfProject"></select></div>
+          <div class="nr-k">Task</div><div class="nr-v"><div id="sfTasks" class="tasks" role="tablist"></div></div>
         </div>
         <div id="sfFlowDesc" class="nr-desc"></div>
         <div id="sfInputs" class="nr-fields"></div>
-        <label class="nr-msg"><span class="fl"><span id="nrMsgLabel">补充说明</span><span class="muted" id="nrMsgNote">这就是第一条消息，原文交给流程</span></span>
+        <label class="nr-msg"><span class="fl"><span id="nrMsgLabel">Details</span><span class="muted" id="nrMsgNote">This is the first message. The flow gets it verbatim.</span></span>
           <textarea id="nrMessage" rows="5"></textarea></label>
-        <details id="sfMore" class="nr-more" hidden><summary>更多选项</summary><div id="sfMoreInputs" class="nr-fields"></div></details>
+        <details id="sfMore" class="nr-more" hidden><summary>More options</summary><div id="sfMoreInputs" class="nr-fields"></div></details>
         <div id="sfKnowledge" class="kpick"></div>
       </div>
       <aside class="np-side"><div id="sfPreview" class="preview"></div></aside>
       <div class="np-foot">
         <span id="nrError" class="warn small"></span>
         <span class="spacer"></span>
-        <span class="muted small">⌘+Enter 启动</span>
-        <button type="button" id="nrCancel" class="ghost">取消</button>
-        <button type="button" id="nrStart">启动</button>
+        <span class="muted small">⌘+Enter to start</span>
+        <button type="button" id="nrCancel" class="ghost">Cancel</button>
+        <button type="button" id="nrStart">Start</button>
       </div>
     </div>
   </div>
-  <div class="pgutter" id="pgutter" role="separator" aria-orientation="horizontal" title="拖动调整高度"></div>
-  <section class="panel" id="panel" aria-label="实时输出">
+  <div class="pgutter" id="pgutter" role="separator" aria-orientation="horizontal" title="Drag to resize"></div>
+  <section class="panel" id="panel" aria-label="Live output">
     <div class="pbar"><div class="ptabs" id="ptabs"></div><span class="spacer"></span><span id="pactions" class="pactions"></span></div>
     <div class="pbody" id="pbody"></div>
   </section>
@@ -122,7 +122,7 @@
   <button type="button" id="stInbox" class="sbtn"></button>
   <span id="volumeWarn" class="swarn"></span>
   <span class="spacer"></span>
-  <button type="button" id="panelBtn" class="sbtn" title="显示或收起底部的实时输出">实时输出</button>
+  <button type="button" id="panelBtn" class="sbtn" title="Show or hide the live output at the bottom">Live output</button>
 </footer>
 
 <dialog id="viewerDlg" class="viewerdlg"></dialog>

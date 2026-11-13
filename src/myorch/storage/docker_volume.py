@@ -21,7 +21,7 @@ log = logging.getLogger(__name__)
 SANDBOX_UID = 1000
 HELPER_IMAGE = "nvcr.io/nvidia/base/ubuntu:24.04"
 GIT_IMAGE = "alpine/git:latest"  # helper with git, for diffs of a run's repository
-MEMORY_SEED = "# 本次运行的共享记忆\n\n各步骤开始前先读这里；结束时把对后续步骤有用的信息追加到末尾。\n"
+MEMORY_SEED = "# Shared memory of this run\n\nEvery step reads this before it starts. When a step finishes, it appends what helps later steps to the end. Write in English.\n"
 
 
 def _session_name(name: str) -> str:
@@ -288,7 +288,7 @@ class DockerVolumeStore:
             # sync-master may have started a clone of its own meanwhile: then that one stays.
             " if [ -d repo/.git ]; then rm -rf repo.seed; exit 0; fi; mv repo.seed/.git repo/.git;"
             f" rm -rf repo.seed; chown -R {SANDBOX_UID}:{SANDBOX_UID} repo;"
-            f" echo \"- seed: repo/ 从本机克隆复制（origin/{base} @ $sha），sync-master 只拉增量\" >> memory/MEMORY.md;"
+            f" echo \"- seed: repo/ copied from the local clone (origin/{base} @ $sha); sync-master fetches only what is new\" >> memory/MEMORY.md;"
             " echo \"$sha\""
         )
         name = f"myorch-seed-{run_id}"

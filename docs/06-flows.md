@@ -1,24 +1,24 @@
-# 6. 流程清单
+# 6. Flows
 
-每个流程的说明在单独的**流程手册**里：[workflows/index.html](workflows/index.html)。那里每个流程一章：做什么、输入、步骤图、每一步做什么、什么时候需要你。步骤图和输入表从 `flows/*.yaml` 生成，文字在 `flows/<流程>.md`。首页讲角色、什么时候用哪个、怎么发起和介入、在原分支上接着改。
+Each flow is described in the separate **Flow manual**: [workflows/README.md](workflows/README.md). It has one chapter per flow: what it does, its inputs, the step graph, what each step does, and when it needs you. The step graphs and input tables are generated from `flows/*.yaml`. The text is in `flows/<flow>.md`. The manual's home page covers roles, which flow to use when, how to start a run and step in, and how to continue on the same branch.
 
-本章只列出有哪些流程。
+This chapter only lists the flows.
 
-## 有哪些流程
+## The flows
 
-| 角色 | 控制台里的任务 | 用途 | 流程文件 |
+| Role | Task in the console | Purpose | Flow file |
 |---|---|---|---|
-| `development` | 开发 | 从需求到推送分支：需求、实现、review、审批、推分支。不开 PR | `development.yaml` |
-| `review` | 评审 PR | 评审一个已有的 PR，结论显示在控制台 | `review.yaml` |
-| `postmortem` | 复盘 | 找出漏过去的问题是哪次改动引入的、本该在哪一层拦住，改进知识，生成评测案例 | `postmortem.yaml` |
-| `sweep` | 找 bug | 找现有代码里的 bug，每次看一批文件，只出日报 | `sweep.yaml` |
-| `learn` | 学习 | 从历史运行里沉淀知识，写回项目包 | `learn.yaml` |
-| `eval` | 评测 | 重放评测案例，给 reviewer 打分 | `eval.yaml` |
-| `onboard` | 接入项目 | 分析仓库，提出项目包的修改 | `onboard.yaml` |
+| `development` | Development | From requirement to pushed branch: requirements, implementation, review, approval, push the branch. Does not open a PR | `development.yaml` |
+| `review` | Review PR | Reviews an existing PR. The verdict is shown in the console | `review.yaml` |
+| `postmortem` | Postmortem | Finds which change introduced a missed problem and which layer should have caught it, improves the knowledge, generates eval cases | `postmortem.yaml` |
+| `sweep` | Find bugs | Finds bugs in existing code, one batch of files at a time. Produces only a daily report | `sweep.yaml` |
+| `learn` | Learn | Distills knowledge from past runs and writes it back to the project pack | `learn.yaml` |
+| `eval` | Eval | Replays eval cases and scores the reviewers | `eval.yaml` |
+| `onboard` | Onboard project | Analyzes the repository and proposes changes to the project pack | `onboard.yaml` |
 
-- 一个角色一个流程，所有项目共用（mdm、blog、myorch 都一样）。片段在 `flows/lib/`：`sync-base`、`review-loop`、`e2e`、`deliver`、`choose-proposals`。
-- 项目之间的差异在项目包里，发起时不用选：`project.yaml` 的 `flows.development` 决定 review 强度、跑满时怎么办、要不要 takeaway 和 `incident` 输入；`prompts/<slot>.md` 是拼进 prompt 的项目条款；有没有 Jira、e2e 镜像决定工单输入、`fetch-ticket` 和端到端测试。流程里用 `if:` 按项目裁剪。见 [7. 项目包 · 共用流程的项目设置](07-projects.md#共用流程的项目设置flows)。
-- 2026-11-03 到 11-10 之间，软件开发的流程按项目复制过一套（`ck-`、`blog-`、`mo-`），之后合回一套。旧运行的 ID 还带着旧名字（如 `ck-development-1f29e33a`），按角色照样能找到和接着改。
-- 流程文件开头的 `role:` 决定它是什么角色，myorch 按角色认流程。`projects:` 可以限定只给某些项目用，现有的流程都不写。
-- 控制台侧栏的「流程定义」列出所有流程定义和片段，按 `projects:` 分组（现在都在「通用」组）。点一个流程在标签页里打开，能选项目和输入预览展开后的步骤。
-- 写流程的语法见 [8. 流程语法](08-flow-syntax.md)。改完流程后重新生成流程手册：`uv run --with markdown python docs/workflows/build.py`。
+- One flow per role, shared by all projects (mdm, blog and myorch alike). The fragments are in `flows/lib/`: `sync-base`, `review-loop`, `e2e`, `deliver`, `choose-proposals`.
+- The differences between projects live in the project pack. You do not choose them when you start a run. `flows.development` in `project.yaml` sets the review strength, what happens when the loop runs out of rounds, and whether there is a takeaway and an `incident` input. `prompts/<slot>.md` holds project clauses that are inserted into prompts. Whether the project has Jira or an e2e image decides the ticket input, `fetch-ticket` and the end-to-end tests. The flows use `if:` to trim themselves per project. See [7. Project packs · Project settings for the shared flows](07-projects.md#project-settings-for-the-shared-flows-flows).
+- From 2026-11-03 to 2026-11-10 the software development flows were copied per project (`ck-`, `blog-`, `mo-`). After that they were merged back into one set. Old run IDs still carry the old names (e.g. `ck-development-1f29e33a`). They are still found by role, and you can still continue them.
+- `role:` at the top of a flow file sets its role. myorch identifies flows by role. `projects:` can restrict a flow to certain projects. None of the current flows set it.
+- The **Flow definitions** side bar in the console lists all flow definitions and fragments, grouped by `projects:` (all are in the **General** group now). A flow opens in a tab, where you can pick a project and inputs to preview the expanded steps.
+- For the syntax of flow files, see [8. Flow syntax](08-flow-syntax.md). After changing a flow, regenerate the Flow manual: `uv run --with markdown python docs/workflows/build.py`.

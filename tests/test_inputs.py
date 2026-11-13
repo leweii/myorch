@@ -19,31 +19,31 @@ def test_every_role_has_a_label_and_a_hint():
 
 
 def test_a_flow_may_override_the_roles_label():
-    v = fi.role_view("development", {"flow": "x", "label": "改代码"})
-    assert v["label"] == "改代码" and v["hint"] == fi.ROLE_INFO["development"]["hint"] and v["default"] and v["order"] == 0
+    v = fi.role_view("development", {"flow": "x", "label": "Change code"})
+    assert v["label"] == "Change code" and v["hint"] == fi.ROLE_INFO["development"]["hint"] and v["default"] and v["order"] == 0
     assert fi.role_view(None, {"flow": "odd"})["label"] == "odd"
 
 
 def test_the_message_fills_the_message_input_by_its_spec():
     first, whole = {"task": {"type": "message", "from_message": "first_line"}}, {"focus": {"type": "message"}}
     a, b = {}, {}
-    fi.fill_from_message(first, a, "第一行\n第二行")
-    fi.fill_from_message(whole, b, "第一行\n第二行")
-    assert a == {"task": "第一行"} and b == {"focus": "第一行\n第二行"}
-    given = {"task": "已给"}
-    fi.fill_from_message(first, given, "别的")
-    assert given == {"task": "已给"}
+    fi.fill_from_message(first, a, "first line\nsecond line")
+    fi.fill_from_message(whole, b, "first line\nsecond line")
+    assert a == {"task": "first line"} and b == {"focus": "first line\nsecond line"}
+    given = {"task": "given"}
+    fi.fill_from_message(first, given, "other")
+    assert given == {"task": "given"}
     plain = {}
     fi.fill_from_message({"task": "string"}, plain, "x")  # no message input: names mean nothing
     assert plain == {}
 
 
 def test_required_inputs_and_one_of_groups():
-    declared = {"pr": {"type": "string", "label": "PR 编号", "required": True}, "commit": "string", "bad": "string"}
-    with pytest.raises(ValueError, match="PR 编号"):
+    declared = {"pr": {"type": "string", "label": "PR number", "required": True}, "commit": "string", "bad": "string"}
+    with pytest.raises(ValueError, match="PR number"):
         fi.check(declared, {})
     fi.check(declared, {"pr": "25"})
-    with pytest.raises(ValueError, match="commit 或 bad"):
+    with pytest.raises(ValueError, match="commit or bad"):
         fi.check(declared, {"pr": "25"}, [["commit", "bad"]])
     fi.check(declared, {"pr": "25", "bad": "abc"}, [["commit", "bad"]])
 
