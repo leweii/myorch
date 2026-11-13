@@ -103,6 +103,8 @@ Current providers:
 | `github-blog` | You, `leweii` | Only `leweii/leweii.github.io` | blog |
 | `github-mdm` | You, `leweii` | mdm's repository; submodule repositories read-only | mdm |
 | `github-myorch` | You, `leweii` | Only `leweii/myorch` | myorch |
+| `github-knowingyou-english` | You, `leweii` | Only `leweii/knowingyou-english-learning` | knowingyou-english |
+| `github-knowingyou-voice` | You, `leweii` | Only `leweii/knowingyou-voice-record` | knowingyou-voice |
 | `azure-artifacts` | The company's private Maven / npm feed (PAT, Packaging Read only) | Private dependency feed | mdm (`providers.artifacts`) |
 | `jira-mdm`, `atlassian-mcp` | Your own Atlassian API token | Jira read-only, Atlassian MCP read-only | mdm (reading tickets, knowledge sources) |
 
@@ -122,6 +124,7 @@ _templates/core-ng/image/build.sh               # myorch-dev-core-ng:latest (JDK
 mdm/image/build.sh                              # myorch-dev-mdm:latest (adds JDK 25, Node 24, pnpm 9 on top of core-ng)
 blog/image/build.sh <path to the blog repository>     # myorch-dev-blog:latest and myorch-e2e-blog:latest
 myorch/image/build.sh <path to the myorch repository> # myorch-dev-myorch:latest (dependencies from uv.lock)
+_templates/swift-apple/image/build.sh [swift version]  # myorch-dev-swift-apple:latest (swift-frontend for a syntax parse; knowingyou-english, knowingyou-voice)
 ```
 
 Rebuild when the dependencies change (for example the blog's Gemfile.lock, myorch's uv.lock). Everything in the image **must be installed under `/usr`**, because OpenShell's Landlock does not allow reading `/opt`.

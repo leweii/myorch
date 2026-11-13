@@ -11,9 +11,12 @@ Flows are shared by all projects, one per role. See [6. Flows](06-flows.md). The
 | `blog` | `leweii/leweii.github.io` | master | — | the owner, `leweii` (before 2026-11-05 the bot `leweiibot`) | `reviewers: 1`, `max_rounds: 1`, `security: false`, `on_exhausted: accept`. `default: 1` in `risk-rules.yaml`. prompts: develop, review | In use. Has e2e (Playwright). onboard has been run |
 | `mdm` | `example-org/master-data-management` | master | core-ng | the owner, `leweii` | Defaults, plus `takeaway: true` and `open_pr: true`. Has Jira. prompts come from the template | In use. Provider created, onboard completed once (2026-11-01). Reads Jira tickets |
 | `myorch` | `leweii/myorch` | main | — | the owner, `leweii` | Defaults, plus `incident: true`. prompts: develop, risk | The platform itself (created 2026-11-05). Checks run offline, image `myorch-dev-myorch`. The project pack's README says it has not had a real run yet |
+| `knowingyou-english` | `leweii/knowingyou-english-learning` | main | swift-apple | the owner, `leweii` | Template's (`reviewers: 2`, `max_rounds: 2`, `on_exhausted: accept`, `open_pr: true`). `default: 1` in `risk-rules.yaml`. prompts: develop | Mac + iPad SwiftUI app (created 2026-11-13). No real run yet |
+| `knowingyou-voice` | `leweii/knowingyou-voice-record` | main | swift-apple | the owner, `leweii` | Template's. `default: 1` in `risk-rules.yaml`. prompts: develop, review. checks.env runs the repository's `check-no-network.sh` and `check-l10n.sh` | macOS menu-bar recorder (created 2026-11-13). No real run yet |
 | `_templates/core-ng` | — | develop | — | — | prompts: develop (Gradle dependencies, `*-interface` modules), review (`*-interface` contracts) | Core-NG template (Java/Gradle multi-module + React). Checks, caches, policy and image were tried on a trial project |
+| `_templates/swift-apple` | — | main | — | — | prompts: develop (Linux sandbox cannot build; "Not verified here" steps), review (read as the compiler would), risk (the approver builds on a Mac first) | Swift apps on Apple platforms (SwiftUI/AppKit, XcodeGen). The sandbox is Linux: checks are a syntax parse and data-file checks, the Mac build and tests are skipped and done by the approver (`myorch export`). Image `myorch-dev-swift-apple` |
 
-The three projects use the same set of flows (development, review, learn, postmortem, eval, sweep, onboard).
+All projects use the same set of flows (development, review, learn, postmortem, eval, sweep, onboard).
 
 ## Directory layout
 

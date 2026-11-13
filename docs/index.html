@@ -3176,6 +3176,18 @@ providers:
 <td>myorch</td>
 </tr>
 <tr>
+<td><code>github-knowingyou-english</code></td>
+<td>You, <code>leweii</code></td>
+<td>Only <code>leweii/knowingyou-english-learning</code></td>
+<td>knowingyou-english</td>
+</tr>
+<tr>
+<td><code>github-knowingyou-voice</code></td>
+<td>You, <code>leweii</code></td>
+<td>Only <code>leweii/knowingyou-voice-record</code></td>
+<td>knowingyou-voice</td>
+</tr>
+<tr>
 <td><code>azure-artifacts</code></td>
 <td>The company's private Maven / npm feed (PAT, Packaging Read only)</td>
 <td>Private dependency feed</td>
@@ -3201,6 +3213,7 @@ providers:
 mdm/image/build.sh                              # myorch-dev-mdm:latest (adds JDK 25, Node 24, pnpm 9 on top of core-ng)
 blog/image/build.sh &lt;path to the blog repository&gt;     # myorch-dev-blog:latest and myorch-e2e-blog:latest
 myorch/image/build.sh &lt;path to the myorch repository&gt; # myorch-dev-myorch:latest (dependencies from uv.lock)
+_templates/swift-apple/image/build.sh [swift version]  # myorch-dev-swift-apple:latest (swift-frontend for a syntax parse; knowingyou-english, knowingyou-voice)
 </code></pre>
 <p>Rebuild when the dependencies change (for example the blog's Gemfile.lock, myorch's uv.lock). Everything in the image <strong>must be installed under <code>/usr</code></strong>, because OpenShell's Landlock does not allow reading <code>/opt</code>.</p>
 <h3 id="04-setup--syncing-project-packs">Syncing project packs</h3>
@@ -4103,6 +4116,24 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <td>The platform itself (created 2026-11-05). Checks run offline, image <code>myorch-dev-myorch</code>. The project pack's README says it has not had a real run yet</td>
 </tr>
 <tr>
+<td><code>knowingyou-english</code></td>
+<td><code>leweii/knowingyou-english-learning</code></td>
+<td>main</td>
+<td>swift-apple</td>
+<td>the owner, <code>leweii</code></td>
+<td>Template's (<code>reviewers: 2</code>, <code>max_rounds: 2</code>, <code>on_exhausted: accept</code>, <code>open_pr: true</code>). <code>default: 1</code> in <code>risk-rules.yaml</code>. prompts: develop</td>
+<td>Mac + iPad SwiftUI app (created 2026-11-13). No real run yet</td>
+</tr>
+<tr>
+<td><code>knowingyou-voice</code></td>
+<td><code>leweii/knowingyou-voice-record</code></td>
+<td>main</td>
+<td>swift-apple</td>
+<td>the owner, <code>leweii</code></td>
+<td>Template's. <code>default: 1</code> in <code>risk-rules.yaml</code>. prompts: develop, review. checks.env runs the repository's <code>check-no-network.sh</code> and <code>check-l10n.sh</code></td>
+<td>macOS menu-bar recorder (created 2026-11-13). No real run yet</td>
+</tr>
+<tr>
 <td><code>_templates/core-ng</code></td>
 <td>—</td>
 <td>develop</td>
@@ -4111,9 +4142,18 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <td>prompts: develop (Gradle dependencies, <code>*-interface</code> modules), review (<code>*-interface</code> contracts)</td>
 <td>Core-NG template (Java/Gradle multi-module + React). Checks, caches, policy and image were tried on a trial project</td>
 </tr>
+<tr>
+<td><code>_templates/swift-apple</code></td>
+<td>—</td>
+<td>main</td>
+<td>—</td>
+<td>—</td>
+<td>prompts: develop (Linux sandbox cannot build; "Not verified here" steps), review (read as the compiler would), risk (the approver builds on a Mac first)</td>
+<td>Swift apps on Apple platforms (SwiftUI/AppKit, XcodeGen). The sandbox is Linux: checks are a syntax parse and data-file checks, the Mac build and tests are skipped and done by the approver (<code>myorch export</code>). Image <code>myorch-dev-swift-apple</code></td>
+</tr>
 </tbody>
 </table>
-<p>The three projects use the same set of flows (development, review, learn, postmortem, eval, sweep, onboard).</p>
+<p>All projects use the same set of flows (development, review, learn, postmortem, eval, sweep, onboard).</p>
 <h2 id="07-projects--directory-layout">Directory layout</h2>
 <pre><code>myorch-knowledge/
   _sources/                 optional: knowledge sources registered globally (see &quot;Knowledge sources&quot;)
