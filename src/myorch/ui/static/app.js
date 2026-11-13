@@ -635,6 +635,12 @@ function renderComposer(d, target) {
   }
   $("#target").textContent = label;
   $("#target").className = `target mode-${target.mode}`;
+  // Nothing to write (running or ended): one row with the status, the explanation and the buttons,
+  // instead of a disabled text box. The text box is kept for replies and approval notes.
+  const compact = !can && target.mode !== "approve";
+  $("#composer").classList.toggle("compact", compact);
+  if (compact) hint.textContent = [placeholder, hint.textContent].filter(Boolean).join(" ");
+  hint.title = compact ? hint.textContent : "";
   input.placeholder = placeholder;
   input.disabled = !(can || target.mode === "approve");
   send.hidden = !can;

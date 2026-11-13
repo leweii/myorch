@@ -430,6 +430,13 @@ ol.opts li::before { content: counter(o); width: 19px; height: 19px; border-radi
 .composer .row { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
 .composer .row .muted.small { font-size: 12px; }
 .composer .context:empty { display: none; }
+.composer.compact { display: flex; flex-wrap: wrap; align-items: center; column-gap: 14px; padding: 8px 28px; }
+.composer.compact textarea { display: none; }
+.composer.compact .target { margin-bottom: 0; flex: none; }
+.composer.compact .row { flex: 1; min-width: 0; margin-top: 0; }
+.composer.compact #composerHint { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.composer.compact #sendError { flex-basis: 100%; }
+.composer.compact #sendError:empty { display: none; }
 .composer .target { font-size: 12.5px; font-weight: 500; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; color: var(--text-faint); }
 .composer .target::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--text-ghost); flex: none; }
 .target.mode-reply, .target.mode-approve { color: var(--warning-text); }
