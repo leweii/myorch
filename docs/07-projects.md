@@ -253,7 +253,7 @@ development 用它：`risk-rules` 步骤取 `default` 和所有命中规则中�
 |---|---|---|---|
 | `dir` | `path`（可以用 `${ENV}` 和 `~`） | `include`、`exclude`、`index`、`projects`、`max_size`、`allow_findings` | 快照只读挂在 `/sandbox/workspace/knowledge/<名字>/` |
 | `git` | `repo`（`owner/name`）、`provider`（能 clone 这个仓库的 OpenShell provider） | `ref`（默认 `main`）、`image`（带 git 和 python3 的镜像，默认用项目的镜像），以及 `dir` 的可选字段 | 同上 |
-| `mcp` | `url`（`https://`）、`provider`、`token_env`、`tools`，必须写 `token_read_only: true`。`auth: basic` 时必填 `email` | `auth`（`bearer` 默认，或 `basic`）、`index`、`projects` | 不挂目录。见下面的「MCP 只允许登记的工具」 |
+| `mcp` | `url`（`https://`）、`provider`、`token_env`、`tools`。`auth: basic` 时必填 `email` | `auth`（`bearer` 默认，或 `basic`）、`index`、`projects`、`token_read_only` | 不挂目录。见下面的「MCP 只允许登记的工具」 |
 
 可选字段的意思：
 
@@ -284,7 +284,7 @@ agent 步骤启动时，`/sandbox/bin/myorch-mcp` 先于 claude 运行：
 3. 读不到工具列表时，禁用整个服务器，不放行任何工具。
 4. 生成配置，加上 `--mcp-config` 和 `--strict-mcp-config` 启动 claude。仓库自带的 `.mcp.json` 不会加载。
 
-所以 `tools` 是白名单，不只是提示。只登记读的工具。token 本身也应该只能读，`token_read_only: true` 是登记人对这一点的确认。
+所以 `tools` 是白名单，不只是提示。只登记读的工具。token 本身也应该只能读。`token_read_only: true` 可以记下登记人已确认这一点，不写也能挂载，挡住写操作的是 `tools` 白名单。
 
 登记后用 `myorch knowledge check <名字> --project <项目>` 试一次：在和步骤一样的 sandbox 里连接服务器，对照白名单检查工具，可以再调用一次某个工具。
 

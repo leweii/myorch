@@ -253,7 +253,7 @@ Three kinds:
 |---|---|---|---|
 | `dir` | `path` (`${ENV}` and `~` allowed) | `include`, `exclude`, `index`, `projects`, `max_size`, `allow_findings` | The snapshot is mounted read-only at `/sandbox/workspace/knowledge/<name>/` |
 | `git` | `repo` (`owner/name`), `provider` (an OpenShell provider that can clone the repository) | `ref` (default `main`), `image` (an image with git and python3; the project's image by default), plus the optional fields of `dir` | Same as above |
-| `mcp` | `url` (`https://`), `provider`, `token_env`, `tools`, and `token_read_only: true` must be set. With `auth: basic`, `email` is required | `auth` (`bearer` by default, or `basic`), `index`, `projects` | No directory is mounted. See "MCP allows only registered tools" below |
+| `mcp` | `url` (`https://`), `provider`, `token_env` and `tools` must be set. With `auth: basic`, `email` is required | `auth` (`bearer` by default, or `basic`), `index`, `projects`, `token_read_only` | No directory is mounted. See "MCP allows only registered tools" below |
 
 What the optional fields mean:
 
@@ -284,7 +284,7 @@ When an agent step starts, `/sandbox/bin/myorch-mcp` runs before claude:
 3. If the tool list cannot be read, the whole server is disabled, and no tools are allowed.
 4. It generates the configuration and starts claude with `--mcp-config` and `--strict-mcp-config`. The repository's own `.mcp.json` is not loaded.
 
-So `tools` is an allowlist, not just a hint. Register only tools that read. The token itself should also be read-only. `token_read_only: true` is the registrant's confirmation of that.
+So `tools` is an allowlist, not just a hint. Register only tools that read. The token itself should also be read-only. `token_read_only: true` records that the registrant checked this; it is optional, and the source mounts without it. What blocks writes is the `tools` allowlist.
 
 After registering, try it once with `myorch knowledge check <name> --project <project>`: it connects to the server in the same kind of sandbox as a step, checks the tools against the allowlist, and can call one tool once.
 

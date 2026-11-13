@@ -66,7 +66,7 @@ class Source(BaseModel):
     auth: Literal["bearer", "basic"] = "bearer"  # mcp: "Bearer <token>", or Basic base64(email:<token>)
     email: str = ""  # mcp, basic: the token owner's email (e.g. an Atlassian personal API token)
     tools: list[str] = Field(default_factory=list)  # mcp: the only tools agents may call (others are denied)
-    token_read_only: bool = False  # mcp: the registrant confirms the provider's token can only read
+    token_read_only: bool = False  # mcp, optional: the registrant notes the provider's token can only read (not enforced)
     allow_findings: list[str] = Field(default_factory=list)  # "file:line" secret-scan hits accepted as false positives
     # filled in by load_sources
     name: str = ""
@@ -116,8 +116,6 @@ class Source(BaseModel):
                 out.append("没有写 tools（允许 agent 调用的工具，其余一律禁用）")
             if self.auth == "basic" and not self.email:
                 out.append("auth: basic 要写 email")
-            if not self.token_read_only:
-                out.append("没有确认 token 只读（token_read_only: true），不能挂载")
         return out
 
 

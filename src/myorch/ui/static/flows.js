@@ -236,7 +236,7 @@ function flRenderMain() {
         : el("div", { class: "evbar" },
           el("button", { text: "编辑", onclick: () => kbOpenForm(k) }),
           el("button", { class: "ghost danger", text: "删除登记", onclick: () => kbRemove(k) }))] : el("p", { class: "muted", text: "这个知识源已不存在。" }));
-    side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "知识库只读挂进 agent 步骤：/sandbox/workspace/knowledge/<名字>/。MCP 知识库经 OpenShell provider 访问，token 只读。" }));
+    side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "知识库只读挂进 agent 步骤：/sandbox/workspace/knowledge/<名字>/。MCP 知识库经 OpenShell provider 访问，agent 只能调用登记的 tools。" }));
   } else if (FL.frag) {
     const g = o.fragments.find((x) => x.name === FL.frag);
     main = el("section", { class: "fd-main" }, g ? [
@@ -501,7 +501,7 @@ function kbFormView(f) {
     el("div", { class: "kbform", id: "kbForm" },
       el("label", {}, "名字", nameIn), el("label", {}, "范围", projSel), el("label", {}, "类型", kindSel),
       ...KB_FIELDS[f.kind].map(field),
-      f.kind === "mcp" ? el("label", { class: "check" }, ro, "我确认这个 token 只能读（不能建、改、删任何东西）") : null),
+      f.kind === "mcp" ? el("label", { class: "check" }, ro, "这个 token 只能读（不能建、改、删任何东西）。可选，只作记录") : null),
     el("div", { class: "evbar" },
       el("button", { class: "ghost", text: "检查", onclick: () => act("check") }),
       el("button", { text: f.edit ? "保存修改" : "登记", onclick: () => act("register") }),

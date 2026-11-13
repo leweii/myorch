@@ -4560,8 +4560,8 @@ default: 0
 </tr>
 <tr>
 <td><code>mcp</code></td>
-<td><code>url</code> (<code>https://</code>), <code>provider</code>, <code>token_env</code>, <code>tools</code>, and <code>token_read_only: true</code> must be set. With <code>auth: basic</code>, <code>email</code> is required</td>
-<td><code>auth</code> (<code>bearer</code> by default, or <code>basic</code>), <code>index</code>, <code>projects</code></td>
+<td><code>url</code> (<code>https://</code>), <code>provider</code>, <code>token_env</code> and <code>tools</code> must be set. With <code>auth: basic</code>, <code>email</code> is required</td>
+<td><code>auth</code> (<code>bearer</code> by default, or <code>basic</code>), <code>index</code>, <code>projects</code>, <code>token_read_only</code></td>
 <td>No directory is mounted. See "MCP allows only registered tools" below</td>
 </tr>
 </tbody>
@@ -4594,7 +4594,7 @@ default: 0
 <li>If the tool list cannot be read, the whole server is disabled, and no tools are allowed.</li>
 <li>It generates the configuration and starts claude with <code>--mcp-config</code> and <code>--strict-mcp-config</code>. The repository's own <code>.mcp.json</code> is not loaded.</li>
 </ol>
-<p>So <code>tools</code> is an allowlist, not just a hint. Register only tools that read. The token itself should also be read-only. <code>token_read_only: true</code> is the registrant's confirmation of that.</p>
+<p>So <code>tools</code> is an allowlist, not just a hint. Register only tools that read. The token itself should also be read-only. <code>token_read_only: true</code> records that the registrant checked this; it is optional, and the source mounts without it. What blocks writes is the <code>tools</code> allowlist.</p>
 <p>After registering, try it once with <code>myorch knowledge check &lt;name&gt; --project &lt;project&gt;</code>: it connects to the server in the same kind of sandbox as a step, checks the tools against the allowlist, and can call one tool once.</p>
 <p>Jira example (Atlassian Rovo MCP; an organization admin must first enable API token access):</p>
 <pre><code class="language-yaml">kind: mcp

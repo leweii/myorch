@@ -138,8 +138,11 @@ def test_resolve_fixes_versions_and_checks_sources(kbroot):
     assert kb.resolve(store, kbroot, "mdm", []) == []
     with pytest.raises(kb.KnowledgeError, match="没有登记"):
         kb.resolve(store, kbroot, "blog", ["team"])
+    # token_read_only is optional: a configured MCP source without it can still be selected
+    (kbroot / "_sources" / "wiki.yaml").write_text("kind: mcp\nurl: https://kb.example.com/mcp\nprovider: p\ntoken_env: T\ntools: [search]\n")
+    assert [r.name for r in kb.resolve(store, kbroot, "mdm", ["wiki"])] == ["wiki"]
     (kbroot / "_sources" / "wiki.yaml").write_text("kind: mcp\nurl: https://kb.example.com/mcp\nprovider: p\ntoken_env: T\n")
-    with pytest.raises(kb.KnowledgeError, match="token 只读"):
+    with pytest.raises(kb.KnowledgeError, match="tools"):
         kb.resolve(store, kbroot, "mdm", ["wiki"])
 
 
@@ -250,10 +253,10 @@ def test_the_console_registers_checks_and_removes_sources(tmp_path):
     assert (s.level, s.include) == ("project", ["**/*.md"]) and kb.registered_fields(s) == {"path": str(docs), "include": ["**/*.md"]}
     with pytest.raises(kb.KnowledgeError, match="已经存在"):
         kb.register(root, "mdm-docs", "mdm", {"kind": "dir", "path": str(docs)}, "jakobhe")
-    # an MCP source must list its tools and confirm a read-only token
+    # an MCP source must list its tools; confirming a read-only token is optional
     r = kb.check(root, "jira", None, {"kind": "mcp", "url": "https://mcp.atlassian.com/v1/mcp", "provider": "atl",
                                       "token_env": "T", "auth": "basic"})
-    assert any("tools" in p for p in r["problems"]) and any("email" in p for p in r["problems"]) and any("只读" in p for p in r["problems"])
+    assert any("tools" in p for p in r["problems"]) and any("email" in p for p in r["problems"]) and not any("只读" in p for p in r["problems"])
     # a raw Obsidian vault is refused
     (docs / ".obsidian").mkdir()
     assert any("Obsidian vault" in p for p in kb.check(root, "v", None, {"kind": "dir", "path": str(docs)})["problems"])

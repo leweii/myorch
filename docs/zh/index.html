@@ -4560,8 +4560,8 @@ default: 0
 </tr>
 <tr>
 <td><code>mcp</code></td>
-<td><code>url</code>（<code>https://</code>）、<code>provider</code>、<code>token_env</code>、<code>tools</code>，必须写 <code>token_read_only: true</code>。<code>auth: basic</code> 时必填 <code>email</code></td>
-<td><code>auth</code>（<code>bearer</code> 默认，或 <code>basic</code>）、<code>index</code>、<code>projects</code></td>
+<td><code>url</code>（<code>https://</code>）、<code>provider</code>、<code>token_env</code>、<code>tools</code>。<code>auth: basic</code> 时必填 <code>email</code></td>
+<td><code>auth</code>（<code>bearer</code> 默认，或 <code>basic</code>）、<code>index</code>、<code>projects</code>、<code>token_read_only</code></td>
 <td>不挂目录。见下面的「MCP 只允许登记的工具」</td>
 </tr>
 </tbody>
@@ -4594,7 +4594,7 @@ default: 0
 <li>读不到工具列表时，禁用整个服务器，不放行任何工具。</li>
 <li>生成配置，加上 <code>--mcp-config</code> 和 <code>--strict-mcp-config</code> 启动 claude。仓库自带的 <code>.mcp.json</code> 不会加载。</li>
 </ol>
-<p>所以 <code>tools</code> 是白名单，不只是提示。只登记读的工具。token 本身也应该只能读，<code>token_read_only: true</code> 是登记人对这一点的确认。</p>
+<p>所以 <code>tools</code> 是白名单，不只是提示。只登记读的工具。token 本身也应该只能读。<code>token_read_only: true</code> 可以记下登记人已确认这一点，不写也能挂载，挡住写操作的是 <code>tools</code> 白名单。</p>
 <p>登记后用 <code>myorch knowledge check &lt;名字&gt; --project &lt;项目&gt;</code> 试一次：在和步骤一样的 sandbox 里连接服务器，对照白名单检查工具，可以再调用一次某个工具。</p>
 <p>Jira 的例子（Atlassian Rovo MCP，组织管理员要先打开 API token 访问）：</p>
 <pre><code class="language-yaml">kind: mcp
