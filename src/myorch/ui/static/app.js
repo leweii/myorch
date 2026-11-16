@@ -555,6 +555,14 @@ function bubble(cls, who, ...kids) {
   return el("div", { class: `msg ${cls}` }, who ? el("div", { class: "who", text: who }) : null, el("div", { class: "bubble" }, ...kids));
 }
 
+// A reply that carried images ends with their paths (ui/service.py attach_block); show them, not the paths.
+function splitAttachments(text) {
+  const i = (text || "").indexOf("\n\n[myorch: attached images]\n");
+  if (i < 0) return { text, images: [] };
+  const images = [...text.slice(i).matchAll(/^- \/sandbox\/workspace\/(docs\/attachments\/[0-9a-f]{16}\.(?:png|jpg|gif|webp))$/gm)].map((m) => m[1]);
+  return { text: text.slice(0, i).replace(/^\(Images only\.\)$/, ""), images };
+}
+
 function renderItem(it) {
   if (it.kind === "request") return bubble("user", `${WHO.request}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}`, el("div", { class: "pre", text: it.text || "(the original text was not recorded)" }));
   if (it.kind === "step") {
@@ -577,8 +585,14 @@ function renderItem(it) {
       it.options?.length ? el("ol", { class: "opts" }, it.options.map((o) => el("li", { text: o }))) : null);
   }
   if (it.kind === "said") {
-    const text = it.what === "reply" ? it.text : `${WHAT[it.what] || it.what} ${it.step || ""}${it.text ? `: ${it.text}` : ""}`;
-    return bubble("user", `${WHO[it.what] || "You"}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}${it.what === "reply" ? ` → ${it.step}` : ""}`, el("div", { class: "pre", text }));
+    const { text: said, images } = it.what === "reply" ? splitAttachments(it.text) : { text: it.text, images: [] };
+    const text = it.what === "reply" ? said : `${WHAT[it.what] || it.what} ${it.step || ""}${it.text ? `: ${it.text}` : ""}`;
+    return bubble("user", `${WHO[it.what] || "You"}${it.by ? ` · ${it.by}` : ""}${it.at ? ` · ${fmtTime(it.at)}` : ""}${it.what === "reply" ? ` → ${it.step}` : ""}`,
+      text ? el("div", { class: "pre", text }) : null,
+      images.length ? el("div", { class: "shots" }, images.map((p) => {
+        const url = `/api/runs/${enc(S.run)}/raw?path=${encodeURI(p)}`;
+        return el("a", { href: url, target: "_blank", rel: "noopener", title: "Open the image" }, el("img", { src: url, alt: "attached image", loading: "lazy" }));
+      })) : null);
   }
   if (it.kind === "approval") {
     return bubble("agent asking", `${it.step} · waiting for your approval`, el("div", { text: it.missing || `${it.needed} approval(s) needed` }),
@@ -642,6 +656,10 @@ function renderComposer(d, target) {
     hint.textContent = retry.length ? "Steps that succeeded keep their results and do not run again." : "";
     can = false;
   }
+  const attach = target.mode === "reply" && target.kind === "question";
+  $("#attachBtn").hidden = !attach;
+  if (attach) hint.textContent = `${hint.textContent} Paste or drop images to send them to ${target.step}.`.trim();
+  renderAttachBar();
   $("#target").textContent = label;
   $("#target").className = `target mode-${target.mode}`;
   // Nothing to write (running or ended): one row with the status, the explanation and the buttons,
@@ -656,18 +674,112 @@ function renderComposer(d, target) {
 }
 
 async function sendMessage() {
-  const text = $("#input").value;
+  await adding;
+  const text = $("#input").value, run = S.run, imgs = canAttach() ? attachments().slice() : [];
   $("#sendError").textContent = "";
-  if (!S.run || S.target?.mode !== "reply" || !text.trim()) return;
+  if (!run || S.target?.mode !== "reply" || (!text.trim() && !imgs.length)) return;
   $("#sendBtn").disabled = true;
   try {
-    await api(`/api/runs/${enc(S.run)}/do/reply`, { method: "POST", body: { step: S.target.step, text } });
-    $("#input").value = ""; delete DRAFT[S.run];
+    const paths = [];  // each image goes up on its own (raw bytes), then the reply names them
+    for (const [n, a] of imgs.entries()) {
+      $("#sendBtn").textContent = `Uploading ${n + 1}/${imgs.length}…`;
+      const r = await fetch(`/api/runs/${enc(run)}/attachments`, { method: "POST", headers: { "X-Myorch-UI": "1" }, body: a.file });
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+      paths.push(d.path);
+    }
+    await api(`/api/runs/${enc(run)}/do/reply`, { method: "POST", body: { step: S.target.step, text, images: paths } });
+    $("#input").value = ""; delete DRAFT[run];
+    ATTACH[run] = []; renderAttachBar();
     S.convKey = null;
     await loadDetail();
   } catch (e) { $("#sendError").textContent = `Not sent: ${e.message}`; }
+  $("#sendBtn").textContent = "Send";
   $("#sendBtn").disabled = false;
 }
+
+// ---- images in a message ------------------------------------------------------------------------------
+// Pasted, dropped or picked images wait under the box as thumbnails and go with Send (a reply to an
+// agent that asked) or Start (the request of a new run). The agents that get the message open them from
+// the run's workspace (ui/service.py, attachments.py). The page may only show data: images, so a
+// thumbnail is a small canvas copy; the file itself is what is uploaded.
+// A slot is where the images belong: a run id (its reply box), or "new" (the new-run form).
+
+const ATTACH = {};  // slot -> [{file, thumb}], kept like DRAFT while you look at other runs
+const ATTACH_MAX = 6, ATTACH_MAX_BYTES = 5_000_000, ATTACH_TYPES = ["image/png", "image/jpeg", "image/gif", "image/webp"];
+const attachments = (slot = S.run) => (slot ? (ATTACH[slot] ||= []) : []);
+const canAttach = (slot = S.run) => slot === "new" || (S.target?.mode === "reply" && S.target.kind === "question");
+const attachBar = (slot) => $(slot === "new" ? "#nrAttachBar" : "#attachBar");
+const attachNote = (slot) => $(slot === "new" ? "#nrError" : "#sendError");
+
+async function thumbOf(file) {
+  const bmp = await createImageBitmap(file);
+  const k = Math.min(1, 128 / Math.max(bmp.width, bmp.height)), c = document.createElement("canvas");
+  c.width = Math.max(1, Math.round(bmp.width * k)); c.height = Math.max(1, Math.round(bmp.height * k));
+  c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+  bmp.close();
+  return c.toDataURL("image/jpeg", 0.75);
+}
+
+let adding = Promise.resolve();  // additions run one after another; a send waits for them, so a quick Send loses no image
+const addImages = (files, slot = S.run) => (adding = adding.then(() => addImagesNow(files, slot)));
+
+async function addImagesNow(files, slot) {
+  const list = attachments(slot);
+  let note = "";
+  for (const f of files) {
+    const name = f.name || "The pasted image";
+    if (!ATTACH_TYPES.includes(f.type)) { note = `${name} is not a PNG, JPEG, GIF or WebP image.`; continue; }
+    if (f.size > ATTACH_MAX_BYTES) { note = `${name} is larger than ${ATTACH_MAX_BYTES / 1_000_000} MB.`; continue; }
+    if (list.length >= ATTACH_MAX) { note = `At most ${ATTACH_MAX} images in one message.`; break; }
+    try { list.push({ file: f, thumb: await thumbOf(f) }); } catch { note = `${name} cannot be read as an image.`; }
+  }
+  if (slot === "new" || S.run === slot) { attachNote(slot).textContent = note; renderAttachBar(slot); }
+}
+
+function renderAttachBar(slot = S.run) {
+  const list = attachments(slot), bar = attachBar(slot);
+  bar.hidden = !list.length || !canAttach(slot);
+  bar.replaceChildren(...list.map((a, i) => el("div", { class: "thumb", title: `${a.file.name || "pasted image"} · ${Math.max(1, Math.round(a.file.size / 1024))} KB` },
+    el("img", { src: a.thumb, alt: "" }),
+    el("button", { type: "button", class: "rm", title: "Remove", text: "×", onclick: () => { list.splice(i, 1); renderAttachBar(slot); } }))));
+}
+
+const toBase64 = (file) => new Promise((res, rej) => {
+  const r = new FileReader();
+  r.onload = () => res(String(r.result).split(",")[1]);
+  r.onerror = () => rej(new Error(`Cannot read ${file.name || "the image"}.`));
+  r.readAsDataURL(file);
+});
+
+// Paste, drop and a button for one box. slotOf: where the images go now; null when nothing can take them.
+function wireImages({ box, zone, button, input, slotOf }) {
+  const imagesOf = (files) => [...(files || [])].filter((f) => f.type.startsWith("image/"));
+  const take = (files) => {
+    const slot = slotOf();
+    if (!slot || !canAttach(slot)) { $("#sendError").textContent = "Images can be attached when an agent is waiting for your answer."; return; }
+    addImages(files, slot);
+  };
+  box.addEventListener("paste", (e) => {
+    const files = imagesOf(e.clipboardData?.files);
+    if (!files.length) return;
+    if (!e.clipboardData.getData("text/plain")) e.preventDefault();  // a screenshot: nothing to paste as text; copied page text still pastes
+    take(files);
+  });
+  zone.addEventListener("dragover", (e) => { if ([...(e.dataTransfer?.types || [])].includes("Files")) { e.preventDefault(); zone.classList.add("drop"); } });
+  zone.addEventListener("dragleave", (e) => { if (e.target === zone) zone.classList.remove("drop"); });
+  zone.addEventListener("drop", (e) => {
+    zone.classList.remove("drop");
+    const files = imagesOf(e.dataTransfer?.files);
+    if (!files.length) return;
+    e.preventDefault();
+    take(files);
+  });
+  button.addEventListener("click", () => input.click());
+  input.addEventListener("change", (e) => { take(e.target.files); e.target.value = ""; });
+}
+wireImages({ box: $("#input"), zone: $("#composer"), button: $("#attachBtn"), input: $("#attachInput"), slotOf: () => S.run });
+wireImages({ box: $("#nrMessage"), zone: $("#pane-new"), button: $("#nrAttachBtn"), input: $("#nrAttachInput"), slotOf: () => "new" });
 
 async function decideApproval(action) {
   if (!S.run || S.target?.mode !== "approve") return;

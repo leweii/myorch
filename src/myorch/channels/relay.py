@@ -17,10 +17,12 @@ import asyncio
 import itertools
 import logging
 import re
+import secrets
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+from myorch.attachments import ATTACH_DIR
 from myorch.channels.model import ChannelsConfig, load_config
 from myorch.core.inputs import label_matches
 from myorch.engines.temporal import client as tc
@@ -177,13 +179,15 @@ class Relay:
 
     async def start(self, flow: str, project: str | None, inputs: dict[str, Any], message: str, *,
                     via: str, account: str, source: str = "", knowledge: list[str] | None = None,
-                    labels: list[str] | None = None) -> str:
+                    labels: list[str] | None = None, attachments: dict[str, bytes] | None = None) -> str:
         """Start a run. The message is the request: saved verbatim in the run, and it fills the flow's
         message input (core/inputs.py) unless the caller gave one.
         `knowledge`: the knowledge sources to mount (None: the project's defaults), fixed to their
         newest snapshots now (myorch/knowledge.py).
         `labels`: what the run is found by, besides the tickets in its inputs and the labels of the runs
-        its inputs name (added here and in tc.start_run)."""
+        its inputs name (added here and in tc.start_run).
+        `attachments`: files (images, see attachments.py) put in the run's workspace before its first
+        step, by path; the message names them. The run's id is chosen here so they can be written first."""
         from myorch import knowledge as kb
 
         from myorch.cli import (_auto_runs, _continue_files, _continue_from, _flow_doc, _flow_inputs, _learn_files,
@@ -219,13 +223,24 @@ class Relay:
         refs = await asyncio.to_thread(kb.resolve, self.store, self.kb_root, project, knowledge)
         labels = [*(labels or []), *await asyncio.to_thread(inherited_labels, self.events_log, inputs,
                                                              flow_inputs_of(self.config_dir / "flows", self.kb_root))]
-        return await tc.start_run(self.client, flow_yaml, inputs, person, self.cfg.aliases(person), pub,
+        run_id = f"{meta['flow']}-{secrets.token_hex(4)}" if attachments else None
+        for rel, data in (attachments or {}).items():  # last: nothing is written for a start that was refused above
+            await asyncio.to_thread(self.store.write_run_file, run_id, rel, data)
+        return await tc.start_run(self.client, flow_yaml, inputs, person, self.cfg.aliases(person), pub, run_id=run_id,
                                   source=source or via, files=files, knowledge=refs, labels=labels)
 
     async def reply(self, run_id: str, step: str, text: str, *, via: str, account: str) -> None:
         if not (text or "").strip():
             raise ValueError("The reply cannot be empty.")
         await tc.reply(self.client, check_run_id(run_id), step, text)
+
+    async def write_attachment(self, run_id: str, data: bytes, ext: str) -> str:
+        """Save an image the user attached to a message into the run's workspace; returns its path there.
+        Done by the process that has the volume, not through the workflow: the bytes would exceed what
+        a signal or an activity input may carry."""
+        rel = f"{ATTACH_DIR}/{secrets.token_hex(8)}.{ext}"
+        await asyncio.to_thread(self.store.write_run_file, check_run_id(run_id), rel, data)
+        return rel
 
     async def approve(self, run_id: str, step: str, *, via: str, account: str) -> None:
         await tc.approve(self.client, check_run_id(run_id), step, self.person(via, account))

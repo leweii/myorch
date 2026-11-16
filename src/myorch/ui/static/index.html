@@ -67,10 +67,13 @@
           <button type="button" id="changesBtn" class="ghost" hidden>Request changes</button>
           <button type="button" id="seeChanges" class="ghost">See changes and review verdict</button>
         </div>
+        <div id="attachBar" class="attachbar" hidden></div>
         <textarea id="input" rows="3"></textarea>
         <div class="row">
           <span class="muted small" id="composerHint"></span>
           <span class="spacer"></span>
+          <input type="file" id="attachInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+          <button type="button" id="attachBtn" class="ghost small" title="Attach images. You can also paste or drop them into the box." hidden>Attach image</button>
           <button type="button" id="continueRunBtn" class="ghost small" hidden>Continue on this branch</button>
           <button type="button" id="resumeRunBtn" class="small" hidden>Re-run failed steps</button>
           <button type="button" id="cancelRunBtn" class="ghost danger small" hidden>Cancel this run</button>
@@ -100,6 +103,12 @@
         <div id="sfInputs" class="nr-fields"></div>
         <label class="nr-msg"><span class="fl"><span id="nrMsgLabel">Details</span><span class="muted" id="nrMsgNote">This is the first message. The flow gets it verbatim.</span></span>
           <textarea id="nrMessage" rows="5"></textarea></label>
+        <div id="nrAttachBar" class="attachbar" hidden></div>
+        <div class="nr-attach">
+          <input type="file" id="nrAttachInput" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden>
+          <button type="button" id="nrAttachBtn" class="ghost small">Attach image</button>
+          <span class="muted small">or paste or drop images into the box. The agents open them from the run.</span>
+        </div>
         <details id="sfMore" class="nr-more" hidden><summary>More options</summary><div id="sfMoreInputs" class="nr-fields"></div></details>
         <div id="sfKnowledge" class="kpick"></div>
       </div>

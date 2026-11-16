@@ -120,7 +120,7 @@ class ArtifactStore(Protocol):
         """
         ...
 
-    def write_run_file(self, run_id: str, rel_path: str, text: str) -> None:
+    def write_run_file(self, run_id: str, rel_path: str, text: str | bytes) -> None:
         """Write a file into the run's workspace (e.g. .myorch/mandate.json)."""
         ...
 

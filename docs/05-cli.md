@@ -109,7 +109,8 @@ Where the input box sends its content depends on the run's state; the text above
 
 | Run state | Input box and buttons |
 |---|---|
-| A step is asking a question | The reply goes to that step unchanged; it continues its earlier session |
+| A step is asking a question | The reply goes to that step unchanged; it continues its earlier session. You can **paste** a screenshot into the box, drop image files on it or use **Attach image** (up to 6 images of PNG, JPEG, GIF or WebP, 5 MB each). They are saved in the run's workspace under `docs/attachments/`, and the reply tells the agent where they are so it opens them with its Read tool. The conversation shows them under your reply. Only the agent that asked gets them; a running step cannot be sent anything, and a decision on an exhausted loop takes no images |
+| Starting a run (New run tab) | The **Requirement** box takes images the same way (paste, drop or **Attach image**). They are saved in the new run's workspace before its first step, and the request names them, so every agent that reads `docs/external/request.md` can open them |
 | Waiting for approval | **Approve**, **Reject**. If the approval has `changes` configured, there is also **Request changes**: write the feedback in the input box, and the run goes back to the review loop to make changes. The input box content also serves as the approval note |
 | Running | Cannot send. Shows the step that is running. **Cancel this run** is at the bottom right |
 | Failed or cancelled | Cannot send. **Re-run failed steps** is at the bottom right; it is the same as [`resume`](#resume) |

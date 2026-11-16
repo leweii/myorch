@@ -99,3 +99,105 @@ def test_the_console_creates_a_project_and_reports_a_failed_sync_without_undoing
     assert any("project sync other" in s for s in r["next"])
     with pytest.raises(ValueError, match="already exists"):
         asyncio.run(svc.create_project({"repo": "me/app"}))
+
+
+def _png() -> bytes:
+    return b"\x89PNG\r\n\x1a\n" + b"\x00" * 16
+
+
+def test_image_signatures_decide_what_may_be_attached():
+    from myorch.ui.service import sniff_image
+
+    assert sniff_image(_png()) == "png" and sniff_image(b"\xff\xd8\xff\xe0abc") == "jpg"
+    assert sniff_image(b"GIF89a....") == "gif" and sniff_image(b"RIFF\x00\x00\x00\x00WEBPVP8 ") == "webp"
+    assert sniff_image(b"<svg xmlns='http://www.w3.org/2000/svg'/>") is None and sniff_image(b"") is None
+
+
+def test_a_reply_carries_attached_images_to_the_agent_and_the_page_can_find_them_again(tmp_path):
+    import asyncio
+    import re
+
+    from myorch.ui.service import ATTACH_MARK, MAX_ATTACH, Service
+
+    class Relay:
+        client = store = None
+        sent: list = []
+        files = ["a" * 16 + ".png"]
+        waiting = [{"step": "develop", "kind": "question", "text": "Which?"}]
+
+        async def write_attachment(self, run_id, data, ext):
+            return f"docs/attachments/{'b' * 16}.{ext}"
+
+        async def list_files(self, run_id, rel, depth):
+            return self.files
+
+        async def reply(self, run_id, step, text, *, via, account):
+            self.sent.append((step, text))
+
+    relay = Relay()
+    svc = Service(relay, tmp_path, tmp_path, "jakobhe", log_dir=tmp_path / "log")
+
+    async def detail(rid):
+        return {"waiting": relay.waiting, "tree": []}
+
+    svc.run_detail = detail
+    svc.log = lambda *a, **k: None
+    ok = f"docs/attachments/{'a' * 16}.png"
+
+    assert asyncio.run(svc.attach("r1", _png())) == {"path": f"docs/attachments/{'b' * 16}.png", "bytes": len(_png())}
+    for data, error in [(b"", "empty"), (b"GIF89a" + b"x" * 5_000_001, "larger"), (b"<html>", "Only PNG")]:
+        with pytest.raises(ValueError, match=error):
+            asyncio.run(svc.attach("r1", data))
+
+    asyncio.run(svc.reply("r1", "develop", "Use this one", [ok]))
+    step, text = relay.sent[-1]
+    assert step == "develop" and text.startswith("Use this one\n\n" + ATTACH_MARK) and f"- /sandbox/workspace/{ok}" in text
+    asyncio.run(svc.reply("r1", "develop", "  ", [ok]))
+    assert relay.sent[-1][1].startswith("(Images only.)")
+    asyncio.run(svc.reply("r1", "develop", "no images"))
+    assert relay.sent[-1][1] == "no images"
+    # what app.js splitAttachments looks for: the mark, then one "- /sandbox/workspace/<path>" per image
+    assert re.search(rf"\n\n\[myorch: attached images\]\n[^\n]*\n(- /sandbox/workspace/docs/attachments/[0-9a-f]{{16}}\.png\n?)+$", text)
+
+    n = len(relay.sent)
+    for images, error in [(["../../etc/passwd"], "uploaded to this run"), ([ok, ok], "uploaded to this run"),
+                          ([f"docs/attachments/{'c' * 16}.png"], "not in the run"),
+                          ([f"docs/attachments/{i:016x}.png" for i in range(MAX_ATTACH + 1)], "up to")]:
+        with pytest.raises(ValueError, match=error):
+            asyncio.run(svc.reply("r1", "develop", "x", images))
+    relay.waiting = [{"step": "review-loop", "kind": "loop", "text": "Decide"}]
+    with pytest.raises(ValueError, match="loop"):
+        asyncio.run(svc.reply("r1", "review-loop", "x", [ok]))
+    assert len(relay.sent) == n  # none of the refused ones reached the agent
+
+
+def test_a_run_is_started_with_its_images_named_in_the_request(tmp_path):
+    import asyncio
+
+    from myorch.ui.service import ATTACH_MARK, Service
+
+    class Relay:
+        client = store = None
+        got: dict = {}
+
+        async def start(self, flow, project, inputs, message, **kw):
+            self.got = {"message": message, **kw}
+            return "development-1"
+
+    relay = Relay()
+    svc = Service(relay, tmp_path, tmp_path, "jakobhe", log_dir=tmp_path / "log")
+    logged = []
+    svc.log = lambda run, e: logged.append(e)
+    asyncio.run(svc.start("development", "sp", {}, "Fix the layout", images=[_png(), _png()]))
+    paths = list(relay.got["attachments"])
+    assert len(paths) == 2 and all(p.startswith("docs/attachments/") and p.endswith(".png") for p in paths)
+    assert relay.got["message"].startswith("Fix the layout\n\n" + ATTACH_MARK) and all(f"/sandbox/workspace/{p}" in relay.got["message"] for p in paths)
+    assert logged[-1]["text"] == relay.got["message"]  # the console shows the request with its images
+    asyncio.run(svc.start("development", "sp", {}, "Plain"))
+    assert relay.got["attachments"] == {} and relay.got["message"] == "Plain"
+    asyncio.run(svc.start("development", "sp", {}, "", images=[_png()]))
+    assert relay.got["message"].startswith("(Images only.)")
+    with pytest.raises(ValueError, match="Only PNG"):
+        asyncio.run(svc.start("development", "sp", {}, "x", images=[b"<svg/>"]))
+    with pytest.raises(ValueError, match="at most"):
+        asyncio.run(svc.start("development", "sp", {}, "x", images=[_png()] * 7))

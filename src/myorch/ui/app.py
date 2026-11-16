@@ -15,6 +15,7 @@ Local only (127.0.0.1). Defences, since run content is untrusted and the page ca
 from __future__ import annotations
 
 import asyncio
+import base64
 import getpass
 
 import json
@@ -32,6 +33,7 @@ from starlette.responses import FileResponse, JSONResponse, PlainTextResponse, R
 from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
+from myorch.attachments import MAX_ATTACH_BYTES
 from myorch.channels.http import labels_of
 from myorch.ui.flowgraph import FlowDefs
 from myorch.ui.service import Service, image_type
@@ -146,9 +148,13 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
             flow, project = str(b.get("flow") or ""), (str(b.get("project") or "") or None)
             inputs = {str(k): str(v) for k, v in (b.get("inputs") or {}).items()}
             try:
+                images = [base64.b64decode(str(x), validate=True) for x in b.get("images") or []]  # attached to the request
+            except ValueError:
+                return err("An attached image is not valid base64.")
+            try:
                 kn = b.get("knowledge")  # names to mount; absent: the project's defaults
                 run_id = await svc.start(flow, project, inputs, str(b.get("message") or ""),
-                                         [str(x) for x in kn] if isinstance(kn, list) else None, labels_of(b))
+                                         [str(x) for x in kn] if isinstance(kn, list) else None, labels_of(b), images)
             except (ValueError, FileNotFoundError) as e:
                 return err(str(e))
             return JSONResponse({"run_id": run_id})
@@ -191,9 +197,10 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         step, text = str(b.get("step") or ""), str(b.get("text") or "")
         try:
             if action == "reply":
-                if not text.strip():
+                images = [str(x) for x in b.get("images") or []]
+                if not text.strip() and not images:
                     return err("The reply cannot be empty.")
-                await svc.reply(rid, step, text)
+                await svc.reply(rid, step, text, images)
             elif action == "approve":
                 await svc.approve(rid, step, text)
             elif action == "reject":
@@ -215,6 +222,15 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         except ValueError as e:  # the step is not waiting for this, bad ids
             return err(str(e), 409)
         return JSONResponse({"ok": True})
+
+    async def attach(req: Request) -> Response:
+        """POST /api/runs/{rid}/attachments: the bytes of one image; answers {path}. Reply names it afterwards."""
+        if int(req.headers.get("content-length") or 0) > MAX_ATTACH_BYTES:
+            return err(f"The image is larger than {MAX_ATTACH_BYTES // 1_000_000} MB.", 413)
+        try:
+            return JSONResponse(await svc.attach(req.path_params["rid"], await req.body()))
+        except (ValueError, RuntimeError) as e:
+            return err(str(e))
 
     async def knowledge(req: Request) -> Response:
         try:
@@ -342,6 +358,7 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         Route("/api/runs", runs, methods=["GET", "POST"]),
         Route("/api/runs/{rid}", run_detail),
         Route("/api/runs/{rid}/do/{action:str}", act, methods=["POST"]),
+        Route("/api/runs/{rid}/attachments", attach, methods=["POST"]),
         Route("/api/runs/{rid}/steps/{iid}", step_files),
         Route("/api/runs/{rid}/steps/{iid}/knowledge", step_knowledge),
         Route("/api/knowledge", knowledge),

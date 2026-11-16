@@ -3488,7 +3488,11 @@ uv run lint-imports    # checks the layer dependencies
 <tbody>
 <tr>
 <td>A step is asking a question</td>
-<td>The reply goes to that step unchanged; it continues its earlier session</td>
+<td>The reply goes to that step unchanged; it continues its earlier session. You can <strong>paste</strong> a screenshot into the box, drop image files on it or use <strong>Attach image</strong> (up to 6 images of PNG, JPEG, GIF or WebP, 5 MB each). They are saved in the run's workspace under <code>docs/attachments/</code>, and the reply tells the agent where they are so it opens them with its Read tool. The conversation shows them under your reply. Only the agent that asked gets them; a running step cannot be sent anything, and a decision on an exhausted loop takes no images</td>
+</tr>
+<tr>
+<td>Starting a run (New run tab)</td>
+<td>The <strong>Requirement</strong> box takes images the same way (paste, drop or <strong>Attach image</strong>). They are saved in the new run's workspace before its first step, and the request names them, so every agent that reads <code>docs/external/request.md</code> can open them</td>
 </tr>
 <tr>
 <td>Waiting for approval</td>

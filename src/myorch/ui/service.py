@@ -25,6 +25,8 @@ from typing import Any
 
 import yaml
 
+from myorch.attachments import (ATTACH_DIR, ATTACH_MARK, ATTACH_PATH, MAX_ATTACH, MAX_ATTACH_BYTES, attach_block,  # noqa: F401
+                               check_images, new_path, sniff_image)
 from myorch.core.flow import role_of
 from myorch.core.inputs import role_view
 
@@ -530,16 +532,40 @@ class Service:
     # ---- commands, through the relay (only called after the user confirmed) ----------------
 
     async def start(self, flow: str, project: str | None, inputs: dict[str, Any], message: str = "",
-                    knowledge: list[str] | None = None, labels: list[str] | None = None) -> str:
+                    knowledge: list[str] | None = None, labels: list[str] | None = None,
+                    images: list[bytes] | None = None) -> str:
+        """Start a run. Images go with the request: they are saved in the new run's workspace before its
+        first step, the request names them (attachments.py), and the agents open them from there."""
+        saved = dict(zip((new_path(e) for e in check_images(images or [])), images or []))
+        if saved:
+            message = (message.strip() or "(Images only.)") + attach_block(list(saved))
         run_id = await self.relay.start(flow, project, inputs, message, via=VIA, account=self.user, source="console",
-                                        knowledge=knowledge, labels=labels)
+                                        knowledge=knowledge, labels=labels, attachments=saved)
         self._runs = (0.0, [])
         self.log(run_id, {"kind": "request", "text": message.strip(), "inputs": inputs})
         return run_id
 
-    async def reply(self, run_id: str, step: str, text: str) -> None:
+    async def attach(self, run_id: str, data: bytes) -> dict[str, Any]:
+        """Save an image the user pasted or dropped into the reply box; the reply names it afterwards."""
+        ext = check_images([data])[0]
+        if await self.run_detail(check_run_id(run_id)) is None:
+            raise ValueError(f"No such run: {run_id}")
+        return {"path": await self.relay.write_attachment(run_id, data, ext), "bytes": len(data)}
+
+    async def reply(self, run_id: str, step: str, text: str, images: list[str] | None = None) -> None:
         view = await self.run_detail(check_run_id(run_id))
         w = next((w for w in (view or {}).get("waiting") or [] if w["step"] == step), None)
+        images = list(images or [])
+        if images:
+            if len(images) > MAX_ATTACH or len(set(images)) != len(images) or not all(ATTACH_PATH.fullmatch(p) for p in images):
+                raise ValueError(f"Attach up to {MAX_ATTACH} images, each one uploaded to this run.")
+            if w is not None and w["kind"] != "question":
+                raise ValueError("Images go with an answer to a question, not with a decision on a loop.")
+            have = {f.rsplit("/", 1)[-1] for f in await self.relay.list_files(run_id, ATTACH_DIR, 1)}
+            missing = [p for p in images if p.rsplit("/", 1)[-1] not in have]
+            if missing:
+                raise ValueError(f"These images are not in the run: {', '.join(missing)}")
+            text = (text.strip() or "(Images only.)") + attach_block(images)
         await self.relay.reply(run_id, step, text, via=VIA, account=self.user)  # refuses unless the step waits
         self.log(run_id, {"kind": "reply", "step": step, "text": text,
                           "question": w["text"] if w else "", "options": w.get("options", []) if w else []})
@@ -688,7 +714,7 @@ class Service:
         waiting = detail.get("waiting") or []
         for w in waiting:
             if w["kind"] in ("question", "loop"):
-                return {"mode": "reply", "step": w["step"], "question": w["text"], "options": w.get("options", []),
+                return {"mode": "reply", "step": w["step"], "kind": w["kind"], "question": w["text"], "options": w.get("options", []),
                         "others": [x["step"] for x in waiting if x is not w]}
         for w in waiting:
             if w["kind"] == "approval":

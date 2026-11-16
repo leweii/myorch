@@ -86,6 +86,7 @@ async function openNewRun(preset = {}) {
     NR.continued = preset.continued || null;
     $("#nrMessage").value = "";
     $("#nrError").textContent = "";
+    ATTACH.new = [];
   }
   openTab({ kind: "new" });
 }
@@ -98,6 +99,7 @@ function renderNewPane() {
   if (!names.includes(NR.project)) NR.project = names[0] || "";
   $("#sfProject").value = NR.project;
   $("#nrNote").textContent = NR.continued?.note || "";
+  renderAttachBar("new");
   renderStartInputs();
   document.dispatchEvent(new CustomEvent("newrun:open", { detail: NR }));
   $("#nrMessage").focus();
@@ -173,12 +175,15 @@ async function startRun() {
   if (problem) { $("#nrError").textContent = problem; return; }
   $("#nrStart").disabled = true;
   try {
+    await adding;  // app.js: images still being read
+    const images = await Promise.all(attachments("new").map((a) => toBase64(a.file)));
     const knowledge = typeof knowledgeSelection === "function" ? knowledgeSelection() : null;  // knowledge.js
-    const r = await api("/api/runs", { method: "POST", body: { flow: f.flow, project: NR.project, inputs: formValues(), message: text, ...(knowledge ? { knowledge } : {}) } });
+    const r = await api("/api/runs", { method: "POST", body: { flow: f.flow, project: NR.project, inputs: formValues(), message: text, ...(images.length ? { images } : {}), ...(knowledge ? { knowledge } : {}) } });
     localStorage.setItem("myorch.flow", f.flow);
     if (NR.project) localStorage.setItem("myorch.project", NR.project);
     NR.continued = null;
     $("#nrMessage").value = "";
+    ATTACH.new = []; renderAttachBar("new");
     closeTab("new");
     openTab({ kind: "run", run: r.run_id });
     loadRuns();

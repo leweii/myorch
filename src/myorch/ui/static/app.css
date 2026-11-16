@@ -755,3 +755,18 @@ button.add:hover { background: var(--hover); color: var(--accent); }
 #resList .item .line1 .tag { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #resList .item .line1 .id { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
 #resList .pad { padding: 4px 8px; }
+
+/* ---- images in a reply (app.js addImages / splitAttachments) ---------------------------------------- */
+.attachbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.attachbar[hidden] { display: none; }
+.attachbar .thumb { position: relative; width: 64px; height: 64px; overflow: hidden; border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--well); }
+.attachbar .thumb img { display: block; width: 100%; height: 100%; object-fit: cover; }
+.attachbar .thumb button.rm { position: absolute; top: 3px; right: 3px; width: 18px; height: 18px; padding: 0; border: 0; border-radius: 50%; background: rgba(0,0,0,.62); color: #fff; font-size: 13px; line-height: 1; }
+.attachbar .thumb button.rm:hover { background: rgba(0,0,0,.85); }
+.composer.drop { outline: 2px dashed var(--accent); outline-offset: -5px; }
+.composer.compact .attachbar { display: none; }
+.shots { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.shots img { display: block; max-width: 240px; max-height: 170px; border: 1px solid var(--line); border-radius: var(--r-md); }
+.nr-attach { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+#pane-new.drop .nr-msg textarea { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+#nrAttachBar { margin-top: 10px; margin-bottom: 0; }

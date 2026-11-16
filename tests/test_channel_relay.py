@@ -22,12 +22,16 @@ steps:
 class FakeStore:
     def __init__(self):
         self.files = {"runs/r1/docs/requirements.md": "# Requirements"}
+        self.written = []
 
     def read_file(self, rel):
         return self.files.get(rel)
 
     def list_files(self, base, max_depth=3):
         return [k.removeprefix(base + "/") for k in self.files if k.startswith(base + "/")]
+
+    def write_run_file(self, rid, rel, data):
+        self.written.append((rid, rel, data))
 
     def read_manifest(self, rid, iid):
         return None
@@ -236,3 +240,16 @@ async def test_http_guards_and_routes(relay, calls):
     f = await call(app, "GET", "/runs/r1/file", query="path=docs/requirements.md")
     assert f["json"]["text"] == "# Requirements"
     assert (await call(app, "GET", "/runs/r1/changes"))["status"] == 400  # base is required
+
+
+async def test_start_writes_attached_images_into_the_new_run_before_it_starts(relay, calls):
+    relay.store.write_run_file = lambda rid, rel, data: calls.append(("write", (rid, rel, data), {}))  # same list as the engine calls: order is visible
+    rel = "docs/attachments/" + "a" * 16 + ".png"
+    await relay.start("ask", None, {}, "See the picture\n\n[myorch: attached images]\n- /sandbox/workspace/" + rel,
+                      via="web", account="jakobhe", attachments={rel: b"\x89PNG"})
+    (w, (rid, written, data), _), (s_, _, kw) = calls
+    assert (w, s_) == ("write", "start_run")  # written first ...
+    assert rid == kw["run_id"] and rid.startswith("ask-") and written == rel and data == b"\x89PNG"  # ... under the id the run gets
+    assert "[myorch: attached images]" in kw["files"]["docs/external/request.md"]
+    await relay.start("ask", None, {}, "No images", via="web", account="jakobhe")
+    assert calls[-1][2].get("run_id") is None  # without images the id is still chosen by the engine

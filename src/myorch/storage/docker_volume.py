@@ -126,7 +126,7 @@ class DockerVolumeStore:
         v = self._read(f"{project_snapshot_dir(project)}/.version")
         return v.strip() if v else "unknown"
 
-    def write_run_file(self, run_id: str, rel_path: str, text: str) -> None:
+    def write_run_file(self, run_id: str, rel_path: str, text: str | bytes) -> None:
         p = shlex.quote(f"/v/{run_dir(run_id)}/{rel_path}")
         # The directories it creates belong to the sandbox user too: steps write next to the file
         # (eval's prepare writes docs/eval/requirement.md beside docs/eval/case.json).
@@ -473,13 +473,16 @@ class DockerVolumeStore:
         out = self._sh(f"if [ -f {p} ]; then cat {p}; else echo __MISSING__; fi")
         return None if out.strip() == "__MISSING__" else out
 
-    def _sh(self, script: str, stdin: str | None = None) -> str:
+    def _sh(self, script: str, stdin: str | bytes | None = None) -> str:
         cmd = [
             "docker", "run", "--rm", "-i", "--network", "none",
             "-v", f"{self.volume}:/v", self.helper_image, "sh", "-c", script,
         ]
         # errors="replace": file contents may be cut mid-character (tail -c) or not be UTF-8 at all.
-        res = subprocess.run(cmd, input=stdin, capture_output=True, text=True, errors="replace")
+        binary = isinstance(stdin, bytes)  # a binary file (an image) is piped in as it is
+        res = subprocess.run(cmd, input=stdin, capture_output=True, text=not binary, errors=None if binary else "replace")
+        if binary:
+            res.stdout, res.stderr = res.stdout.decode(errors="replace"), res.stderr.decode(errors="replace")
         if res.returncode != 0:
             raise RuntimeError(f"storage helper failed ({res.returncode}): {res.stderr.strip()}")
         return res.stdout
