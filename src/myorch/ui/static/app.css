@@ -194,7 +194,9 @@ body.resizing .work, body.resizing-y .work, body.resizing .side { pointer-events
 
 /* editor: tabs over panes */
 .work { display: grid; min-width: 0; min-height: 0; background: var(--surface);
+  grid-template-columns: minmax(0, 1fr);  /* the implicit column grows to its widest child: one long live-output line pushed the whole editor off screen */
   grid-template-rows: 36px minmax(0, 1fr) 1px min(var(--h-panel, 280px), 70%); }
+.work > * { min-width: 0; }
 .work.panel-off { grid-template-rows: 36px minmax(0, 1fr) 0 0; }
 .work.panel-off .panel, .work.panel-off .pgutter { visibility: hidden; }
 .work.panel-max { grid-template-rows: 36px 0 0 minmax(0, 1fr); }
@@ -770,3 +772,4 @@ button.add:hover { background: var(--hover); color: var(--accent); }
 .nr-attach { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 #pane-new.drop .nr-msg textarea { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 #nrAttachBar { margin-top: 10px; margin-bottom: 0; }
+.nr-msg textarea { box-sizing: border-box; }
