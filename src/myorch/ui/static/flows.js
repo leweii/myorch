@@ -1,11 +1,11 @@
 // Flow definitions, drawn live from flows/*.yaml (ui/flowgraph.py): the side bar's Flow definitions view lists
-// flows, fragments, eval cases and knowledge sources; each opens as a tab (ref {t: flow|frag|kb|ev|kbform,
-// id}). The new-run tab shows the steps it will run. Both poll /api/flowdefs/version while visible and
+// flows, fragments and eval cases; each opens as a tab (ref {t: flow|frag|ev, id}). Knowledge bases and MCP
+// servers are in the Resources view (resources.js). The new-run tab shows the steps it will run. Both poll /api/flowdefs/version while visible and
 // redraw when a flow or fragment file changes. Uses el/st/EXEC/api/openTab from app.js (loaded first).
 // All flow text is inserted as textContent.
 "use strict";
 
-const FL = { filter: "", groups: {}, overview: null, flow: null, frag: null, kb: null, kbForm: null, knowledge: [], cases: [], ev: null, project: null, inputs: {}, graph: null, sel: null, version: null, at: null };
+const FL = { filter: "", groups: {}, overview: null, flow: null, frag: null, cases: [], ev: null, project: null, inputs: {}, graph: null, sel: null, version: null, at: null };
 const FL_POLL_MS = 2500;
 
 function flQuery(flow, project, inputs) {
@@ -109,7 +109,6 @@ function defDetail(s) {
 async function flLoadOverview() {
   FL.overview = await api("/api/flowdefs");
   FL.version = FL.overview.version; FL.at = new Date();
-  try { FL.knowledge = await api("/api/knowledge?all=1"); } catch { FL.knowledge = []; }  // shared and per-project sources
   try { FL.cases = await api("/api/evals"); } catch { FL.cases = []; }  // reviewer-eval cases (myorch/evals.py)
 }
 
@@ -149,9 +148,7 @@ async function flShowTab(ref) {
   if (!FL.overview) pane.replaceChildren(el("p", { class: "muted small pad", text: "Loading…" }));
   try { await flEnsure(); } catch (e) { pane.replaceChildren(el("p", { class: "muted small pad", text: `Could not read the flows: ${e.message}` })); return; }
   FL.frag = ref.t === "frag" ? ref.id : null;
-  FL.kb = ref.t === "kb" ? ref.id : ref.t === "kbform" ? "+form" : null;
   FL.ev = ref.t === "ev" ? ref.id : null;
-  if (ref.t === "kbform" && !FL.kbForm) FL.kbForm = { edit: false, name: "", project: "", kind: "dir", fields: {} };
   if (ref.t === "flow" && (FL.flow !== ref.id || !FL.graph)) {
     FL.flow = ref.id; FL.sel = null;
     const f = FL.overview.flows.find((x) => x.flow === ref.id);
@@ -185,12 +182,6 @@ function flRenderList() {
   const caseItem = (c) => el("div", { class: `item${refIs("ev", c.id) ? " active" : ""}`, onclick: () => flOpenRef({ t: "ev", id: c.id }) },
     el("div", { class: "line1" }, el("span", { class: "id", text: c.id }), el("span", { class: `tag${c.status === "pending" ? " cond" : ""}`, text: STATUS[c.status] || c.status })),
     el("div", { class: "sub", text: `${c.project} · ${c.findings.length} findings${c.status === "confirmed" ? ` · ${c.keep.length} kept` : ""}` }));
-  const kbItem = (k) => el("div", { class: `item${refIs("kb", kbKey(k)) ? " active" : ""}`, onclick: () => flOpenRef({ t: "kb", id: kbKey(k) }) },
-    el("div", { class: "line1" }, el("span", { class: "ic k-script", text: { dir: "DIR", git: "GIT", mcp: "MCP" }[k.kind] || k.kind }),
-      el("span", { class: "id", text: k.name }), k.problems.length ? el("span", { class: "tag cond", text: "problems" }) : null),
-    el("div", { class: "sub", text: `${k.project ? `${k.project} · ` : k.level === "template" ? "template · " : "global · "}${k.kind === "mcp" ? "live queries" : k.latest ? `synced ${fmtTime(k.latest.synced_at)}` : "no snapshot yet (synced when a run starts)"}` }));
-  const kbNew = el("div", { class: `item${refIs("kbform") && !FL.kbForm?.edit ? " active" : ""}`, onclick: () => kbOpenForm(null) },
-    el("div", { class: "line1" }, el("span", { class: "id", text: "+ Register knowledge source" })), el("div", { class: "sub", text: "A folder, a git repository or an MCP server" }));
   const filter = el("input", { type: "search", class: "fd-filter", placeholder: "Filter by name or role, e.g. ck, review, learn", value: FL.filter,
     oninput: (e) => { FL.filter = e.target.value; flFilter(box); } });
   const groups = flGroups(o.flows);
@@ -202,8 +193,8 @@ function flRenderList() {
       g.key === (FL.project || "") || (active && g.flows.includes(active)), g.title)),
     flGroup("frag", "Fragments", "lib/*", o.fragments.map(fragItem), refIs("frag"), "flows/lib/*.yaml: flows reference them with use:"),
     el("h5", { text: `Eval set · ${FL.cases.filter((c) => c.status === "confirmed").length}/${FL.cases.length}` }), el("div", { class: "list" },
-      FL.cases.length ? FL.cases.map(caseItem) : el("div", { class: "muted small", text: "No candidate cases yet. Run myorch eval collect in a terminal." })),
-    el("h5", { text: `Knowledge · ${FL.knowledge.length}` }), el("div", { class: "list" }, kbNew, ...FL.knowledge.map(kbItem)));
+      FL.cases.length ? FL.cases.map(caseItem) : el("div", { class: "muted small", text: "No candidate cases yet. Run myorch eval collect in a terminal." })));
+
   flFilter(box);
   box.scrollTop = keep;
   if (typing) { filter.focus(); filter.setSelectionRange(filter.value.length, filter.value.length); }
@@ -213,30 +204,9 @@ function flRenderMain() {
   const o = FL.overview, pane = $("#pane-flow");
   if (!o) return;
   let main, side;
-  const kbRow = FL.kb && FL.knowledge.find((k) => kbKey(k) === FL.kb);
   const evCase = FL.ev && FL.cases.find((c) => c.id === FL.ev);
   if (FL.ev) {
     [main, side] = evCase ? caseView(evCase) : [el("section", { class: "fd-main" }, el("p", { class: "muted", text: "This case no longer exists." })), el("aside", { class: "fd-side" })];
-  } else if (FL.kb === "+form" && FL.kbForm) {
-    [main, side] = kbFormView(FL.kbForm);
-  } else if (FL.kb) {
-    const k = kbRow;
-    main = el("section", { class: "fd-main" }, k ? [
-      el("div", { class: "fd-title" }, el("span", { class: "big", text: k.name }), el("span", { class: "file", text: `myorch-knowledge/${k.file}` })),
-      k.problems.length ? el("div", { class: "warn", text: k.problems.join("; ") }) : null,
-      kv([["Type", { dir: "local folder", git: "git repository", mcp: "MCP server" }[k.kind]], ["Registered in", k.level], ["Location", k.where], ["Expanded", k.expanded],
-        ["Read first", k.index], ["Tools", (k.tools || []).join(", ")], ["Projects that may use it", (k.projects || []).join(", ") || "all projects"],
-        ["Mounted by default in", (k.default_in || []).join(", ")],
-        ["Latest snapshot", k.latest ? `${k.latest.version} · ${fmtTime(k.latest.synced_at)} · ${k.latest.files} files · ${(k.latest.bytes / 1024).toFixed(1)} KB` : (k.kind === "mcp" ? "MCP has no snapshots" : "not synced (it syncs when a run starts)")],
-        ["Versions kept", k.kind === "mcp" ? null : String(k.versions)]]),
-      k.kind !== "mcp" ? el("p", { class: "muted small", text: k.kind === "dir"
-        ? "Snapshots: synced automatically each time a run starts. If the content has not changed, the old snapshot is reused. A new snapshot affects only runs started later."
-        : "Snapshots: when a run starts, the repository is cloned again if the latest snapshot is older than 1 hour. If the clone fails, the previous snapshot is used." }) : null,
-      k.level === "template" ? el("p", { class: "muted small", text: "Registered in the template. The console does not change templates. To change it, edit the file above." })
-        : el("div", { class: "evbar" },
-          el("button", { text: "Edit", onclick: () => kbOpenForm(k) }),
-          el("button", { class: "ghost danger", text: "Unregister", onclick: () => kbRemove(k) }))] : el("p", { class: "muted", text: "This knowledge source no longer exists." }));
-    side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "Knowledge is mounted read-only into agent steps: /sandbox/workspace/knowledge/<name>/. MCP knowledge is reached through an OpenShell provider; the agent can call only the registered tools." }));
   } else if (FL.frag) {
     const g = o.fragments.find((x) => x.name === FL.frag);
     main = el("section", { class: "fd-main" }, g ? [
@@ -419,103 +389,3 @@ document.addEventListener("newrun:change", () => schedulePreview());  // newrun.
 document.addEventListener("newrun:open", () => schedulePreview(true));
 setInterval(flPoll, FL_POLL_MS);
 
-
-// ---- registering a knowledge source (myorch/knowledge.py register / check / unregister) ------------
-
-function kbKey(k) { return `${k.project || ""}/${k.name}`; }
-
-function kbOpenForm(k) {
-  FL.kbForm = k ? { edit: true, name: k.name, project: k.project || "", kind: k.kind, fields: { ...(k.fields || {}) } }
-    : { edit: false, name: "", project: "", kind: "dir", fields: {} };
-  FL.kbCheck = null;
-  if (refIs("kbform")) flRender(); else flOpenRef({ t: "kbform" }, false);
-}
-
-async function kbRemove(k) {
-  if (!confirm(`Unregister knowledge source ${k.name}? Existing snapshots are kept. Runs started later can no longer mount it.`)) return;
-  try {
-    await api("/api/knowledge/remove", { method: "POST", body: { name: k.name, project: k.project || null } });
-    closeTab(tabKey({ kind: "flow", ref: { t: "kb", id: kbKey(k) } })); await flLoadOverview(); flRender();
-  } catch (e) { alert(e.message); }
-}
-
-const KB_FIELDS = {  // [field, label, hint, kind of input]
-  dir: [["path", "Folder", "A local path; ~ and ${ENV} work. Do not use an Obsidian vault directly; use a folder you curated"],
-    ["include", "Only these files", "globs, comma-separated, e.g. **/*.md; empty means all"], ["exclude", "Not these files", "globs, comma-separated"],
-    ["index", "Read first", "the file the agent reads first, e.g. README.md"]],
-  git: [["repo", "Repository", "owner/name"], ["ref", "Branch or tag", "main"], ["provider", "OpenShell provider", "a provider that can clone this repository"],
-    ["image", "Image (optional)", "with git and python3; empty means the project's development image"], ["include", "Only these files", "globs, comma-separated"],
-    ["exclude", "Not these files", "globs, comma-separated"], ["index", "Read first", "e.g. README.md"]],
-  mcp: [["url", "MCP URL", "https://…, e.g. https://mcp.atlassian.com/v1/mcp"], ["provider", "OpenShell provider", "the provider that adds the token at the gateway"],
-    ["token_env", "Token placeholder variable", "the provider's environment variable name, e.g. ATLASSIAN_TOKEN"], ["auth", "Authentication", "", "auth"],
-    ["email", "Email (for basic)", "the email of the account the token belongs to"], ["tools", "Allowed tools", "comma-separated. Only these can be called; all others are disabled. List read-only tools only"],
-    ["index", "Usage", "tell the agent when to use which tool, e.g.: read issues with getJiraIssue"]],
-};
-
-function kbFormView(f) {
-  const projects = (S.projects || []).filter((p) => !p.error).map((p) => p.name);
-  if (!S.projects) api("/api/projects").then((ps) => { S.projects = ps; flRender(); }).catch(() => {});
-  const read = () => {
-    const box = $("#kbForm");
-    const data = { kind: box.querySelector('[name="kind"]').value };
-    box.querySelectorAll("[data-f]").forEach((e) => { data[e.dataset.f] = e.type === "checkbox" ? e.checked : e.value; });
-    return { name: box.querySelector('[name="name"]').value.trim(), project: box.querySelector('[name="project"]').value || null, data };
-  };
-  const field = ([k, label, hint, type]) => {
-    const v = f.fields[k];
-    const input = type === "auth"
-      ? el("select", { "data-f": k }, el("option", { value: "bearer", text: "bearer: a service account's API key" }), el("option", { value: "basic", text: "basic: a personal API token + email" }))
-      : el("input", { "data-f": k, placeholder: hint });
-    input.value = Array.isArray(v) ? v.join(", ") : v ?? (type === "auth" ? "bearer" : "");
-    return el("label", {}, label, input);
-  };
-  const kindSel = el("select", { name: "kind", disabled: f.edit }, ["dir", "git", "mcp"].map((k) => el("option", { value: k, text: { dir: "local folder", git: "git repository", mcp: "MCP server" }[k] })));
-  kindSel.value = f.kind;
-  kindSel.addEventListener("change", () => { FL.kbForm = { ...f, kind: kindSel.value, fields: {} }; FL.kbCheck = null; flRender(); });
-  const nameIn = el("input", { name: "name", placeholder: "lowercase letters, digits and -, e.g. mdm-docs", disabled: f.edit });
-  nameIn.value = f.name;
-  const projSel = el("select", { name: "project", disabled: f.edit }, el("option", { value: "", text: "Global (every project can use it)" }),
-    ...projects.map((p) => el("option", { value: p, text: `Only project ${p}` })));
-  projSel.value = f.project || "";
-  const ro = el("input", { type: "checkbox", "data-f": "token_read_only" });
-  ro.checked = !!f.fields.token_read_only;
-  const result = FL.kbCheck;
-  const act = async (op) => {
-    const b = read();
-    FL.kbForm = { ...f, name: b.name, project: b.project || "", fields: b.data };
-    try {
-      const r = await api(`/api/knowledge/${op}`, { method: "POST", body: { ...b, replace: f.edit } });
-      FL.kbCheck = { ...r, op };
-      if (op === "register") {
-        await flLoadOverview(); FL.kbForm = null;
-        closeTab(tabKey({ kind: "flow", ref: { t: "kbform" } }));
-        flOpenRef({ t: "kb", id: `${b.project || ""}/${b.name}` }, false);
-        return;
-      }
-    } catch (e) { FL.kbCheck = { error: e.message }; }
-    flRender();
-  };
-  const main = el("section", { class: "fd-main" },
-    el("div", { class: "fd-title" }, el("span", { class: "big", text: f.edit ? `Edit ${f.name}` : "Register knowledge source" }),
-      el("span", { class: "file", text: "Written to myorch-knowledge as one git commit" })),
-    el("div", { class: "kbform", id: "kbForm" },
-      el("label", {}, "Name", nameIn), el("label", {}, "Scope", projSel), el("label", {}, "Type", kindSel),
-      ...KB_FIELDS[f.kind].map(field),
-      f.kind === "mcp" ? el("label", { class: "check" }, ro, "This token is read-only (it cannot create, change or delete anything). Optional, for the record only") : null),
-    el("div", { class: "evbar" },
-      el("button", { class: "ghost", text: "Check", onclick: () => act("check") }),
-      el("button", { text: f.edit ? "Save changes" : "Register", onclick: () => act("register") }),
-      el("button", { class: "ghost", text: "Cancel", onclick: () => { FL.kbForm = null; closeTab(tabKey({ kind: "flow", ref: { t: "kbform" } })); } })),
-    result?.error ? el("div", { class: "warn", text: result.error }) : null,
-    result && !result.error ? el("div", {},
-      result.problems?.length ? el("div", { class: "warn", text: `Problems: ${result.problems.join("; ")}` }) : el("div", { class: "ok small", text: "No problems." }),
-      result.files !== undefined ? el("div", { class: "small", text: `A sync will take in ${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB in total.` }) : null,
-      result.findings?.length ? el("pre", { class: "small", text: result.findings.join("\n") }) : null,
-      result.sample?.length ? el("pre", { class: "small", text: result.sample.join("\n") + (result.files > result.sample.length ? "\n…" : "") }) : null,
-      result.yaml ? fileView({ path: "source.yaml", title: "Registration file", text: result.yaml, html: null }) : null) : null);
-  const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
-    f.kind === "mcp" ? "MCP knowledge source: the agent can call only the tools in Allowed tools; myorch-mcp disables the rest at start. If the tool list cannot be read, the whole server is unavailable. The token is kept in the OpenShell gateway; the sandbox sees only a placeholder. For the Atlassian MCP, an organisation admin must first turn on API token access."
-    : f.kind === "git" ? "git knowledge source: cloned with the provider in a one-off sandbox, filtered, scanned for secrets, and stored as a snapshot. When a run starts, it is cloned again if the snapshot is older than 1 hour."
-    : "Folder knowledge source: synced automatically when a run starts. It is scanned for secrets; if one is found, it is not synced and the run does not start. Check first tells you which files it will take in." }));
-  return [main, side];
-}

@@ -95,10 +95,11 @@ There is no agent in the console. People start runs, reply and approve here. The
 
 | Area | Content |
 |---|---|
-| Activity bar (far left) | Switches the side bar: **Runs**, **Waiting on you** (with a count), **Flow definitions**. Clicking the current icon again folds the side bar. The theme is at the bottom |
+| Activity bar (far left) | Switches the side bar: **Runs**, **Waiting on you** (with a count), **Flow definitions**, **Resources**. Clicking the current icon again folds the side bar. The theme is at the bottom |
 | Side bar: Runs | A tree of project › run › steps. Filter by project, or search by [tag](#tags-finding-runs-by-ticket) or run id (searches all runs, not only recent ones). Click a run to open its conversation; click ▸ to show its steps: in `needs` order, ∥ marks parallel steps, a loop shows the steps of its current round, a step with replicas has one row per replica |
 | Side bar: Waiting on you | Questions, approvals, loops that ran out of rounds, watchdog reminders. Click one to open that run's conversation and reply or approve there |
-| Side bar: Flow definitions | All flow definitions, fragments, eval cases and knowledge sources. Click one to open it in the editor area |
+| Side bar: Flow definitions | The work: all flow definitions, fragments and eval cases. Click one to open it in the editor area |
+| Side bar: Resources | What runs use: **Projects**, **Knowledge bases** (a folder or a git repository) and **MCP servers**, three groups that fold, each with a **+** button in its header (new project, register a knowledge base, register an MCP server); filtering keeps the groups. A project page shows its settings, its default knowledge and a button to start a run on it; a knowledge base or MCP server page has **Edit** and **Unregister**. Knowledge bases and MCP servers are the same registry (`myorch knowledge`) |
 | Editor tabs | A run's conversation: the request, each step's progress and digest, questions, replies, approvals, the end, with the input box below. Its header has **Changes**, **Docs** and **Flow definition**. A step: error, question, digest, outputs, artifacts and the last turn's log, the knowledge record, read as soon as it opens. **Changes**: the diff against base, the review conclusion, the risk verdict. **Docs**: the workspace's `docs/`; images (for example ticket screenshots) are shown directly. Files, a new run and flow definitions get a tab each too. A single click in the tree opens a preview tab (italic) that the next single click replaces; a double click, or typing in it, keeps it. Tabs survive a reload, and the address names the active tab (`#run=…&step=…`), so it can be shared |
 | New run | A tab: first pick the project, then the task (this project's flows), then fill in the fields, the first message and the knowledge sources; the steps it will run are on the right. Rarely used fields (`more: true` in the spec) fold under **More options**. ⌘+Enter or **Start**. The first message is written verbatim to the run's `docs/external/request.md`; `task` takes its first line |
 | Bottom panel | Live output. It comes up when you open a step that is running, or click a step's **Live output**. One tab per step; drag it taller, maximise or fold it. Output is kept 7 days, so finished steps can be read back; **Full log** opens the last turn's log file |
@@ -444,14 +445,14 @@ The run writes a `run_resumed` event (who, which steps), and a new `run_finished
 
 ```sh
 uv run myorch project list                                 # all projects and templates, whether synced, repository and base branch
-uv run myorch project create <owner/repo> [--name NAME] [--template TEMPLATE] [--sync] [--onboard]
-                                                           # create a new project pack with guided setup
+uv run myorch project create <owner/repo> [--name N] [--template T] [--base B] [--account A] [--sync]
+                                                           # a new project pack (the console has the same: the last row of a project dropdown, New project…)
 uv run myorch project show <name>                          # the full configuration after merging templates (JSON)
 uv run myorch project sync <name>                          # writes the project pack snapshot into the volume (required after changing a project pack)
 uv run myorch project github-profile <name> [--read-only]  # generates this project's OpenShell GitHub provider profile
 ```
 
-- `create` sets up a new project pack with a basic `project.yaml`, directory structure, and README. Use `--template` to extend an existing template (e.g., `swift-apple`, `core-ng`). Use `--sync` to sync immediately after creation, or `--onboard` to also run the onboard flow (which analyzes the repository and proposes improvements to the pack).
+- `create` writes `project.yaml` and `README.md` for a new pack, takes the identity the other packs use, and prints what is left to do by hand (the GitHub provider needs a token). `--sync` also snapshots it. It does not commit `myorch-knowledge`.
 - `sync` prints `project <name>: N files synced (sha256:...)`. Each sync is a new version. New runs use the latest version, and the mandate records which one.
 - `github-profile` by default allows push and API reads for this repository, and read-only clones of submodules. `--read-only` removes push, PRs and comments; that is enough for onboard and for reading PRs.
 

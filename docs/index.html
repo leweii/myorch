@@ -3441,7 +3441,7 @@ uv run lint-imports    # checks the layer dependencies
 <tbody>
 <tr>
 <td>Activity bar (far left)</td>
-<td>Switches the side bar: <strong>Runs</strong>, <strong>Waiting on you</strong> (with a count), <strong>Flow definitions</strong>. Clicking the current icon again folds the side bar. The theme is at the bottom</td>
+<td>Switches the side bar: <strong>Runs</strong>, <strong>Waiting on you</strong> (with a count), <strong>Flow definitions</strong>, <strong>Resources</strong>. Clicking the current icon again folds the side bar. The theme is at the bottom</td>
 </tr>
 <tr>
 <td>Side bar: Runs</td>
@@ -3453,7 +3453,11 @@ uv run lint-imports    # checks the layer dependencies
 </tr>
 <tr>
 <td>Side bar: Flow definitions</td>
-<td>All flow definitions, fragments, eval cases and knowledge sources. Click one to open it in the editor area</td>
+<td>The work: all flow definitions, fragments and eval cases. Click one to open it in the editor area</td>
+</tr>
+<tr>
+<td>Side bar: Resources</td>
+<td>What runs use: <strong>Projects</strong>, <strong>Knowledge bases</strong> (a folder or a git repository) and <strong>MCP servers</strong>, three groups that fold, each with a <strong>+</strong> button in its header (new project, register a knowledge base, register an MCP server); filtering keeps the groups. A project page shows its settings, its default knowledge and a button to start a run on it; a knowledge base or MCP server page has <strong>Edit</strong> and <strong>Unregister</strong>. Knowledge bases and MCP servers are the same registry (<code>myorch knowledge</code>)</td>
 </tr>
 <tr>
 <td>Editor tabs</td>
@@ -3895,14 +3899,14 @@ uv run myorch reject  &lt;run_id&gt; &lt;step&gt; [--as &lt;name&gt;]
 <hr />
 <h2 id="05-cli--project-packs">Project packs</h2>
 <pre><code class="language-sh">uv run myorch project list                                 # all projects and templates, whether synced, repository and base branch
-uv run myorch project create &lt;owner/repo&gt; [--name NAME] [--template TEMPLATE] [--sync] [--onboard]
-                                                           # create a new project pack with guided setup
+uv run myorch project create &lt;owner/repo&gt; [--name N] [--template T] [--base B] [--account A] [--sync]
+                                                           # a new project pack (the console has the same: the last row of a project dropdown, New project…)
 uv run myorch project show &lt;name&gt;                          # the full configuration after merging templates (JSON)
 uv run myorch project sync &lt;name&gt;                          # writes the project pack snapshot into the volume (required after changing a project pack)
 uv run myorch project github-profile &lt;name&gt; [--read-only]  # generates this project's OpenShell GitHub provider profile
 </code></pre>
 <ul>
-<li><code>create</code> sets up a new project pack with a basic <code>project.yaml</code>, directory structure, and README. Use <code>--template</code> to extend an existing template (e.g., <code>swift-apple</code>, <code>core-ng</code>). Use <code>--sync</code> to sync immediately after creation, or <code>--onboard</code> to also run the onboard flow (which analyzes the repository and proposes improvements to the pack).</li>
+<li><code>create</code> writes <code>project.yaml</code> and <code>README.md</code> for a new pack, takes the identity the other packs use, and prints what is left to do by hand (the GitHub provider needs a token). <code>--sync</code> also snapshots it. It does not commit <code>myorch-knowledge</code>.</li>
 <li><code>sync</code> prints <code>project &lt;name&gt;: N files synced (sha256:...)</code>. Each sync is a new version. New runs use the latest version, and the mandate records which one.</li>
 <li><code>github-profile</code> by default allows push and API reads for this repository, and read-only clones of submodules. <code>--read-only</code> removes push, PRs and comments; that is enough for onboard and for reading PRs.</li>
 </ul>
@@ -4179,41 +4183,18 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
     README.md               notes for people (status, steps to enable)
 </code></pre>
 <h2 id="07-projects--creating-a-new-project">Creating a new project</h2>
-<p>Use <code>myorch project create</code> to quickly set up a new project pack:</p>
-<pre><code class="language-bash"># Basic usage
-uv run myorch project create owner/repo-name
-
-# With options
-uv run myorch project create owner/repo-name \
-  --name my-project \
-  --template swift-apple \
-  --base main \
-  --sync
+<p>Two entrances, one function (<code>create_project</code> in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/project.py"><code>src/myorch/project.py</code></a>):</p>
+<ul>
+<li><strong>Console:</strong> <strong>Resources → + New project…</strong>, or the last row (<strong>New project…</strong>) of a project dropdown (the "All projects" filter above the run list, or <strong>Project</strong> in the New run tab). Fill in the repository (<code>owner/name</code>) and optionally the name, template, base branch and account. The pack is written, committed to <code>myorch-knowledge</code> (as <code>project: create &lt;name&gt;</code>), and optionally synced.</li>
+<li><strong>CLI:</strong> <code>uv run myorch project create &lt;owner/repo&gt; [--name N] [--template T] [--base B] [--account A] [--image I] [--sync]</code>. It writes the files and does not commit; commit <code>myorch-knowledge</code> yourself.</li>
+</ul>
+<p>Both write <code>project.yaml</code> and a <code>README.md</code> into <code>../myorch-knowledge/&lt;name&gt;/</code> and check that the pack loads (nothing is left behind if it does not). The name defaults to the repository name. The identity (account, commit author) defaults to the one the existing packs use, then <code>git config github.user</code> / <code>user.name</code> / <code>user.email</code>; with none of them, give <code>--account</code> (the console's Account field). <code>approvers</code> starts as that account. The image defaults to the template's, else <code>myorch-dev-&lt;name&gt;:latest</code>.</p>
+<p>What it does not do, because a token or a build is involved: create the GitHub provider, write checks for a project without a template, and build the image. Both entrances print the remaining steps in order (the pack's <code>README.md</code> has them too):</p>
+<pre><code class="language-bash">uv run myorch project github-profile &lt;name&gt; &gt; /tmp/github-&lt;name&gt;.yaml &amp;&amp; openshell provider profile import -f /tmp/github-&lt;name&gt;.yaml
+read -s GITHUB_TOKEN &amp;&amp; export GITHUB_TOKEN &amp;&amp; openshell provider create --name github-&lt;name&gt; --type github-&lt;name&gt; --credential GITHUB_TOKEN; unset GITHUB_TOKEN
+uv run myorch project sync &lt;name&gt;                      # not needed after --sync / &quot;Sync now&quot;
+uv run myorch run flows/onboard.yaml --project &lt;name&gt;  # analyses the repository and proposes pack changes
 </code></pre>
-<p>The command will:
-1. Create the project directory structure in <code>../myorch-knowledge/&lt;name&gt;/</code>
-2. Generate a <code>project.yaml</code> with sensible defaults (git config is used for identity)
-3. Create a README with setup instructions
-4. Optionally sync the project (<code>--sync</code>)
-5. Optionally run onboard (<code>--onboard</code>, implies <code>--sync</code>)</p>
-<p>After creation:
-1. Review and edit <code>project.yaml</code> as needed
-2. Generate and configure the GitHub provider:
-   <code>bash
-   uv run myorch project github-profile &lt;name&gt; &gt; /tmp/github-&lt;name&gt;.yaml
-   openshell provider profile import -f /tmp/github-&lt;name&gt;.yaml
-   # Create the provider with your GitHub token (see the project's README.md)</code>
-3. Sync the project: <code>uv run myorch project sync &lt;name&gt;</code>
-4. Run onboard to analyze the repository: <code>uv run myorch run flows/onboard.yaml --project &lt;name&gt;</code></p>
-<p>Available options:
-- <code>--name</code>: Project name (default: derived from repo name)
-- <code>--template</code>: Template to extend (e.g., <code>swift-apple</code>, <code>core-ng</code>)
-- <code>--base</code>: Base branch (default: <code>main</code>)
-- <code>--account</code>: GitHub account (default: from git config)
-- <code>--git-name</code>, <code>--git-email</code>: Git identity (default: from git config)
-- <code>--image</code>: Development image (default: from template or <code>myorch-dev-&lt;name&gt;</code>)
-- <code>--sync</code>: Sync the project after creation
-- <code>--onboard</code>: Run onboard flow after sync</p>
 <h2 id="07-projects--projectyaml-fields">project.yaml fields</h2>
 <p>The final authority for the fields is the <code>Project</code> model in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/project.py"><code>src/myorch/project.py</code></a>.</p>
 <table>
@@ -4590,7 +4571,7 @@ default: 0
 <p>development uses it: the <code>risk-rules</code> step takes the maximum of <code>default</code> and all matching rules. At least 1 person is needed when: the review still has unresolved Important issues, the checks failed, or some commits were not reviewed. The <code>classify-risk</code> agent judges independently once more (counting at most 2 people). The number of approvers is the larger of the two, capped at the size of the <code>approvers</code> list. blog has <code>default: 1</code>, so every change needs human approval. For each flow's specific rules, see the <a href="workflows/index.html#ch-index">Flow manual</a>.</p>
 <h2 id="07-projects--knowledge-sources">Knowledge sources</h2>
 <p>A knowledge source is read-only knowledge mounted into a run. It is not part of the project pack snapshot. It is synced and versioned separately. The final authority for the fields is the <code>Source</code> model in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/knowledge.py"><code>src/myorch/knowledge.py</code></a>.</p>
-<p>Registering: fill in the form in the console under <strong>Flows → Knowledge → + Register knowledge source</strong>, or write the YAML by hand.
+<p>Registering: fill in the form in the console under <strong>Resources → + Register knowledge base</strong> (a folder or a git repository) or <strong>+ Register MCP server</strong>, or write the YAML by hand.
 - The form first runs <strong>Check</strong>: it reports missing fields. For the folder type it also lists which files will be collected and any suspected secrets found by the scan.
 - <strong>Register</strong> writes it into <code>myorch-knowledge</code> and makes one git commit. A registered knowledge source can be changed with <strong>Edit</strong> or removed with <strong>Unregister</strong> on its page. Unregistering does not delete existing snapshots.
 - Knowledge sources in templates are read-only in the console.

@@ -64,3 +64,38 @@ def test_the_console_serves_only_images_of_bounded_size(tmp_path):
         with pytest.raises(ValueError):
             asyncio.run(svc.read_image("r1", path))
     assert MAX_IMAGE_BYTES >= 5_000_000  # fetch-ticket saves attachments up to 5 MB
+
+
+def test_the_console_creates_a_project_and_reports_a_failed_sync_without_undoing_it(tmp_path):
+    import asyncio
+
+    import yaml
+
+    from myorch.ui.service import Service
+
+    kb = tmp_path / "kb"
+    (kb / "mine").mkdir(parents=True)
+    (kb / "mine" / "project.yaml").write_text(yaml.safe_dump({
+        "repo": "me/mine", "identity": {"account": "me", "git_name": "Me", "git_email": "me@x"}, "image": "img"}))
+
+    class Store:
+        down = False
+
+        def project_sync(self, name, local_dir, version):
+            if self.down:
+                raise RuntimeError("Docker is not running")
+
+    class Relay:
+        client = None
+        store = Store()
+
+    relay = Relay()
+    svc = Service(relay, tmp_path, kb, "jakobhe", log_dir=tmp_path / "log")
+    r = asyncio.run(svc.create_project({"repo": " me/app ", "name": "", "template": "", "base": "", "sync": True}))
+    assert r["name"] == "app" and r["version"].startswith("sha256:") and not any("project sync" in s for s in r["next"])
+    relay.store.down = True
+    r = asyncio.run(svc.create_project({"repo": "me/other", "sync": True}))
+    assert r["sync_error"] == "Docker is not running" and (kb / "other" / "project.yaml").is_file()
+    assert any("project sync other" in s for s in r["next"])
+    with pytest.raises(ValueError, match="already exists"):
+        asyncio.run(svc.create_project({"repo": "me/app"}))

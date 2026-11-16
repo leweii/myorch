@@ -704,3 +704,54 @@ a.vbtn { text-decoration: none; display: inline-flex; align-items: center; }
 .wb ::-webkit-scrollbar { width: 10px; height: 10px; }
 .wb ::-webkit-scrollbar-thumb { background: var(--line-strong); border: 3px solid transparent; background-clip: padding-box; border-radius: 10px; }
 .wb ::-webkit-scrollbar-corner { background: transparent; }
+
+/* ---- new project dialog (projects.js) --------------------------------------------------------------- */
+.pdlg { padding: 0; border: 1px solid var(--line-strong); border-radius: 14px; background: var(--surface); color: var(--text); width: min(580px, 94vw); box-shadow: var(--shadow-float); }
+.pdlg::backdrop { background: var(--scrim); backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px); }
+.pdlg[open] { animation: dlgin .16s ease-out; }
+.pdlg form { padding: 20px 24px 0; }
+.pj-grid { display: grid; grid-template-columns: 96px 1fr; align-items: center; row-gap: 10px; margin-top: 14px; }
+.pj-grid label { font-size: 12.5px; font-weight: 500; color: var(--text-faint); }
+.pj-grid input:not([type=checkbox]) { box-sizing: border-box; width: 100%; padding: 6px 11px; border: 1px solid var(--line-strong); border-radius: var(--r-md); background-color: var(--surface); }
+.pj-grid input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.pj-grid .pj-check { display: flex; align-items: center; gap: 8px; font-weight: 400; color: var(--text); }
+.pj-result { margin-top: 14px; font-size: 13.5px; }
+.pj-steps { padding-left: 20px; display: flex; flex-direction: column; gap: 8px; }
+.pj-steps code { display: block; padding: 6px 10px; border-radius: var(--r-sm); background: var(--well); font-size: 12px; white-space: pre-wrap; word-break: break-all; user-select: all; }
+.pdlg .np-foot { margin: 18px -24px 0; }
+
+/* ---- dropdown in place of the native select (picker.js) ------------------------------------------------ */
+.dd-native { display: none !important; }
+button.dd-trigger { display: inline-flex; align-items: center; justify-content: space-between; gap: 10px; max-width: 100%; padding: 5px 9px 5px 11px; text-align: left;
+  border: 1px solid var(--line-strong); border-radius: var(--r-md); background: var(--surface); color: var(--text-strong); font: 400 13.5px var(--font); }
+button.dd-trigger.small { font-size: 12.5px; padding-top: 3px; padding-bottom: 3px; }
+button.dd-trigger:hover { background: var(--surface); border-color: var(--text-ghost); }
+button.dd-trigger[aria-expanded="true"] { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+button.dd-trigger:disabled { background: var(--well); color: var(--text-faint); border-color: var(--line-strong); }
+.dd-trigger::after { content: ""; flex: none; width: 5px; height: 5px; margin-top: -3px; border-right: 1.5px solid var(--text-faint); border-bottom: 1.5px solid var(--text-faint); transform: rotate(45deg); }
+.dd-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.side-search .dd-trigger { flex: none; }
+.nr-v .dd-trigger { min-width: 280px; font-weight: 500; padding: 6px 11px; }
+.nr-fields .dd-trigger, .kbform .dd-trigger, .pj-grid .dd-trigger, .newgrid .dd-trigger { width: 100%; }
+.dd-panel { position: fixed; z-index: 80; overflow-y: auto; padding: 4px; background: var(--raised); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-float); animation: dlgin .12s ease-out; }
+.dd-opt, .dd-opt:hover { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 10px 6px 6px; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text); font: 400 13px var(--font); text-align: left; white-space: nowrap; }
+.dd-opt:hover, .dd-opt:focus-visible { background: var(--hover); outline: none; }
+.dd-opt[aria-selected="true"] { color: var(--text-strong); font-weight: 500; }
+.dd-opt:disabled { opacity: .45; cursor: default; }
+.dd-check { flex: none; width: 14px; text-align: center; color: var(--accent); }
+.dd-sep { height: 1px; margin: 4px 2px; background: var(--line); }
+.dd-act, .dd-act:hover { color: var(--accent); font-weight: 500; }
+.kbform input:not([type=checkbox]), .nr-fields input, .nr-fields textarea { box-sizing: border-box; }
+
+/* ---- Resources side bar (resources.js): groups with a "+", one-line items ------------------------------------ */
+#resList .grp { padding: 6px 4px 6px 8px; }
+#resList .grp .gname { margin-right: auto; }
+#resList .grp .n { margin-left: 0; }
+button.add { flex: none; width: 22px; height: 22px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--text-faint); font-size: 17px; line-height: 1; }
+button.add:hover { background: var(--hover); color: var(--accent); }
+#resList .grp-body { margin: 0 0 6px 10px; padding-left: 8px; border-left: 1px solid var(--line); }
+#resList .item { padding: 5px 8px; }
+#resList .item .sub { padding-left: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-faint); font-size: 11.5px; }
+#resList .item .line1 .tag { flex: none; max-width: 45%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#resList .item .line1 .id { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+#resList .pad { padding: 4px 8px; }

@@ -312,8 +312,16 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
     async def flows(_: Request) -> Response:
         return JSONResponse(svc.flows())
 
-    async def projects(_: Request) -> Response:
+    async def projects(req: Request) -> Response:
+        if req.method == "POST":
+            try:
+                return JSONResponse(await svc.create_project(await body_of(req)))
+            except (ValueError, RuntimeError, FileNotFoundError) as e:
+                return err(str(e))
         return JSONResponse(svc.projects())
+
+    async def templates(_: Request) -> Response:
+        return JSONResponse(svc.templates())
 
     flowdefs = FlowDefs(config, kb_root)  # flow definitions, read live from flows/ (ui/flowgraph.py)
 
@@ -345,7 +353,8 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         Route("/api/runs/{rid}/raw", read_raw),
         Route("/api/runs/{rid}/changes", changes),
         Route("/api/flows", flows),
-        Route("/api/projects", projects),
+        Route("/api/projects", projects, methods=["GET", "POST"]),
+        Route("/api/templates", templates),
         Route("/api/flowdefs", flowdefs_overview),
         Route("/api/flowdefs/version", flowdefs_version),
         Route("/api/flowdefs/{flow}", flowdefs_graph),

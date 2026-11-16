@@ -50,9 +50,9 @@ document.addEventListener("click", (e) => {
   if (!e.target.closest("#userBtn") && !e.target.closest("#userPanel")) $("#userPanel").hidden = true;
 });
 
-// ---- side bar: three views; clicking the shown view's icon folds the side bar ---------------------
+// ---- side bar: four views; clicking the shown view's icon folds the side bar ---------------------
 
-const VIEWS = { runs: "Runs", inbox: "Waiting on you", flows: "Flow definitions" };
+const VIEWS = { runs: "Runs", inbox: "Waiting on you", flows: "Flow definitions", resources: "Resources" };
 function showView(name, fold = false) {
   const off = document.body.classList.contains("side-off");
   if (fold && S.view === name && !off) { document.body.classList.add("side-off"); store.set("myorch.side", "off"); return; }
@@ -64,6 +64,7 @@ function showView(name, fold = false) {
   $("#sideTitle").textContent = VIEWS[name];
   store.set("myorch.view", name);
   if (name === "flows" && typeof flOpenView === "function") flOpenView();  // flows.js
+  if (name === "resources" && typeof resOpenView === "function") resOpenView();  // resources.js
 }
 
 // ---- runs: the list, the inbox, the tree ------------------------------------------------------------
@@ -255,7 +256,7 @@ function tabKey(t) {
     case "step": return `step:${t.run}:${t.step}`;
     case "changes": case "docs": return `${t.kind}:${t.run}`;
     case "file": return `file:${t.run}:${t.log ? `log:${t.step}` : t.path}`;
-    case "flow": return `flow:${t.ref.t}:${t.ref.id || ""}`;
+    case "flow": case "res": return `${t.kind}:${t.ref.t}:${t.ref.id || ""}`;
     default: return t.kind;
   }
 }
@@ -313,7 +314,10 @@ function saveTabs() {
 function restoreTabs() {
   const s = store.get("myorch.tabs", null);
   if (!s?.list) return;
-  TABS.list = s.list.filter((t) => t.kind && t.kind !== "new").map((t) => ({ ...t, key: tabKey(t) }));
+  // Knowledge pages were flow tabs before the Resources view existed.
+  const moved = (t) => (t.kind === "flow" && ["kb", "kbform"].includes(t.ref?.t) ? { ...t, kind: "res" } : t);
+  TABS.list = s.list.filter((t) => t.kind && t.kind !== "new").map(moved).map((t) => ({ ...t, key: tabKey(t) }));
+  s.active = s.active?.replace(/^flow:(kb|kbform):/, "res:$1:");
   const a = TABS.list.find((t) => t.key === s.active) || TABS.list[TABS.list.length - 1];
   if (a) activate(a.key);
 }
@@ -331,7 +335,9 @@ function tabInfo(t) {
     case "docs": return { icon: icon("▤"), title: "Docs", sub: rl, tip: `${t.run} · docs/` };
     case "file": return { icon: icon("▢"), title: t.log ? `${t.step} · log` : t.path.split("/").pop(), sub: rl, tip: `${t.run} · ${t.log ? `${t.step} log of the last turn` : t.path}` };
     case "new": return { icon: icon("+"), title: "New run", tip: "New run" };
-    case "flow": return { icon: icon("⑂"), title: t.ref.t === "kbform" ? "Register knowledge source" : t.ref.id, sub: { frag: "fragment", kb: "knowledge", ev: "eval" }[t.ref.t] || "", tip: t.ref.id || "" };
+    case "flow": return { icon: icon("⑂"), title: t.ref.id, sub: { frag: "fragment", ev: "eval" }[t.ref.t] || "", tip: t.ref.id || "" };
+    case "res": return { icon: icon(t.ref.t === "project" ? "◈" : "▤"), tip: t.ref.id || "",
+      title: t.ref.t === "kbform" ? "Register resource" : t.ref.id.split("/").pop(), sub: { project: "project", kb: "resource" }[t.ref.t] || "" };
     default: return { icon: icon("·"), title: t.kind };
   }
 }
@@ -356,6 +362,7 @@ function hashOf(t) {
   if (!t) return "";
   if (t.kind === "new") return "#new";
   if (t.kind === "flow") return t.ref.t === "flow" ? `#flow=${enc(t.ref.id)}` : "";
+  if (t.kind === "res") return "";
   const base = `#run=${enc(t.run)}`;
   if (t.kind === "step") return `${base}&step=${enc(t.step)}`;
   if (t.kind === "changes" || t.kind === "docs") return `${base}&tab=${t.kind}`;
@@ -382,7 +389,7 @@ function applyHash() {
 
 // ---- panes: one element per kind of tab, drawn for the active tab ---------------------------------
 
-const PANES = ["empty", "run", "step", "changes", "docs", "file", "flow", "new"];
+const PANES = ["empty", "run", "step", "changes", "docs", "file", "flow", "res", "new"];
 function showPane(t) {
   const kind = t?.kind || "empty";
   for (const p of PANES) $(`#pane-${p}`).hidden = p !== kind;
@@ -394,6 +401,7 @@ function showPane(t) {
   else if (kind === "file") { loadFileTab(t); if (!S.detail) loadDetail(); }
   else if (kind === "new") renderNewPane();  // newrun.js
   else if (kind === "flow") flShowTab(t.ref);  // flows.js
+  else if (kind === "res") resShowTab(t.ref);  // resources.js
 }
 
 function leavePane(t) {
@@ -406,7 +414,8 @@ function renderEmpty() {
     el("p", { class: "muted", text: "Pick a run on the left, or start a new run. Click a run to see its conversation; expand it to see its steps. While a step runs, its live output shows at the bottom." }),
     el("div", { class: "row" }, el("button", { text: "+ New run", onclick: () => openNewRun() }),
       el("button", { class: "ghost", text: "Waiting on you", onclick: () => showView("inbox") }),
-      el("button", { class: "ghost", text: "Flow definitions", onclick: () => showView("flows") }))));
+      el("button", { class: "ghost", text: "Flow definitions", onclick: () => showView("flows") }),
+      el("button", { class: "ghost", text: "Resources", onclick: () => showView("resources") }))));
 }
 
 // ---- run detail ----------------------------------------------------------------------------------------

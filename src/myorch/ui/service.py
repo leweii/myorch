@@ -502,8 +502,30 @@ class Service:
                 continue
             out.append({"name": name, "repo": p.repo, "base": p.base, "extends": p.extends,
                         "required_inputs": p.required_inputs, "synced": (name in synced) if synced is not None else None,
-                        "identity": p.identity.account})
+                        "identity": p.identity.account, "image": p.image, "approvers": p.approvers,
+                        "knowledge": p.knowledge, "providers": {k: v for k, v in p.providers.items() if v}})
         return out
+
+    def templates(self) -> list[str]:
+        from myorch import project as projects
+
+        return projects.list_templates(self.kb_root)
+
+    async def create_project(self, data: dict[str, Any]) -> dict[str, Any]:
+        """A new pack from the console's form (project.create_project), committed to myorch-knowledge;
+        optionally snapshotted. A sync that fails does not undo the pack: it is reported with it."""
+        from myorch import project as projects
+
+        text = lambda k: str(data.get(k) or "").strip() or None  # noqa: E731
+        r = await asyncio.to_thread(projects.create_project, self.kb_root, text("repo") or "", text("name"), text("template"),
+                                    text("base") or "main", text("account"), commit_by=self.user)
+        if data.get("sync"):
+            try:
+                r["files"], r["version"] = await asyncio.to_thread(projects.snapshot, self.relay.store, self.kb_root, r["name"])
+                r["next"] = [x for x in r["next"] if not x.startswith("uv run myorch project sync")]
+            except (RuntimeError, ValueError, OSError) as e:
+                r["sync_error"] = str(e)
+        return r
 
     # ---- commands, through the relay (only called after the user confirmed) ----------------
 

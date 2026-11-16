@@ -44,47 +44,21 @@ myorch-knowledge/
 
 ## Creating a new project
 
-Use `myorch project create` to quickly set up a new project pack:
+Two entrances, one function (`create_project` in `src/myorch/project.py`):
+
+- **Console:** **Resources → + New project…**, or the last row (**New project…**) of a project dropdown (the "All projects" filter above the run list, or **Project** in the New run tab). Fill in the repository (`owner/name`) and optionally the name, template, base branch and account. The pack is written, committed to `myorch-knowledge` (as `project: create <name>`), and optionally synced.
+- **CLI:** `uv run myorch project create <owner/repo> [--name N] [--template T] [--base B] [--account A] [--image I] [--sync]`. It writes the files and does not commit; commit `myorch-knowledge` yourself.
+
+Both write `project.yaml` and a `README.md` into `../myorch-knowledge/<name>/` and check that the pack loads (nothing is left behind if it does not). The name defaults to the repository name. The identity (account, commit author) defaults to the one the existing packs use, then `git config github.user` / `user.name` / `user.email`; with none of them, give `--account` (the console's Account field). `approvers` starts as that account. The image defaults to the template's, else `myorch-dev-<name>:latest`.
+
+What it does not do, because a token or a build is involved: create the GitHub provider, write checks for a project without a template, and build the image. Both entrances print the remaining steps in order (the pack's `README.md` has them too):
 
 ```bash
-# Basic usage
-uv run myorch project create owner/repo-name
-
-# With options
-uv run myorch project create owner/repo-name \
-  --name my-project \
-  --template swift-apple \
-  --base main \
-  --sync
+uv run myorch project github-profile <name> > /tmp/github-<name>.yaml && openshell provider profile import -f /tmp/github-<name>.yaml
+read -s GITHUB_TOKEN && export GITHUB_TOKEN && openshell provider create --name github-<name> --type github-<name> --credential GITHUB_TOKEN; unset GITHUB_TOKEN
+uv run myorch project sync <name>                      # not needed after --sync / "Sync now"
+uv run myorch run flows/onboard.yaml --project <name>  # analyses the repository and proposes pack changes
 ```
-
-The command will:
-1. Create the project directory structure in `../myorch-knowledge/<name>/`
-2. Generate a `project.yaml` with sensible defaults (git config is used for identity)
-3. Create a README with setup instructions
-4. Optionally sync the project (`--sync`)
-5. Optionally run onboard (`--onboard`, implies `--sync`)
-
-After creation:
-1. Review and edit `project.yaml` as needed
-2. Generate and configure the GitHub provider:
-   ```bash
-   uv run myorch project github-profile <name> > /tmp/github-<name>.yaml
-   openshell provider profile import -f /tmp/github-<name>.yaml
-   # Create the provider with your GitHub token (see the project's README.md)
-   ```
-3. Sync the project: `uv run myorch project sync <name>`
-4. Run onboard to analyze the repository: `uv run myorch run flows/onboard.yaml --project <name>`
-
-Available options:
-- `--name`: Project name (default: derived from repo name)
-- `--template`: Template to extend (e.g., `swift-apple`, `core-ng`)
-- `--base`: Base branch (default: `main`)
-- `--account`: GitHub account (default: from git config)
-- `--git-name`, `--git-email`: Git identity (default: from git config)
-- `--image`: Development image (default: from template or `myorch-dev-<name>`)
-- `--sync`: Sync the project after creation
-- `--onboard`: Run onboard flow after sync
 
 ## project.yaml fields
 
@@ -281,7 +255,7 @@ development uses it: the `risk-rules` step takes the maximum of `default` and al
 
 A knowledge source is read-only knowledge mounted into a run. It is not part of the project pack snapshot. It is synced and versioned separately. The final authority for the fields is the `Source` model in `src/myorch/knowledge.py`.
 
-Registering: fill in the form in the console under **Flows → Knowledge → + Register knowledge source**, or write the YAML by hand.
+Registering: fill in the form in the console under **Resources → + Register knowledge base** (a folder or a git repository) or **+ Register MCP server**, or write the YAML by hand.
 - The form first runs **Check**: it reports missing fields. For the folder type it also lists which files will be collected and any suspected secrets found by the scan.
 - **Register** writes it into `myorch-knowledge` and makes one git commit. A registered knowledge source can be changed with **Edit** or removed with **Unregister** on its page. Unregistering does not delete existing snapshots.
 - Knowledge sources in templates are read-only in the console.
