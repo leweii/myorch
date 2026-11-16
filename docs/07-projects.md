@@ -54,8 +54,9 @@ Both write `project.yaml` and a `README.md` into `../myorch-knowledge/<name>/` a
 What it does not do, because a token or a build is involved: create the GitHub provider, write checks for a project without a template, and build the image. Both entrances print the remaining steps in order (the pack's `README.md` has them too):
 
 ```bash
-uv run myorch project github-profile <name> > /tmp/github-<name>.yaml && openshell provider profile import -f /tmp/github-<name>.yaml
-read -s GITHUB_TOKEN && export GITHUB_TOKEN && openshell provider create --name github-<name> --type github-<name> --credential GITHUB_TOKEN; unset GITHUB_TOKEN
+# deploy/secrets/providers.yaml: add <name> to github_profiles, and a provider github-<name> with type github-<name>
+# and credentials GITHUB_TOKEN (a token that can reach the repository); see "GitHub credentials for a project" in 04-setup.md
+docker compose -f deploy/compose.yaml run --rm providers   # imports the profile and creates the provider (OpenShell runs in the container)
 uv run myorch project sync <name>                      # not needed after --sync / "Sync now"
 uv run myorch run flows/onboard.yaml --project <name>  # analyses the repository and proposes pack changes
 ```

@@ -246,7 +246,8 @@ def test_create_project_takes_the_identity_the_other_packs_use(root: Path):
     assert (p.identity.account, p.identity.git_email, p.approvers) == ("me", "me@x", ["me"])
     assert p.providers["github"] == "github-new-app"
     assert (root / "new-app" / "README.md").is_file()
-    assert [s.split()[0:4] for s in r["next"]][-1][:3] == ["uv", "run", "myorch"] and "onboard" in r["next"][-1]
+    assert "onboard" in r["next"][-1] and "github_profiles" in r["next"][0] and "run --rm providers" in r["next"][1]
+    assert not any("openshell" in s for s in r["next"])  # the host has no openshell: the container runs it
 
 
 def test_create_project_without_a_template_asks_for_checks_and_an_image(root: Path):

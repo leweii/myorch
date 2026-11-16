@@ -24,8 +24,8 @@ function showProjectResult(r) {
   const lines = [el("p", {}, "Created ", el("b", { text: r.name }), r.commit ? ` and committed to myorch-knowledge (${r.commit}).` : ".")];
   if (r.version) lines.push(el("p", { class: "muted small", text: `Synced: ${r.files} files (${r.version}).` }));
   if (r.sync_error) lines.push(el("p", { class: "warn small", text: `Not synced: ${r.sync_error}` }));
-  lines.push(el("p", { class: "muted small", text: "Still to do, in order. The provider needs a token, so run these in your own terminal (never paste the token anywhere else):" }),
-    el("ol", { class: "pj-steps" }, r.next.map((n) => el("li", {}, /^(uv|read) /.test(n) ? el("code", { text: n }) : n))));
+  lines.push(el("p", { class: "muted small", text: "Still to do, in order. The GitHub provider holds a token, so you do the first step; the rest run in a terminal in the myorch directory:" }),
+    el("ol", { class: "pj-steps" }, r.next.map((n) => el("li", {}, /^(uv|docker) /.test(n) ? el("code", { text: n }) : n))));
   $("#pjResult").replaceChildren(...lines);
   $("#pjForm").hidden = true;
   $("#pjResult").hidden = false;

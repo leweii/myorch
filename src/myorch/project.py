@@ -413,12 +413,14 @@ def _usual_identity(root: Path) -> Identity | None:
     return Identity(account=top[0][0][0], git_name=top[0][0][1], git_email=top[0][0][2]) if top else None
 
 
-def next_steps(name: str, image: str, has_template: bool) -> list[str]:
-    """What is left to do by hand after create_project: the provider holds a token, so a person makes it."""
+def next_steps(name: str, repo: str, image: str, has_template: bool) -> list[str]:
+    """What is left to do by hand after create_project: the provider holds a token, so a person makes it.
+    OpenShell runs in the container (the host has no gateway), so the provider goes through the
+    providers service, which reads deploy/secrets/providers.yaml."""
     steps = [
-        f"uv run myorch project github-profile {name} > /tmp/github-{name}.yaml && openshell provider profile import -f /tmp/github-{name}.yaml",
-        f"read -s GITHUB_TOKEN && export GITHUB_TOKEN && openshell provider create --name github-{name} "
-        f"--type github-{name} --credential GITHUB_TOKEN; unset GITHUB_TOKEN",
+        f"In deploy/secrets/providers.yaml add {name} to github_profiles, and a provider github-{name} "
+        f"(type: github-{name}, credentials: GITHUB_TOKEN: \"...\") whose token can reach {repo}",
+        "docker compose -f deploy/compose.yaml run --rm providers",
     ]
     if not has_template:
         steps.append(f"Write checks.sh, risk-rules.yaml and security.md, and build the image {image} (image/ in the pack)")
@@ -463,12 +465,12 @@ def create_project(
         config["extends"] = template
     config |= {"identity": {"account": account, "git_name": git_name, "git_email": git_email},
                "providers": {"github": f"github-{name}", "artifacts": None}, "image": image, "approvers": [account]}
-    steps = next_steps(name, image, bool(template))
+    steps = next_steps(name, repo, image, bool(template))
     try:
         (dest / "guide").mkdir(parents=True)
         (dest / "project.yaml").write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
         (dest / "README.md").write_text(f"# {name}\n\nProject pack for {repo}. Still to do, in order:\n\n"
-                                        + "\n".join(f"{i}. `{s}`" if s.startswith(("uv ", "read ")) else f"{i}. {s}"
+                                        + "\n".join(f"{i}. `{s}`" if s.startswith(("uv ", "docker ")) else f"{i}. {s}"
                                                     for i, s in enumerate(steps, 1)) + "\n")
         load_project(root, name)
     except Exception:

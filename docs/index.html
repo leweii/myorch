@@ -4190,8 +4190,9 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 </ul>
 <p>Both write <code>project.yaml</code> and a <code>README.md</code> into <code>../myorch-knowledge/&lt;name&gt;/</code> and check that the pack loads (nothing is left behind if it does not). The name defaults to the repository name. The identity (account, commit author) defaults to the one the existing packs use, then <code>git config github.user</code> / <code>user.name</code> / <code>user.email</code>; with none of them, give <code>--account</code> (the console's Account field). <code>approvers</code> starts as that account. The image defaults to the template's, else <code>myorch-dev-&lt;name&gt;:latest</code>.</p>
 <p>What it does not do, because a token or a build is involved: create the GitHub provider, write checks for a project without a template, and build the image. Both entrances print the remaining steps in order (the pack's <code>README.md</code> has them too):</p>
-<pre><code class="language-bash">uv run myorch project github-profile &lt;name&gt; &gt; /tmp/github-&lt;name&gt;.yaml &amp;&amp; openshell provider profile import -f /tmp/github-&lt;name&gt;.yaml
-read -s GITHUB_TOKEN &amp;&amp; export GITHUB_TOKEN &amp;&amp; openshell provider create --name github-&lt;name&gt; --type github-&lt;name&gt; --credential GITHUB_TOKEN; unset GITHUB_TOKEN
+<pre><code class="language-bash"># deploy/secrets/providers.yaml: add &lt;name&gt; to github_profiles, and a provider github-&lt;name&gt; with type github-&lt;name&gt;
+# and credentials GITHUB_TOKEN (a token that can reach the repository); see &quot;GitHub credentials for a project&quot; in 04-setup.md
+docker compose -f deploy/compose.yaml run --rm providers   # imports the profile and creates the provider (OpenShell runs in the container)
 uv run myorch project sync &lt;name&gt;                      # not needed after --sync / &quot;Sync now&quot;
 uv run myorch run flows/onboard.yaml --project &lt;name&gt;  # analyses the repository and proposes pack changes
 </code></pre>
