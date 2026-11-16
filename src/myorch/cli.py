@@ -339,11 +339,16 @@ def _project_cmd(store, root: Path, args: argparse.Namespace) -> int:
 
     try:
         if args.project_cmd == "create":
-            projects.create_project(
-                root, args.repo, args.name, args.template, args.base,
-                args.account, args.git_name, args.git_email, args.image,
-                args.sync, args.onboard
-            )
+            r = projects.create_project(root, args.repo, args.name, args.template, args.base,
+                                        args.account, args.git_name, args.git_email, args.image)
+            print(f"project {r['name']}: created {r['path']} (image {r['image']})")
+            if args.sync:
+                n, version = projects.snapshot(store, root, r["name"])
+                print(f"project {r['name']}: {n} files synced ({version})")
+            print("still to do, in order:")
+            for i, step in enumerate(r["next"], 1):
+                if not (args.sync and step.startswith("uv run myorch project sync")):
+                    print(f"  {i}. {step}")
         elif args.project_cmd == "sync":
             n, version = projects.snapshot(store, root, args.name)
             print(f"project {args.name}: {n} files synced ({version})")
@@ -798,12 +803,11 @@ def main() -> None:
     cr.add_argument("--name", help="project name (default: derived from repo name)")
     cr.add_argument("--template", help="template to extend (e.g., swift-apple, core-ng)")
     cr.add_argument("--base", default="main", help="base branch (default: main)")
-    cr.add_argument("--account", help="GitHub account (default: current git user)")
-    cr.add_argument("--git-name", help="git commit name (default: from git config)")
-    cr.add_argument("--git-email", help="git commit email (default: from git config)")
-    cr.add_argument("--image", help="development image (default: from template or myorch-dev-<name>)")
-    cr.add_argument("--sync", action="store_true", help="sync the project after creation")
-    cr.add_argument("--onboard", action="store_true", help="run onboard flow after sync (implies --sync)")
+    cr.add_argument("--account", help="GitHub account to act as (default: git config github.user, else the one other packs use)")
+    cr.add_argument("--git-name", help="commit author name (default: the other packs', else git config)")
+    cr.add_argument("--git-email", help="commit author email (default: the other packs', else git config)")
+    cr.add_argument("--image", help="development image (default: the template's, else myorch-dev-<name>:latest)")
+    cr.add_argument("--sync", action="store_true", help="also snapshot the pack into the volume")
 
     for name, hlp in (("sync", "snapshot the pack into the volume"), ("show", "print the resolved config"),
                       ("github-profile", "print an OpenShell provider profile for the project's GitHub access")):

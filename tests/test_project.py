@@ -234,3 +234,64 @@ def test_project_if_drops_steps_and_their_dependents_wait_for_what_they_waited_f
     load_flow(yaml.safe_dump(off))
     with pytest.raises(FragmentError, match="--project"):
         expand_flow(yaml.safe_load(SHAPED), None, {}, None)
+
+
+def test_create_project_takes_the_identity_the_other_packs_use(root: Path):
+    from myorch.project import create_project
+
+    r = create_project(root, "me/new-app", template="core-ng")
+    p = load_project(root, "new-app")
+    assert r["name"] == "new-app" and r["image"] == "myorch-dev-core-ng:latest"
+    assert (p.repo, p.base, p.extends) == ("me/new-app", "main", "core-ng")
+    assert (p.identity.account, p.identity.git_email, p.approvers) == ("me", "me@x", ["me"])
+    assert p.providers["github"] == "github-new-app"
+    assert (root / "new-app" / "README.md").is_file()
+    assert [s.split()[0:4] for s in r["next"]][-1][:3] == ["uv", "run", "myorch"] and "onboard" in r["next"][-1]
+
+
+def test_create_project_without_a_template_asks_for_checks_and_an_image(root: Path):
+    from myorch.project import create_project
+
+    r = create_project(root, "me/Some_Repo.js", account="other")
+    assert r["name"] == "some-repo-js" and r["image"] == "myorch-dev-some-repo-js:latest"
+    assert load_project(root, "some-repo-js").identity.account == "other"
+    assert any("checks.sh" in s for s in r["next"])
+
+
+@pytest.mark.parametrize("kwargs, error", [
+    ({"repo": "not a repo"}, "owner/name"),
+    ({"repo": "me/x", "name": "mdm"}, "already exists"),
+    ({"repo": "me/x", "template": "nope"}, "template 'nope' not found"),
+    ({"repo": "me/x", "name": "../escape"}, "project name"),
+])
+def test_create_project_refuses_what_it_cannot_write(root: Path, kwargs, error):
+    from myorch.project import create_project
+
+    before = sorted(p.name for p in root.iterdir())
+    with pytest.raises(ValueError, match=error):
+        create_project(root, **kwargs)
+    assert sorted(p.name for p in root.iterdir()) == before and not (root.parent / "escape").exists()
+
+
+def test_create_project_needs_an_account_from_somewhere(tmp_path: Path, monkeypatch):
+    from myorch import project as projects
+
+    monkeypatch.setattr(projects, "_git_config", lambda key: "")
+    with pytest.raises(ValueError, match="--account"):
+        projects.create_project(tmp_path, "me/x")
+    assert projects.create_project(tmp_path, "me/x", account="me")["name"] == "x"
+
+
+def test_create_project_commits_the_pack_when_asked(root: Path):
+    import subprocess
+
+    from myorch.project import create_project
+
+    git = ["git", "-C", str(root)]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "-A"], check=True)
+    subprocess.run([*git, "-c", "user.name=t", "-c", "user.email=t@x", "commit", "-q", "-m", "base"], check=True)
+    r = create_project(root, "me/new-app", template="core-ng", commit_by="tester")
+    log = subprocess.run([*git, "log", "-1", "--format=%s%n%b"], capture_output=True, text=True).stdout
+    assert r["commit"] and "project: create new-app (me/new-app)" in log and "by: tester" in log
+    assert subprocess.run([*git, "status", "--porcelain"], capture_output=True, text=True).stdout == ""

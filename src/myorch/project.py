@@ -32,7 +32,6 @@ from __future__ import annotations
 
 import hashlib
 import json
-import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -391,159 +390,89 @@ binaries: [/usr/bin/gh, /usr/local/bin/gh, /usr/bin/git, /usr/local/bin/git]
 """
 
 
-def create_project(
-    root: Path, repo: str, name: str | None = None, template: str | None = None,
-    base: str = "main", account: str | None = None, git_name: str | None = None,
-    git_email: str | None = None, image: str | None = None,
-    sync: bool = False, onboard: bool = False
-) -> None:
-    """Create a new project pack with interactive prompts for missing information."""
-    import re
+
+def _git_config(key: str) -> str:
     import subprocess
-    import sys
 
-    # Parse repo (owner/name format)
-    if not re.match(r"^[a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+$", repo):
-        raise ValueError(f"repo must be in owner/name format, got {repo!r}")
+    r = subprocess.run(["git", "config", "--get", key], capture_output=True, text=True)
+    return r.stdout.strip() if r.returncode == 0 else ""
 
-    # Derive default name from repo
-    if not name:
-        name = repo.split("/")[1].lower().replace(".", "-").replace("_", "-")
-        print(f"Using project name: {name}")
 
-    # Check if project already exists
-    project_path = project_dir(root, name)
-    if project_path.exists():
-        raise ValueError(f"project {name!r} already exists at {project_path}")
+def _usual_identity(root: Path) -> Identity | None:
+    """The identity most existing packs use: a new project is usually the same person's."""
+    from collections import Counter
 
-    # Validate template if provided
-    if template:
-        tmpl_dir = template_dir(root, template)
-        if not tmpl_dir.is_dir():
-            available = list_templates(root)
-            raise ValueError(f"template {template!r} not found. Available: {', '.join(available) or 'none'}")
-
-    # Get git config defaults
-    def git_config(key: str, default: str = "") -> str:
+    seen: Counter[tuple[str, str, str]] = Counter()
+    for n in list_projects(root):
         try:
-            return subprocess.check_output(
-                ["git", "config", "--get", key], text=True, stderr=subprocess.DEVNULL
-            ).strip() or default
-        except subprocess.CalledProcessError:
-            return default
+            i = load_project(root, n).identity
+        except Exception:  # a broken pack is reported elsewhere
+            continue
+        seen[(i.account, i.git_name, i.git_email)] += 1
+    top = seen.most_common(1)
+    return Identity(account=top[0][0][0], git_name=top[0][0][1], git_email=top[0][0][2]) if top else None
 
+
+def next_steps(name: str, image: str, has_template: bool) -> list[str]:
+    """What is left to do by hand after create_project: the provider holds a token, so a person makes it."""
+    steps = [
+        f"uv run myorch project github-profile {name} > /tmp/github-{name}.yaml && openshell provider profile import -f /tmp/github-{name}.yaml",
+        f"read -s GITHUB_TOKEN && export GITHUB_TOKEN && openshell provider create --name github-{name} "
+        f"--type github-{name} --credential GITHUB_TOKEN; unset GITHUB_TOKEN",
+    ]
+    if not has_template:
+        steps.append(f"Write checks.sh, risk-rules.yaml and security.md, and build the image {image} (image/ in the pack)")
+    steps += [f"uv run myorch project sync {name}", f"uv run myorch run flows/onboard.yaml --project {name}"]
+    return steps
+
+
+def create_project(
+    root: Path, repo: str, name: str | None = None, template: str | None = None, base: str = "main",
+    account: str | None = None, git_name: str | None = None, git_email: str | None = None,
+    image: str | None = None, commit_by: str | None = None,
+) -> dict[str, Any]:
+    """Write a new pack (project.yaml and README.md) and check that it loads; nothing else is touched.
+    The identity defaults to the one the existing packs use. commit_by: also commit the pack to
+    myorch-knowledge. Returns {name, path, image, commit, next}."""
+    import re
+
+    from myorch.knowledge import _commit
+
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo or ""):
+        raise ValueError(f"repo must be owner/name, got {repo!r}")
+    name = check_id(name or repo.split("/")[1].lower().replace(".", "-").replace("_", "-"), "project name")
+    dest = project_dir(root, name)
+    if dest.exists():
+        raise ValueError(f"project {name!r} already exists")
+    if template and not template_dir(root, template).is_dir():
+        raise ValueError(f"template {template!r} not found; available: {', '.join(list_templates(root)) or 'none'}")
+
+    usual = _usual_identity(root)
+    account = account or _git_config("github.user") or (usual.account if usual else "")
     if not account:
-        account = git_config("user.name") or git_config("github.user") or "myorch-bot"
-    if not git_name:
-        git_name = git_config("user.name") or account
-    if not git_email:
-        git_email = git_config("user.email") or f"{account}@users.noreply.github.com"
-
-    # Determine image
+        raise ValueError("no GitHub account to act as: give --account (no other pack or git config github.user to take it from)")
+    same = usual is not None and usual.account == account
+    git_name = git_name or (usual.git_name if same else _git_config("user.name")) or account
+    git_email = git_email or (usual.git_email if same else _git_config("user.email")) or f"{account}@users.noreply.github.com"
     if not image:
-        if template:
-            # Load template's image
-            tmpl_project = _read_yaml(template_dir(root, template) / "project.yaml")
-            image = tmpl_project.get("image", f"myorch-dev-{name}")
-        else:
-            image = f"myorch-dev-{name}"
+        image = _read_yaml(template_dir(root, template) / "project.yaml").get("image") if template else None
+        image = image or f"myorch-dev-{name}:latest"
 
-    # Create project directory structure
-    print(f"Creating project pack at {project_path}")
-    project_path.mkdir(parents=True, exist_ok=True)
-    (project_path / "guide").mkdir(exist_ok=True)
-    (project_path / "prompts").mkdir(exist_ok=True)
-
-    # Create project.yaml
-    config = {
-        "repo": repo,
-        "base": base,
-        "identity": {
-            "account": account,
-            "git_name": git_name,
-            "git_email": git_email,
-        },
-        "providers": {
-            "github": f"github-{name}",
-            "artifacts": None,
-        },
-        "image": image,
-        "approvers": [git_config("github.user") or account],
-    }
-
+    config: dict[str, Any] = {"repo": repo, "base": base or "main"}
     if template:
         config["extends"] = template
-
-    project_yaml_path = project_path / "project.yaml"
-    project_yaml_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
-    print(f"Created {project_yaml_path}")
-
-    # Create basic README
-    readme_path = project_path / "README.md"
-    readme_content = f"""# {name}
-
-Project pack for {repo}.
-
-## Setup
-
-1. Generate and import the GitHub provider profile:
-   ```bash
-   uv run myorch project github-profile {name} > /tmp/{name}-github.yaml
-   openshell provider profile import -f /tmp/{name}-github.yaml
-   ```
-
-2. Create the provider with your GitHub token:
-   ```bash
-   read -s GITHUB_TOKEN && export GITHUB_TOKEN
-   openshell provider create --name github-{name} --type github-{name} --credential GITHUB_TOKEN
-   unset GITHUB_TOKEN
-   ```
-
-3. Sync the project:
-   ```bash
-   uv run myorch project sync {name}
-   ```
-
-4. Optionally run onboard to analyze the repository:
-   ```bash
-   uv run myorch run flows/onboard.yaml --project {name}
-   ```
-"""
-    readme_path.write_text(readme_content)
-    print(f"Created {readme_path}")
-
-    # Print next steps
-    print(f"\n✓ Project {name} created successfully!")
-    print(f"\nNext steps:")
-    print(f"  1. Review and edit {project_yaml_path}")
-
-    if not template:
-        print(f"  2. Add checks.sh for the project's CI checks")
-        print(f"  3. Add risk-rules.yaml for approval rules")
-        print(f"  4. Add security.md for security review focus")
-
-    provider_name = f"github-{name}"
-    print(f"\n  Configure GitHub provider:")
-    print(f"    uv run myorch project github-profile {name} > /tmp/{provider_name}.yaml")
-    print(f"    openshell provider profile import -f /tmp/{provider_name}.yaml")
-    print(f"    # Then create the provider with your GitHub token (see {readme_path})")
-
-    if sync or onboard:
-        # Import and sync
-        from myorch.storage import ArtifactStore
-        store = ArtifactStore.connect(os.environ.get("MYORCH_VOLUME", "myorch-artifacts"))
-        print(f"\n  Syncing project...")
-        n, version = snapshot(store, root, name)
-        print(f"  ✓ {n} files synced ({version})")
-
-        if onboard:
-            print(f"\n  Starting onboard flow...")
-            print(f"    uv run myorch run flows/onboard.yaml --project {name}")
-            # Note: We don't actually run it here because it needs temporal worker
-            print(f"  (Run the above command manually once the provider is configured)")
-    else:
-        print(f"\n  Sync and onboard:")
-        print(f"    uv run myorch project sync {name}")
-        print(f"    uv run myorch run flows/onboard.yaml --project {name}")
-
-    print(f"\nProject pack created at: {project_path}")
+    config |= {"identity": {"account": account, "git_name": git_name, "git_email": git_email},
+               "providers": {"github": f"github-{name}", "artifacts": None}, "image": image, "approvers": [account]}
+    steps = next_steps(name, image, bool(template))
+    try:
+        (dest / "guide").mkdir(parents=True)
+        (dest / "project.yaml").write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
+        (dest / "README.md").write_text(f"# {name}\n\nProject pack for {repo}. Still to do, in order:\n\n"
+                                        + "\n".join(f"{i}. `{s}`" if s.startswith(("uv ", "read ")) else f"{i}. {s}"
+                                                    for i, s in enumerate(steps, 1)) + "\n")
+        load_project(root, name)
+    except Exception:
+        shutil.rmtree(dest, ignore_errors=True)
+        raise
+    commit = _commit(root, name, f"project: create {name} ({repo})", commit_by) if commit_by else ""
+    return {"name": name, "path": str(dest), "image": image, "commit": commit, "next": steps}
