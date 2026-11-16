@@ -444,11 +444,14 @@ The run writes a `run_resumed` event (who, which steps), and a new `run_finished
 
 ```sh
 uv run myorch project list                                 # all projects and templates, whether synced, repository and base branch
+uv run myorch project create <owner/repo> [--name NAME] [--template TEMPLATE] [--sync] [--onboard]
+                                                           # create a new project pack with guided setup
 uv run myorch project show <name>                          # the full configuration after merging templates (JSON)
 uv run myorch project sync <name>                          # writes the project pack snapshot into the volume (required after changing a project pack)
 uv run myorch project github-profile <name> [--read-only]  # generates this project's OpenShell GitHub provider profile
 ```
 
+- `create` sets up a new project pack with a basic `project.yaml`, directory structure, and README. Use `--template` to extend an existing template (e.g., `swift-apple`, `core-ng`). Use `--sync` to sync immediately after creation, or `--onboard` to also run the onboard flow (which analyzes the repository and proposes improvements to the pack).
 - `sync` prints `project <name>: N files synced (sha256:...)`. Each sync is a new version. New runs use the latest version, and the mandate records which one.
 - `github-profile` by default allows push and API reads for this repository, and read-only clones of submodules. `--read-only` removes push, PRs and comments; that is enough for onboard and for reading PRs.
 

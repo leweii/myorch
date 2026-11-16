@@ -42,6 +42,50 @@ myorch-knowledge/
     README.md               notes for people (status, steps to enable)
 ```
 
+## Creating a new project
+
+Use `myorch project create` to quickly set up a new project pack:
+
+```bash
+# Basic usage
+uv run myorch project create owner/repo-name
+
+# With options
+uv run myorch project create owner/repo-name \
+  --name my-project \
+  --template swift-apple \
+  --base main \
+  --sync
+```
+
+The command will:
+1. Create the project directory structure in `../myorch-knowledge/<name>/`
+2. Generate a `project.yaml` with sensible defaults (git config is used for identity)
+3. Create a README with setup instructions
+4. Optionally sync the project (`--sync`)
+5. Optionally run onboard (`--onboard`, implies `--sync`)
+
+After creation:
+1. Review and edit `project.yaml` as needed
+2. Generate and configure the GitHub provider:
+   ```bash
+   uv run myorch project github-profile <name> > /tmp/github-<name>.yaml
+   openshell provider profile import -f /tmp/github-<name>.yaml
+   # Create the provider with your GitHub token (see the project's README.md)
+   ```
+3. Sync the project: `uv run myorch project sync <name>`
+4. Run onboard to analyze the repository: `uv run myorch run flows/onboard.yaml --project <name>`
+
+Available options:
+- `--name`: Project name (default: derived from repo name)
+- `--template`: Template to extend (e.g., `swift-apple`, `core-ng`)
+- `--base`: Base branch (default: `main`)
+- `--account`: GitHub account (default: from git config)
+- `--git-name`, `--git-email`: Git identity (default: from git config)
+- `--image`: Development image (default: from template or `myorch-dev-<name>`)
+- `--sync`: Sync the project after creation
+- `--onboard`: Run onboard flow after sync
+
 ## project.yaml fields
 
 The final authority for the fields is the `Project` model in `src/myorch/project.py`.

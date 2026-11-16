@@ -338,7 +338,13 @@ def _project_cmd(store, root: Path, args: argparse.Namespace) -> int:
     from myorch import project as projects
 
     try:
-        if args.project_cmd == "sync":
+        if args.project_cmd == "create":
+            projects.create_project(
+                root, args.repo, args.name, args.template, args.base,
+                args.account, args.git_name, args.git_email, args.image,
+                args.sync, args.onboard
+            )
+        elif args.project_cmd == "sync":
             n, version = projects.snapshot(store, root, args.name)
             print(f"project {args.name}: {n} files synced ({version})")
         elif args.project_cmd == "github-profile":
@@ -786,6 +792,19 @@ def main() -> None:
     pj = sub.add_parser("project", help="project packs (myorch-knowledge/<name>/)")
     pj_sub = pj.add_subparsers(dest="project_cmd", required=True)
     pj_sub.add_parser("list", help="projects, templates, and whether they are synced")
+
+    cr = pj_sub.add_parser("create", help="create a new project pack")
+    cr.add_argument("repo", help="repository in owner/name format (e.g., leweii/myorch)")
+    cr.add_argument("--name", help="project name (default: derived from repo name)")
+    cr.add_argument("--template", help="template to extend (e.g., swift-apple, core-ng)")
+    cr.add_argument("--base", default="main", help="base branch (default: main)")
+    cr.add_argument("--account", help="GitHub account (default: current git user)")
+    cr.add_argument("--git-name", help="git commit name (default: from git config)")
+    cr.add_argument("--git-email", help="git commit email (default: from git config)")
+    cr.add_argument("--image", help="development image (default: from template or myorch-dev-<name>)")
+    cr.add_argument("--sync", action="store_true", help="sync the project after creation")
+    cr.add_argument("--onboard", action="store_true", help="run onboard flow after sync (implies --sync)")
+
     for name, hlp in (("sync", "snapshot the pack into the volume"), ("show", "print the resolved config"),
                       ("github-profile", "print an OpenShell provider profile for the project's GitHub access")):
         sp = pj_sub.add_parser(name, help=hlp)

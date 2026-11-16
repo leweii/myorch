@@ -151,7 +151,7 @@
 <li class="ch"><a class="ch-link" href="#ch-04-setup">4. Setup</a><ul class="sub"><li><a href="#04-setup--41-required-software">4.1 Required software</a></li><li><a href="#04-setup--42-one-time-installation">4.2 One-time installation</a></li><li><a href="#04-setup--43-starting-the-day">4.3 Starting the day</a></li><li><a href="#04-setup--44-optional-configuration">4.4 Optional configuration</a></li><li><a href="#04-setup--45-development-environment">4.5 Development environment</a></li><li><a href="#04-setup--46-running-with-docker-compose">4.6 Running with docker compose</a></li></ul></li>
 <li class="ch"><a class="ch-link" href="#ch-05-cli">5. CLI reference</a><ul class="sub"><li><a href="#05-cli--global-arguments">Global arguments</a></li><li><a href="#05-cli--where-to-run">Where to run</a></li><li><a href="#05-cli--by-purpose">By purpose</a></li><li><a href="#05-cli--install-start">Install, start</a></li><li><a href="#05-cli--start-runs">Start runs</a></li><li><a href="#05-cli--view-runs">View runs</a></li><li><a href="#05-cli--intervene-in-runs">Intervene in runs</a></li><li><a href="#05-cli--project-packs">Project packs</a></li><li><a href="#05-cli--knowledge-sources">Knowledge sources</a></li><li><a href="#05-cli--reviewer-evals">Reviewer evals</a></li><li><a href="#05-cli--other-common-commands">Other common commands</a></li></ul></li>
 <li class="ch"><a class="ch-link" href="#ch-06-flows">6. Flows</a><ul class="sub"><li><a href="#06-flows--the-flows">The flows</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-07-projects">7. Project packs</a><ul class="sub"><li><a href="#07-projects--current-projects">Current projects</a></li><li><a href="#07-projects--directory-layout">Directory layout</a></li><li><a href="#07-projects--projectyaml-fields">project.yaml fields</a></li><li><a href="#07-projects--project-settings-for-the-shared-flows-flows">Project settings for the shared flows (flows:)</a></li><li><a href="#07-projects--prompt-slots-prompts">Prompt slots (prompts/)</a></li><li><a href="#07-projects--template-inheritance-rules">Template inheritance rules</a></li><li><a href="#07-projects--checkssh-convention">checks.sh convention</a></li><li><a href="#07-projects--e2e-convention-optional">e2e/ convention (optional)</a></li><li><a href="#07-projects--risk-rulesyaml">risk-rules.yaml</a></li><li><a href="#07-projects--knowledge-sources">Knowledge sources</a></li><li><a href="#07-projects--onboarding-a-new-project">Onboarding a new project</a></li><li><a href="#07-projects--changing-a-project-pack">Changing a project pack</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-07-projects">7. Project packs</a><ul class="sub"><li><a href="#07-projects--current-projects">Current projects</a></li><li><a href="#07-projects--directory-layout">Directory layout</a></li><li><a href="#07-projects--creating-a-new-project">Creating a new project</a></li><li><a href="#07-projects--projectyaml-fields">project.yaml fields</a></li><li><a href="#07-projects--project-settings-for-the-shared-flows-flows">Project settings for the shared flows (flows:)</a></li><li><a href="#07-projects--prompt-slots-prompts">Prompt slots (prompts/)</a></li><li><a href="#07-projects--template-inheritance-rules">Template inheritance rules</a></li><li><a href="#07-projects--checkssh-convention">checks.sh convention</a></li><li><a href="#07-projects--e2e-convention-optional">e2e/ convention (optional)</a></li><li><a href="#07-projects--risk-rulesyaml">risk-rules.yaml</a></li><li><a href="#07-projects--knowledge-sources">Knowledge sources</a></li><li><a href="#07-projects--onboarding-a-new-project">Onboarding a new project</a></li><li><a href="#07-projects--changing-a-project-pack">Changing a project pack</a></li></ul></li>
 <li class="ch"><a class="ch-link" href="#ch-08-flow-syntax">8. Writing flows: YAML syntax</a><ul class="sub"><li><a href="#08-flow-syntax--how-a-flow-file-becomes-a-run">How a flow file becomes a run</a></li><li><a href="#08-flow-syntax--top-level-structure">Top-level structure</a></li><li><a href="#08-flow-syntax--inputs">Inputs</a></li><li><a href="#08-flow-syntax--steps">Steps</a></li><li><a href="#08-flow-syntax--approvals">Approvals</a></li><li><a href="#08-flow-syntax--host-actions">Host actions</a></li><li><a href="#08-flow-syntax--loops">Loops</a></li><li><a href="#08-flow-syntax--fragments-use">Fragments (use:)</a></li><li><a href="#08-flow-syntax--per-project-trimming-if">Per-project trimming: if:</a></li><li><a href="#08-flow-syntax--rules-in-prompts-rule">Rules in prompts ([[rule:]])</a></li><li><a href="#08-flow-syntax--presets">presets</a></li><li><a href="#08-flow-syntax--expressions">Expressions</a></li><li><a href="#08-flow-syntax--template-variables">Template variables</a></li><li><a href="#08-flow-syntax--how-the-prompt-is-assembled">How the prompt is assembled</a></li><li><a href="#08-flow-syntax--environment-and-mounts-in-the-sandbox">Environment and mounts in the sandbox</a></li><li><a href="#08-flow-syntax--profile">Profile</a></li><li><a href="#08-flow-syntax--manifest">Manifest</a></li><li><a href="#08-flow-syntax--agent-questions">Agent questions</a></li></ul></li>
 <li class="ch"><a class="ch-link" href="#ch-09-principles">9. Design principles</a><ul class="sub"><li><a href="#09-principles--summary">Summary</a></li><li><a href="#09-principles--1-two-kinds-of-credentials-agents-reach-neither">1. Two kinds of credentials, agents reach neither</a></li><li><a href="#09-principles--2-keep-credentials-and-code-execution-apart">2. Keep credentials and code execution apart</a></li><li><a href="#09-principles--3-one-sandbox-per-step">3. One sandbox per step</a></li><li><a href="#09-principles--4-the-volume-is-the-source-of-truth">4. The volume is the source of truth</a></li><li><a href="#09-principles--5-keep-scheduling-and-the-engine-apart">5. Keep scheduling and the engine apart</a></li><li><a href="#09-principles--6-structure-before-model-judgment">6. Structure before model judgment</a></li><li><a href="#09-principles--7-external-text-is-only-data">7. External text is only data</a></li><li><a href="#09-principles--8-fixed-authorization-approval-bound-to-a-commit">8. Fixed authorization, approval bound to a commit</a></li><li><a href="#09-principles--9-changes-stay-on-this-machine-until-approved">9. Changes stay on this machine until approved</a></li><li><a href="#09-principles--10-people-see-one-and-the-same-run">10. People see one and the same run</a></li><li><a href="#09-principles--11-the-attention-principle">11. The attention principle</a></li><li><a href="#09-principles--12-external-actions-are-idempotent">12. External actions are idempotent</a></li><li><a href="#09-principles--13-on-the-host-only-registered-actions">13. On the host, only registered actions</a></li><li><a href="#09-principles--14-flows-do-not-depend-on-projects">14. Flows do not depend on projects</a></li><li><a href="#09-principles--15-honest-reporting">15. Honest reporting</a></li><li><a href="#09-principles--recording-rejected-designs">Recording rejected designs</a></li></ul></li>
 <li class="ch"><a class="ch-link" href="#ch-10-conventions">10. Conventions</a><ul class="sub"><li><a href="#10-conventions--101-daily-use">10.1 Daily use</a></li><li><a href="#10-conventions--102-credentials-and-security">10.2 Credentials and security</a></li><li><a href="#10-conventions--103-changing-code-and-flows">10.3 Changing code and flows</a></li><li><a href="#10-conventions--104-maintaining-the-docs">10.4 Maintaining the docs</a></li></ul></li>
@@ -3895,11 +3895,14 @@ uv run myorch reject  &lt;run_id&gt; &lt;step&gt; [--as &lt;name&gt;]
 <hr />
 <h2 id="05-cli--project-packs">Project packs</h2>
 <pre><code class="language-sh">uv run myorch project list                                 # all projects and templates, whether synced, repository and base branch
+uv run myorch project create &lt;owner/repo&gt; [--name NAME] [--template TEMPLATE] [--sync] [--onboard]
+                                                           # create a new project pack with guided setup
 uv run myorch project show &lt;name&gt;                          # the full configuration after merging templates (JSON)
 uv run myorch project sync &lt;name&gt;                          # writes the project pack snapshot into the volume (required after changing a project pack)
 uv run myorch project github-profile &lt;name&gt; [--read-only]  # generates this project's OpenShell GitHub provider profile
 </code></pre>
 <ul>
+<li><code>create</code> sets up a new project pack with a basic <code>project.yaml</code>, directory structure, and README. Use <code>--template</code> to extend an existing template (e.g., <code>swift-apple</code>, <code>core-ng</code>). Use <code>--sync</code> to sync immediately after creation, or <code>--onboard</code> to also run the onboard flow (which analyzes the repository and proposes improvements to the pack).</li>
 <li><code>sync</code> prints <code>project &lt;name&gt;: N files synced (sha256:...)</code>. Each sync is a new version. New runs use the latest version, and the mandate records which one.</li>
 <li><code>github-profile</code> by default allows push and API reads for this repository, and read-only clones of submodules. <code>--read-only</code> removes push, PRs and comments; that is enough for onboard and for reading PRs.</li>
 </ul>
@@ -4175,6 +4178,42 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
     sources/                optional: knowledge sources registered by this project (not in the snapshot)
     README.md               notes for people (status, steps to enable)
 </code></pre>
+<h2 id="07-projects--creating-a-new-project">Creating a new project</h2>
+<p>Use <code>myorch project create</code> to quickly set up a new project pack:</p>
+<pre><code class="language-bash"># Basic usage
+uv run myorch project create owner/repo-name
+
+# With options
+uv run myorch project create owner/repo-name \
+  --name my-project \
+  --template swift-apple \
+  --base main \
+  --sync
+</code></pre>
+<p>The command will:
+1. Create the project directory structure in <code>../myorch-knowledge/&lt;name&gt;/</code>
+2. Generate a <code>project.yaml</code> with sensible defaults (git config is used for identity)
+3. Create a README with setup instructions
+4. Optionally sync the project (<code>--sync</code>)
+5. Optionally run onboard (<code>--onboard</code>, implies <code>--sync</code>)</p>
+<p>After creation:
+1. Review and edit <code>project.yaml</code> as needed
+2. Generate and configure the GitHub provider:
+   <code>bash
+   uv run myorch project github-profile &lt;name&gt; &gt; /tmp/github-&lt;name&gt;.yaml
+   openshell provider profile import -f /tmp/github-&lt;name&gt;.yaml
+   # Create the provider with your GitHub token (see the project's README.md)</code>
+3. Sync the project: <code>uv run myorch project sync &lt;name&gt;</code>
+4. Run onboard to analyze the repository: <code>uv run myorch run flows/onboard.yaml --project &lt;name&gt;</code></p>
+<p>Available options:
+- <code>--name</code>: Project name (default: derived from repo name)
+- <code>--template</code>: Template to extend (e.g., <code>swift-apple</code>, <code>core-ng</code>)
+- <code>--base</code>: Base branch (default: <code>main</code>)
+- <code>--account</code>: GitHub account (default: from git config)
+- <code>--git-name</code>, <code>--git-email</code>: Git identity (default: from git config)
+- <code>--image</code>: Development image (default: from template or <code>myorch-dev-&lt;name&gt;</code>)
+- <code>--sync</code>: Sync the project after creation
+- <code>--onboard</code>: Run onboard flow after sync</p>
 <h2 id="07-projects--projectyaml-fields">project.yaml fields</h2>
 <p>The final authority for the fields is the <code>Project</code> model in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/project.py"><code>src/myorch/project.py</code></a>.</p>
 <table>

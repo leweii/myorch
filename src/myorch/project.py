@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import tempfile
 from pathlib import Path
@@ -388,3 +389,161 @@ endpoints:
 {chr(10).join(api_rules)}
 binaries: [/usr/bin/gh, /usr/local/bin/gh, /usr/bin/git, /usr/local/bin/git]
 """
+
+
+def create_project(
+    root: Path, repo: str, name: str | None = None, template: str | None = None,
+    base: str = "main", account: str | None = None, git_name: str | None = None,
+    git_email: str | None = None, image: str | None = None,
+    sync: bool = False, onboard: bool = False
+) -> None:
+    """Create a new project pack with interactive prompts for missing information."""
+    import re
+    import subprocess
+    import sys
+
+    # Parse repo (owner/name format)
+    if not re.match(r"^[a-zA-Z0-9_-]+/[a-zA-Z0-9._-]+$", repo):
+        raise ValueError(f"repo must be in owner/name format, got {repo!r}")
+
+    # Derive default name from repo
+    if not name:
+        name = repo.split("/")[1].lower().replace(".", "-").replace("_", "-")
+        print(f"Using project name: {name}")
+
+    # Check if project already exists
+    project_path = project_dir(root, name)
+    if project_path.exists():
+        raise ValueError(f"project {name!r} already exists at {project_path}")
+
+    # Validate template if provided
+    if template:
+        tmpl_dir = template_dir(root, template)
+        if not tmpl_dir.is_dir():
+            available = list_templates(root)
+            raise ValueError(f"template {template!r} not found. Available: {', '.join(available) or 'none'}")
+
+    # Get git config defaults
+    def git_config(key: str, default: str = "") -> str:
+        try:
+            return subprocess.check_output(
+                ["git", "config", "--get", key], text=True, stderr=subprocess.DEVNULL
+            ).strip() or default
+        except subprocess.CalledProcessError:
+            return default
+
+    if not account:
+        account = git_config("user.name") or git_config("github.user") or "myorch-bot"
+    if not git_name:
+        git_name = git_config("user.name") or account
+    if not git_email:
+        git_email = git_config("user.email") or f"{account}@users.noreply.github.com"
+
+    # Determine image
+    if not image:
+        if template:
+            # Load template's image
+            tmpl_project = _read_yaml(template_dir(root, template) / "project.yaml")
+            image = tmpl_project.get("image", f"myorch-dev-{name}")
+        else:
+            image = f"myorch-dev-{name}"
+
+    # Create project directory structure
+    print(f"Creating project pack at {project_path}")
+    project_path.mkdir(parents=True, exist_ok=True)
+    (project_path / "guide").mkdir(exist_ok=True)
+    (project_path / "prompts").mkdir(exist_ok=True)
+
+    # Create project.yaml
+    config = {
+        "repo": repo,
+        "base": base,
+        "identity": {
+            "account": account,
+            "git_name": git_name,
+            "git_email": git_email,
+        },
+        "providers": {
+            "github": f"github-{name}",
+            "artifacts": None,
+        },
+        "image": image,
+        "approvers": [git_config("github.user") or account],
+    }
+
+    if template:
+        config["extends"] = template
+
+    project_yaml_path = project_path / "project.yaml"
+    project_yaml_path.write_text(yaml.safe_dump(config, sort_keys=False, allow_unicode=True))
+    print(f"Created {project_yaml_path}")
+
+    # Create basic README
+    readme_path = project_path / "README.md"
+    readme_content = f"""# {name}
+
+Project pack for {repo}.
+
+## Setup
+
+1. Generate and import the GitHub provider profile:
+   ```bash
+   uv run myorch project github-profile {name} > /tmp/{name}-github.yaml
+   openshell provider profile import -f /tmp/{name}-github.yaml
+   ```
+
+2. Create the provider with your GitHub token:
+   ```bash
+   read -s GITHUB_TOKEN && export GITHUB_TOKEN
+   openshell provider create --name github-{name} --type github-{name} --credential GITHUB_TOKEN
+   unset GITHUB_TOKEN
+   ```
+
+3. Sync the project:
+   ```bash
+   uv run myorch project sync {name}
+   ```
+
+4. Optionally run onboard to analyze the repository:
+   ```bash
+   uv run myorch run flows/onboard.yaml --project {name}
+   ```
+"""
+    readme_path.write_text(readme_content)
+    print(f"Created {readme_path}")
+
+    # Print next steps
+    print(f"\n✓ Project {name} created successfully!")
+    print(f"\nNext steps:")
+    print(f"  1. Review and edit {project_yaml_path}")
+
+    if not template:
+        print(f"  2. Add checks.sh for the project's CI checks")
+        print(f"  3. Add risk-rules.yaml for approval rules")
+        print(f"  4. Add security.md for security review focus")
+
+    provider_name = f"github-{name}"
+    print(f"\n  Configure GitHub provider:")
+    print(f"    uv run myorch project github-profile {name} > /tmp/{provider_name}.yaml")
+    print(f"    openshell provider profile import -f /tmp/{provider_name}.yaml")
+    print(f"    # Then create the provider with your GitHub token (see {readme_path})")
+
+    if sync or onboard:
+        # Import and sync
+        from myorch.storage import ArtifactStore
+        store = ArtifactStore.connect(os.environ.get("MYORCH_VOLUME", "myorch-artifacts"))
+        print(f"\n  Syncing project...")
+        n, version = snapshot(store, root, name)
+        print(f"  ✓ {n} files synced ({version})")
+
+        if onboard:
+            print(f"\n  Starting onboard flow...")
+            print(f"    uv run myorch run flows/onboard.yaml --project {name}")
+            # Note: We don't actually run it here because it needs temporal worker
+            print(f"  (Run the above command manually once the provider is configured)")
+    else:
+        print(f"\n  Sync and onboard:")
+        print(f"    uv run myorch project sync {name}")
+        print(f"    uv run myorch run flows/onboard.yaml --project {name}")
+
+    print(f"\nProject pack created at: {project_path}")
