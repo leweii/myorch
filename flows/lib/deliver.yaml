@@ -12,6 +12,8 @@
 # has an open pull request (a run continued with from_run), that one is reused. Either way the PR's
 # link is output as pr_url: the console, Slack and the run list show it, and it makes a pr_opened
 # event. Without open_pr it calls no platform API and people open the PR themselves.
+# With the project's media, it first pushes what the run added there; if that base moved since the
+# clone, it puts the run's media commit on top of the current base and pushes once more.
 # Interface: docs/notes/2026-11-02-delivery-interface.md
 #
 # Docs: https://leweii.github.io/myorch/workflows/#fragments--deliver
@@ -80,9 +82,20 @@ item:
     PY
       if [ -s /tmp/media-files.txt ]; then
         mgit commit --quiet -m "$MYORCH_BRANCH: $(wc -l < /tmp/media-files.txt | tr -d ' ') file(s) from myorch run $MYORCH_RUN_ID"
-        mgit push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE" \
-          || { mgit reset --quiet --soft HEAD~1
-               echo "Could not push to $MYORCH_PROJECT_MEDIA_REPO $MYORCH_PROJECT_MEDIA_BASE (it moved, or the token cannot push there). Nothing was pushed; continue the run with from_run." >&2; exit 4; }
+        # The run's files go back to the index, so a retry or a from_run run commits them again.
+        media_fail() { mgit reset --quiet --soft HEAD~1
+                       echo "Could not push to $MYORCH_PROJECT_MEDIA_REPO $MYORCH_PROJECT_MEDIA_BASE ($1). Nothing was pushed; continue the run with from_run." >&2; exit 4; }
+        if ! mgit push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE"; then
+          # The clone is from the start of the run, and other runs push to the same base. If the base moved, put
+          # this run's one commit on top of it and push once more (no --force). --onto: the clone is shallow.
+          mgit fetch --quiet origin "+refs/heads/$MYORCH_PROJECT_MEDIA_BASE:refs/remotes/origin/$MYORCH_PROJECT_MEDIA_BASE" \
+            || media_fail "the push was refused, and fetching it failed"
+          ! mgit merge-base --is-ancestor "origin/$MYORCH_PROJECT_MEDIA_BASE" HEAD || media_fail "the token cannot push there"
+          mgit rebase --quiet --onto "origin/$MYORCH_PROJECT_MEDIA_BASE" HEAD~1 \
+            || { mgit rebase --abort || true; media_fail "it moved and changed a file this run also changed"; }
+          mgit push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE" \
+            || media_fail "it moved again, or the token cannot push there"
+        fi
       fi
     fi
     git -c "http.extraHeader=Authorization: Basic $basic" push --quiet -u origin "HEAD:refs/heads/$MYORCH_BRANCH"

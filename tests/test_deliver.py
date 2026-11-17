@@ -313,6 +313,8 @@ def media_repo(tmp_path: Path, ws: Path) -> Path:
     git(tmp_path, "init", "-q", "--bare", "-b", "master", str(origin))
     media = ws / "media"
     git(tmp_path, "clone", "-q", str(origin), str(media))
+    git(media, "config", "user.name", "myorch")  # checkout-branch sets the identity in the clone
+    git(media, "config", "user.email", "myorch@example.com")
     (media / "projects").mkdir()
     (media / "projects" / "old.png").write_bytes(b"old")
     (media / "2020-post").mkdir()
@@ -366,10 +368,99 @@ def test_media_deletions_and_files_outside_paths_are_refused(tmp_path: Path, cha
     assert subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/MD-5-run"], cwd=origin).returncode != 0
 
 
-def test_media_in_a_sparse_blobless_clone_of_a_private_repository(tmp_path: Path):
+def upstream(tmp_path: Path, morigin: Path, files: dict[str, bytes]) -> str:
+    """Another run pushes `files` to the media base after this run cloned it (development-897f1a4b)."""
+    other = tmp_path / "other-media"
+    if not other.exists():
+        git(tmp_path, "clone", "-q", str(morigin), str(other))
+    for name, data in files.items():
+        (other / name).parent.mkdir(parents=True, exist_ok=True)
+        (other / name).write_bytes(data)
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "another run")
+    git(other, "push", "-q", "origin", "HEAD:master")
+    return git(morigin, "rev-parse", "master")
+
+
+def refuse_pushes(morigin: Path) -> None:
+    """The remote refuses every push, as GitHub does when the token cannot push (403)."""
+    hook = morigin / "hooks" / "pre-receive"
+    hook.write_text("#!/bin/sh\necho 'remote: Permission denied (403)' >&2\nexit 1\n")
+    hook.chmod(0o755)
+
+
+def no_branch(origin: Path) -> bool:
+    return subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/MD-5-run"], cwd=origin).returncode != 0
+
+
+def test_media_push_rebases_onto_a_base_that_moved(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    moved = upstream(tmp_path, morigin, {"projects/other/x.png": b"x", "2020-post/a.png": b"changed"})
+    (ws / "media" / "projects" / "sound-pin").mkdir()
+    (ws / "media" / "projects" / "sound-pin" / "menu.png").write_bytes(b"png")
+    res, manifest = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 0, res.stderr
+    assert git(morigin, "rev-parse", "master~1") == moved  # on top of the other run's commit: no force, no merge
+    assert git(morigin, "show", "master:projects/sound-pin/menu.png") == "png"
+    assert git(morigin, "show", "master:projects/other/x.png") == "x"
+    assert git(morigin, "show", "master:2020-post/a.png") == "changed"
+    assert git(origin, "rev-parse", "refs/heads/MD-5-run") == git(repo, "rev-parse", "HEAD")
+    assert json.loads(manifest.read_text())["outputs"]["delivery"]["media"]["files"] == ["projects/sound-pin/menu.png"]
+
+
+def test_media_conflict_with_the_moved_base_pushes_nothing(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    cloned = git(ws / "media", "rev-parse", "HEAD")
+    moved = upstream(tmp_path, morigin, {"projects/old.png": b"theirs"})
+    (ws / "media" / "projects" / "old.png").write_bytes(b"ours")
+    res, _ = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 4
+    assert "changed a file this run also changed" in res.stderr and "Nothing was pushed" in res.stderr
+    assert git(morigin, "rev-parse", "master") == moved
+    assert no_branch(origin)
+    gitdir = ws / "media" / ".git"
+    assert not (gitdir / "rebase-merge").exists() and not (gitdir / "rebase-apply").exists()
+    assert git(ws / "media", "rev-parse", "HEAD") == cloned  # as before: the run's change is staged, not committed
+    assert git(ws / "media", "diff", "--cached", "--name-only") == "projects/old.png"
+    assert (ws / "media" / "projects" / "old.png").read_bytes() == b"ours"
+
+
+def test_media_push_refused_without_a_moved_base_does_not_rebase(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    before = git(morigin, "rev-parse", "master")
+    refuse_pushes(morigin)
+    (ws / "media" / "projects" / "new.png").write_bytes(b"png")
+    res, _ = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 4
+    assert "(the token cannot push there). Nothing was pushed" in res.stderr
+    assert git(morigin, "rev-parse", "master") == before
+    assert no_branch(origin)
+
+
+def test_media_push_refused_again_after_the_rebase(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    moved = upstream(tmp_path, morigin, {"projects/other/x.png": b"x"})
+    refuse_pushes(morigin)
+    (ws / "media" / "projects" / "new.png").write_bytes(b"png")
+    res, _ = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 4
+    assert "it moved again" in res.stderr and "Nothing was pushed" in res.stderr
+    assert git(morigin, "rev-parse", "master") == moved
+    assert no_branch(origin)
+    assert git(ws / "media", "rev-parse", "HEAD") == moved  # the retry commits again on top of the fetched base
+    assert git(ws / "media", "diff", "--cached", "--name-only") == "projects/new.png"
+
+
+@pytest.mark.parametrize("moved", [False, True])
+def test_media_in_a_sparse_blobless_clone_of_a_private_repository(tmp_path: Path, moved: bool):
     """checkout-branch clones the media repository with --filter=blob:none and only its paths checked out, so the
     root .gitignore is a missing blob that `git add` fetches on demand. The repository is private: like GitHub,
-    the remote here answers only git calls that carry the token (development-8f05459f failed with exit 128)."""
+    the remote here answers only git calls that carry the token (development-8f05459f failed with exit 128).
+    moved: another run pushed after the clone, so the fetch and the rebase need the token too (development-897f1a4b)."""
     ws, repo, origin = workspace(tmp_path)
     morigin = tmp_path / "media.git"
     seed = tmp_path / "seed"
@@ -393,13 +484,26 @@ def test_media_in_a_sparse_blobless_clone_of_a_private_repository(tmp_path: Path
     git(tmp_path, *auth, "clone", "-q", "--depth", "1", "--filter=blob:none", "--no-checkout", "--branch", "master",
         f"ext::{serve} %s {morigin}", str(media))
     git(media, "config", "protocol.ext.allow", "always")
+    git(media, "config", "user.name", "myorch")
+    git(media, "config", "user.email", "myorch@example.com")
     git(media, "sparse-checkout", "set", "--no-cone", "/projects/")
     git(media, *auth, "checkout", "-q")
     assert not (media / ".gitignore").exists()
+    if moved:
+        (seed / ".gitignore").write_text("/.idea\n.DS_Store\n*.tmp\n")
+        (seed / "projects" / "other.png").write_bytes(b"other")
+        git(seed, "add", "-A")
+        git(seed, "commit", "-qm", "another run")
+        git(seed, "push", "-q", str(morigin), "HEAD:master")
     (media / "projects" / "sound-pin").mkdir()
     (media / "projects" / "sound-pin" / "menu.png").write_bytes(b"png")
     res, manifest = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
     assert res.returncode == 0, res.stderr
     assert git(morigin, "show", "master:projects/sound-pin/menu.png") == "png"
-    assert git(morigin, "show", "master:.gitignore") == "/.idea\n.DS_Store"  # the commit kept the files outside the paths
+    if moved:
+        assert git(morigin, "rev-parse", "master~1") == git(seed, "rev-parse", "HEAD")
+        assert git(morigin, "show", "master:projects/other.png") == "other"
+        assert git(morigin, "show", "master:.gitignore") == "/.idea\n.DS_Store\n*.tmp"
+    else:
+        assert git(morigin, "show", "master:.gitignore") == "/.idea\n.DS_Store"  # the commit kept the files outside the paths
     assert json.loads(manifest.read_text())["outputs"]["delivery"]["media"]["files"] == ["projects/sound-pin/menu.png"]
