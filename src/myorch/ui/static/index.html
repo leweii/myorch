@@ -36,7 +36,8 @@
 
 <aside class="side" id="side">
   <div class="side-head"><span id="sideTitle">Runs</span><span class="spacer"></span>
-    <button type="button" id="newRunBtn" class="iconbtn" title="New run">+</button></div>
+    <button type="button" id="newRunBtn" class="newrun-btn" title="New run (Alt+N)">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg><span>New run</span></button></div>
   <div id="view-runs" class="view">
     <div class="side-search">
       <input id="runSearch" type="search" placeholder="Search labels or run id, e.g. MD-18700" title="Search all runs by label (a Jira ticket etc.; case-insensitive; the number alone works too) or by part of a run id">
@@ -139,6 +140,8 @@
 </footer>
 
 <dialog id="viewerDlg" class="viewerdlg"></dialog>
+<!-- the keyboard shortcuts (shortcuts.js), opened with ? -->
+<dialog id="keysDlg" class="pdlg keysdlg" aria-label="Keyboard shortcuts"></dialog>
 
 <!-- a new project pack (projects.js): the form, then what is still to do by hand -->
 <dialog id="projectDlg" class="pdlg">
@@ -169,5 +172,6 @@
 <script src="/static/knowledge.js"></script>
 <script src="/static/picker.js"></script>
 <script src="/static/projects.js"></script>
+<script src="/static/shortcuts.js"></script>
 </body>
 </html>

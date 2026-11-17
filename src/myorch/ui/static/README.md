@@ -6,3 +6,4 @@ Where the [myorch docs](https://leweii.github.io/myorch/) describe what is in th
 | | Described in |
 |---|---|
 | [`(this directory)`](.) | [3. Architecture › Code map](https://leweii.github.io/myorch/#03-architecture--code-map) |
+| [`shortcuts.js`](shortcuts.js) | [5. CLI reference › ui](https://leweii.github.io/myorch/#05-cli--ui) |

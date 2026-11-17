@@ -373,6 +373,13 @@ function tabInfo(t) {
   }
 }
 
+// A shortcut as the keyboard prints it: "Alt+Shift+T" is ⌥⇧T on a Mac. shortcuts.js binds them.
+const IS_MAC = /mac|iphone|ipad/i.test(navigator.userAgentData?.platform || navigator.platform || "");
+function keyParts(spec) {
+  const mac = { Alt: "⌥", Shift: "⇧", Ctrl: "⌃", Cmd: "⌘" };
+  return spec.split("+").map((k) => (IS_MAC && mac[k]) || k);
+}
+const keyLabel = (spec) => keyParts(spec).join(IS_MAC ? "" : "+");
 const copyText = (text) => navigator.clipboard?.writeText(text).catch(() => {});
 const FINISHED = new Set(["succeeded", "failed", "rejected", "cancelled"]);
 const runStatusOf = (t) => (t.run ? DETAIL.get(t.run)?.status || runOf(t.run)?.status || "" : "");
@@ -385,28 +392,28 @@ function tabMenu(t, x, y) {
   const link = hashOf(t);
   const copy = copyText;
   showMenu(x, y, [
-    { label: "Close", run: () => closeTab(t.key) },
-    { label: "Close others", disabled: !others.length, run: () => closeTabs(others, t.key) },
+    { label: "Close", hint: keyLabel("Alt+W"), run: () => closeTab(t.key) },
+    { label: "Close others", hint: keyLabel("Alt+Shift+W"), disabled: !others.length, run: () => closeTabs(others, t.key) },
     { label: "Close to the right", disabled: !right.length, run: () => closeTabs(right, t.key) },
     { label: "Close to the left", disabled: !left.length, run: () => closeTabs(left, t.key) },
     { label: "Close tabs of finished runs", disabled: !finished.length, run: () => closeTabs(finished, t.key) },
     { label: "Close all", disabled: !list.some((o) => !o.pinned), run: () => closeTabs(list.filter((o) => !o.pinned).map((o) => o.key)) },
     "-",
     ...(t.preview ? [{ label: "Keep open", hint: "double click", run: () => { t.preview = false; renderTabbar(); saveTabs(); } }] : []),
-    { label: t.pinned ? "Unpin" : "Pin", run: () => togglePin(t.key) },
+    { label: t.pinned ? "Unpin" : "Pin", hint: keyLabel("Alt+P"), run: () => togglePin(t.key) },
     ...(link || t.run ? ["-"] : []),
     ...(link ? [{ label: "Copy link", run: () => copy(`${location.origin}${location.pathname}${link}`) }] : []),
     ...(t.run ? [{ label: "Copy run id", run: () => copy(t.run) }] : []),
     "-",
-    { label: "Reopen closed tab", disabled: !CLOSED.length, run: reopenClosed },
+    { label: "Reopen closed tab", hint: keyLabel("Alt+Shift+T"), disabled: !CLOSED.length, run: reopenClosed },
   ]);
 }
 
 // Right click on the empty part of the tab bar.
 function tabbarMenu(x, y) {
   showMenu(x, y, [
-    { label: "New run", run: () => openNewRun() },
-    { label: "Reopen closed tab", disabled: !CLOSED.length, run: reopenClosed },
+    { label: "New run", hint: keyLabel("Alt+N"), run: () => openNewRun() },
+    { label: "Reopen closed tab", hint: keyLabel("Alt+Shift+T"), disabled: !CLOSED.length, run: reopenClosed },
     "-",
     { label: "Close all", disabled: !TABS.list.some((o) => !o.pinned), run: () => closeTabs(TABS.list.filter((o) => !o.pinned).map((o) => o.key)) },
   ]);
