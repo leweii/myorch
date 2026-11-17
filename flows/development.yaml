@@ -188,10 +188,14 @@ steps:
           | git -C "$media" "${mauth[@]}" cat-file --batch > /dev/null
         git -C "$media" config user.name "$MYORCH_GIT_NAME"
         git -C "$media" config user.email "$MYORCH_GIT_EMAIL"
-        # Continuing: bring over what the previous run added but never pushed.
+        # Continuing: bring over what the previous run added but never pushed. Plain copies, no git there: the
+        # previous workspace is read-only, and git in it may need to fetch a missing blob into it (exit 128,
+        # development-8d410e89). Files that did not change copy over as no change; new ones show up in this clone.
         if [ -n "$MYORCH_INPUT_FROM_RUN" ] && [ -d "$prev/media/.git" ]; then
-          git -c safe.directory='*' "${mauth[@]}" -C "$prev/media" ls-files -z -m -o --exclude-standard \
-            | (cd "$prev/media" && xargs -0 -r cp --parents -t "$media")
+          for p in ${MYORCH_PROJECT_MEDIA_PATHS:-.}; do
+            [ -e "$prev/media/${p%/}" ] || continue
+            tar -C "$prev/media" --exclude=.git -cf - "${p%/}" | tar -C "$media" -xf -
+          done
         fi
         echo "- checkout-branch: media repository $MYORCH_PROJECT_MEDIA_REPO in $media (${MYORCH_PROJECT_MEDIA_PATHS:-all paths}); files added there are pushed by deliver" >> "$MYORCH_WORKSPACE/memory/MEMORY.md"
       fi
