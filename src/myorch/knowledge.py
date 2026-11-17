@@ -576,6 +576,16 @@ def _clean(kind: str, data: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def skill_names(name: str, files: list[str]) -> list[str]:
+    """The skills a snapshot of a skill source installs, by the rules of runner.SKILLS_SH: SKILL.md at
+    the root is one skill named after the source, else every <dir>/SKILL.md and skills/<dir>/SKILL.md."""
+    if "SKILL.md" in files:
+        return [name]
+    found = [f.split("/")[-2] for f in files if f.count("/") == 1 and f.endswith("/SKILL.md")]
+    found += [f.split("/")[1] for f in files if f.count("/") == 2 and f.startswith("skills/") and f.endswith("/SKILL.md")]
+    return list(dict.fromkeys(found))
+
+
 def check(kb_root: Path, name: str, project: str | None, data: dict[str, Any]) -> dict[str, Any]:
     """Validate a registration without saving: its problems, and for a folder what a snapshot would
     take (files, size, secret-scan findings). Nothing is copied."""
@@ -593,6 +603,10 @@ def check(kb_root: Path, name: str, project: str | None, data: dict[str, Any]) -
             out["problems"].append(f"The scan found {len(findings)} possible secrets; sync will fail. Remove them, or add \"file:line\" of false positives to allow_findings")
         elif not files:
             out["problems"].append("No files after filtering")
+        elif s.skill:
+            out["skills"] = skill_names(name, files)
+            if not out["skills"]:
+                out["problems"].append("No skills: put a SKILL.md at the root (one skill), or in <dir>/ or skills/<dir>/ (one skill each)")
     return out
 
 

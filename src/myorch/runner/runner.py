@@ -206,16 +206,21 @@ def step_knowledge(req: StepRequest, is_agent: bool) -> list[KnowledgeRef]:
 # then (snapshot, source name) pairs, then `--` and the command. A snapshot with SKILL.md at its root
 # is one skill named after the source; otherwise every <dir>/SKILL.md and skills/<dir>/SKILL.md below
 # it is a skill named after its directory (a repository of many skills). Copied, not linked: the
-# snapshot is read-only and the harness may want to write next to a skill.
-SKILLS_SH = r'''dest=$1; shift; mkdir -p "$dest"
+# snapshot is read-only and the harness may want to write next to a skill. Each turn installs afresh
+# (the directory persists with the session); when two skills share a name the first one wins and the
+# log says which was left out, instead of their files being merged into one directory.
+SKILLS_SH = r'''dest=$1; shift; mkdir -p "$dest"; seen=/
+put() {
+  case "$seen" in *"/$2/"*) echo "myorch: skill $2 from knowledge source $3 left out: a skill of that name is already installed" >&2; return ;; esac
+  seen="$seen$2/"; rm -rf "$dest/$2"; mkdir -p "$dest/$2" && cp -R "$1". "$dest/$2"/ && found=1
+}
 while [ "$1" != -- ]; do
   src=$1; name=$2; shift 2; found=0
   if [ -f "$src/SKILL.md" ]; then
-    mkdir -p "$dest/$name" && cp -R "$src"/. "$dest/$name"/ && found=1
+    put "$src/" "$name" "$name"
   else
     for d in "$src"/*/ "$src"/skills/*/; do
-      [ -f "${d}SKILL.md" ] || continue
-      n=$(basename "$d"); mkdir -p "$dest/$n" && cp -R "${d}." "$dest/$n"/ && found=1
+      [ -f "${d}SKILL.md" ] && put "$d" "$(basename "$d")" "$name"
     done
   fi
   [ "$found" = 1 ] || echo "myorch: knowledge source $name is marked skill but holds no SKILL.md" >&2

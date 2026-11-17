@@ -343,7 +343,7 @@ def test_skills_are_not_listed_as_knowledge_in_the_prompt():
     assert "Knowledge (read-only)" not in build_prompt(STEP, CTX, {}, False, [refs[1]])
 
 
-def test_a_skill_source_resolves_with_its_flag_and_mcp_cannot_be_one(tmp_path):
+def test_skill_is_a_registered_field_and_mcp_cannot_hold_skills(tmp_path):
     s = kb.Source(kind="dir", path=str(tmp_path), skill=True)
     assert "skill" in kb.registered_fields(s)
     assert any("skills" in p for p in kb.Source(kind="mcp", url="https://x", provider="p", token_env="T", tools=["a"], skill=True).problems())
@@ -371,3 +371,38 @@ def test_a_project_lists_its_skills_separately_from_its_knowledge(kbroot, tmp_pa
         "identity": {"account": "me", "git_name": "Me", "git_email": "me@x", "self_is_operator": True}}))
     with pytest.raises(kb.KnowledgeError, match="not registered with skill: true"):
         kb.resolve(store, kbroot, "mdm", None)
+
+
+def test_skills_with_the_same_name_are_not_merged_and_a_new_turn_installs_afresh(tmp_path):
+    import subprocess
+
+    from myorch.runner.runner import with_skills
+
+    kbd = tmp_path / "kb"
+    for rel, text in [("a/x/SKILL.md", "a"), ("a/x/only-a.md", "ref"), ("a/skills/x/SKILL.md", "a2"), ("b/x/SKILL.md", "b")]:
+        (kbd / rel).parent.mkdir(parents=True, exist_ok=True)
+        (kbd / rel).write_text(text)
+    dest = tmp_path / "dest"
+    (dest / "old").mkdir(parents=True)  # left from an earlier turn: replaced when reinstalled, else kept
+    refs = [KnowledgeRef(name="a", kind="dir", skill=True), KnowledgeRef(name="b", kind="dir", skill=True)]
+    argv = [x.replace("/sandbox/workspace/knowledge", str(kbd)) for x in with_skills(["true"], refs, str(dest))]
+    r = subprocess.run(argv, capture_output=True, text=True)
+    assert (dest / "x" / "SKILL.md").read_text() == "a" and (dest / "x" / "only-a.md").is_file()
+    assert r.stderr.count("left out") == 2 and "skill x from knowledge source b left out" in r.stderr
+    (kbd / "a" / "x" / "only-a.md").unlink()
+    subprocess.run(argv, capture_output=True, text=True)
+    assert not (dest / "x" / "only-a.md").exists()  # a removed file does not linger from the last turn
+
+
+def test_check_lists_the_skills_a_source_holds(tmp_path):
+    root = tmp_path / "kb"
+    root.mkdir()
+    src = tmp_path / "s"
+    for rel in ("x/SKILL.md", "skills/y/SKILL.md", "README.md", "deep/a/b/SKILL.md"):
+        (src / rel).parent.mkdir(parents=True, exist_ok=True)
+        (src / rel).write_text("#")
+    r = kb.check(root, "pack", None, {"kind": "dir", "path": str(src), "skill": True})
+    assert r["skills"] == ["x", "y"] and r["problems"] == []
+    (src / "x" / "SKILL.md").unlink(); (src / "skills" / "y" / "SKILL.md").unlink()
+    assert any("No skills" in p for p in kb.check(root, "pack", None, {"kind": "dir", "path": str(src), "skill": True})["problems"])
+    assert kb.skill_names("one", ["SKILL.md", "x/SKILL.md"]) == ["one"]

@@ -299,7 +299,6 @@ Who gets them:
 - By default they are mounted only in agent steps. An agent step with `knowledge: false` does not get them. A script step gets them only with `knowledge: true`. MCP knowledge sources are only given to agent steps.
 - When a run starts, the mandate records the snapshot version of each knowledge source. If a knowledge source changes later, this run still sees the same content.
 
-### MCP allows only registered tools
 ### Skills
 
 A `dir` or `git` knowledge source with `skill: true` holds agent skills instead of reference material. It is registered, scanned, snapshotted and chosen exactly like the other sources (a folder on the host, or a GitHub repository cloned with a provider; list it in the project's `skills`, change it per run with `--kb` or in the **New run** panel). The difference is what a step does with it: the snapshot is not listed in the prompt. Before the harness starts, the runner copies the skills into the directory where that harness looks for them.
@@ -318,6 +317,7 @@ skill: true
 - The console's **Resources** view lists skill sources in their own group, and a project's page shows its `skills`.
 - A snapshot without any `SKILL.md` writes a warning to the step's log. `knowledge: false` on a step also leaves out its skills. An MCP source cannot hold skills.
 
+### MCP allows only registered tools
 
 When an agent step starts, `/sandbox/bin/myorch-mcp` runs before claude:
 

@@ -243,7 +243,7 @@ function kbFormView(f) {
       el("span", { class: "file", text: "Written to myorch-knowledge as one git commit" })),
     el("div", { class: "kbform", id: "kbForm" },
       el("label", {}, "Name", nameIn), el("label", {}, "Scope", projSel), el("label", {}, "Type", kindSel),
-      ...KB_FIELDS[f.kind].map(field),
+      ...KB_FIELDS[f.kind].filter(([k]) => !(f.skill && k === "index")).map(field),
       f.kind === "mcp" ? el("label", { class: "check" }, ro, "This token is read-only (it cannot create, change or delete anything). Optional, for the record only") : null),
     el("div", { class: "evbar" },
       el("button", { class: "ghost", text: "Check", onclick: () => act("check") }),
@@ -252,14 +252,15 @@ function kbFormView(f) {
     result?.error ? el("div", { class: "warn", text: result.error }) : null,
     result && !result.error ? el("div", {},
       result.problems?.length ? el("div", { class: "warn", text: `Problems: ${result.problems.join("; ")}` }) : el("div", { class: "ok small", text: "No problems." }),
+      result.skills?.length ? el("div", { class: "small", text: `Skills: ${result.skills.join(", ")}` }) : null,
       result.files !== undefined ? el("div", { class: "small", text: `A sync will take in ${result.files} files, ${(result.bytes / 1024).toFixed(1)} KB in total.` }) : null,
       result.findings?.length ? el("pre", { class: "small", text: result.findings.join("\n") }) : null,
       result.sample?.length ? el("pre", { class: "small", text: result.sample.join("\n") + (result.files > result.sample.length ? "\n…" : "") }) : null,
       result.yaml ? fileView({ path: "source.yaml", title: "Registration file", text: result.yaml, html: null }) : null) : null);
   const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
     f.kind === "mcp" ? "MCP server: the agent can call only the tools in Allowed tools; myorch-mcp disables the rest at start. If the tool list cannot be read, the whole server is unavailable. The token is kept in the OpenShell gateway; the sandbox sees only a placeholder. For the Atlassian MCP, an organisation admin must first turn on API token access."
+    : f.skill ? "Skills: the folder or repository is scanned for secrets and snapshotted like knowledge, then its SKILL.md directories are copied into the harness's skills directory when an agent step starts. Check lists the skills it found."
     : f.kind === "git" ? "git knowledge base: cloned with the provider in a one-off sandbox, filtered, scanned for secrets, and stored as a snapshot. When a run starts, it is cloned again if the snapshot is older than 1 hour."
-    : f.skill ? "Skills: the folder or repository is scanned for secrets and snapshotted like knowledge, then its SKILL.md directories are copied into the harness's skills directory when an agent step starts."
     : "Folder knowledge base: synced automatically when a run starts. It is scanned for secrets; if one is found, it is not synced and the run does not start. Check first tells you which files it will take in." }));
   return [main, side];
 }
