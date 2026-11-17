@@ -202,6 +202,35 @@ def step_knowledge(req: StepRequest, is_agent: bool) -> list[KnowledgeRef]:
     return [k for k in req.knowledge if k.kind != "mcp" or is_agent]
 
 
+# Installs the run's skills for a harness, then runs the harness: $1 is the harness's skills directory,
+# then (snapshot, source name) pairs, then `--` and the command. A snapshot with SKILL.md at its root
+# is one skill named after the source; otherwise every <dir>/SKILL.md and skills/<dir>/SKILL.md below
+# it is a skill named after its directory (a repository of many skills). Copied, not linked: the
+# snapshot is read-only and the harness may want to write next to a skill.
+SKILLS_SH = r'''dest=$1; shift; mkdir -p "$dest"
+while [ "$1" != -- ]; do
+  src=$1; name=$2; shift 2; found=0
+  if [ -f "$src/SKILL.md" ]; then
+    mkdir -p "$dest/$name" && cp -R "$src"/. "$dest/$name"/ && found=1
+  else
+    for d in "$src"/*/ "$src"/skills/*/; do
+      [ -f "${d}SKILL.md" ] || continue
+      n=$(basename "$d"); mkdir -p "$dest/$n" && cp -R "${d}." "$dest/$n"/ && found=1
+    done
+  fi
+  [ "$found" = 1 ] || echo "myorch: knowledge source $name is marked skill but holds no SKILL.md" >&2
+done
+chmod -R u+w "$dest"; shift; exec "$@"'''
+
+
+def with_skills(argv: list[str], skills: list[KnowledgeRef], dest: str | None) -> list[str]:
+    """argv, started through SKILLS_SH so the skills are in the harness's directory first."""
+    if not skills or dest is None:
+        return argv
+    pairs = [x for k in skills for x in (f"{KNOWLEDGE_ROOT}/{k.name}", k.name)]
+    return ["sh", "-c", SKILLS_SH, "myorch-skills", dest, *pairs, "--", *argv]
+
+
 def shared_dirs(req: StepRequest) -> list[str]:
     """The step's own shared dirs plus the project's (e.g. a build cache every step may use)."""
     return list(dict.fromkeys([*req.step.shared, *((req.context.get("project") or {}).get("shared") or [])]))
@@ -375,7 +404,8 @@ class StepRunner:
         )
         argv = [
             "env", *harness_env(req, repo_writable),
-            "sh", "-c", wrapper(key.attempt, key.turn), "myorch", *adapter.build_command(task),
+            "sh", "-c", wrapper(key.attempt, key.turn), "myorch",
+            *with_skills(adapter.build_command(task), [k for k in knowledge if k.skill], adapter.skills_dir(task.session_dir)),
         ]
         providers = resolve_providers([*profile.providers, *adapter.model_providers()], req.context.get("project"))
         providers += [k.provider for k in mcp if k.provider not in providers]  # adds the read-only token at the gateway

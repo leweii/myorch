@@ -505,7 +505,7 @@ class Service:
             out.append({"name": name, "repo": p.repo, "base": p.base, "extends": p.extends,
                         "required_inputs": p.required_inputs, "synced": (name in synced) if synced is not None else None,
                         "identity": p.identity.account, "image": p.image, "approvers": p.approvers,
-                        "knowledge": p.knowledge, "providers": {k: v for k, v in p.providers.items() if v}})
+                        "knowledge": p.knowledge, "skills": p.skills, "providers": {k: v for k, v in p.providers.items() if v}})
         return out
 
     def templates(self) -> list[str]:

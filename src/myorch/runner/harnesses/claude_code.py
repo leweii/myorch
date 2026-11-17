@@ -77,6 +77,11 @@ class ClaudeCodeAdapter:
             "--dangerously-skip-permissions",
         ]
 
+    def skills_dir(self, session_dir: str) -> str | None:
+        # Claude Code reads user-level skills from $CLAUDE_CONFIG_DIR/skills/<name>/SKILL.md. Not the
+        # repo's .claude/skills: that would put the files into the working tree the step commits from.
+        return f"{session_dir}/skills"
+
     def model_providers(self) -> list[str]:
         return [self.provider]
 

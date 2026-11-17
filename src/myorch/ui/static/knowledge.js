@@ -48,7 +48,7 @@ function renderKnowledgePick() {
     const when = r.kind === "mcp" ? "live queries" : r.latest ? `synced ${fmtTime(r.latest.synced_at)} · ${r.latest.files} files` : "syncs at start";
     return el("label", { class: `kitem${ok ? "" : " off"}`, title: why || r.expanded || r.where },
       box, el("span", { class: "kname", text: r.name }),
-      el("span", { class: "tag", text: KIND_LABEL[r.kind] || r.kind }), el("span", { class: "tag ghost", text: LEVEL_LABEL[r.level] || r.level }),
+      el("span", { class: "tag", text: r.skill ? "skills" : KIND_LABEL[r.kind] || r.kind }), el("span", { class: "tag ghost", text: LEVEL_LABEL[r.level] || r.level }),
       el("span", { class: "kwhen", text: when }),
       why ? el("span", { class: "kwhy", text: why }) : null);
   };

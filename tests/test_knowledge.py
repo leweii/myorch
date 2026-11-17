@@ -286,3 +286,88 @@ def test_folder_outside_the_mounted_root_says_why(monkeypatch, tmp_path):
     assert any(p.startswith("Folder does not exist") for p in missing_inside.problems())
     ok = knowledge.Source.model_validate({"name": "z", "kind": "dir", "path": str(root / "inside")})
     assert ok.problems() == []
+
+
+# ---- skills: a source with `skill: true` is installed into the harness's skills directory ----
+
+def test_skills_are_copied_into_the_harness_directory_before_it_starts(tmp_path):
+    from myorch.runner.runner import with_skills
+
+    one = tmp_path / "kb" / "mine"  # a folder that is one skill
+    one.mkdir(parents=True)
+    (one / "SKILL.md").write_text("# mine")
+    (one / "ref").mkdir()
+    (one / "ref" / "a.md").write_text("a")
+    many = tmp_path / "kb" / "pack"  # a repository of many skills
+    (many / "skills" / "x").mkdir(parents=True)
+    (many / "skills" / "x" / "SKILL.md").write_text("# x")
+    (many / "y").mkdir()
+    (many / "y" / "SKILL.md").write_text("# y")
+    (many / "README.md").write_text("not a skill")
+    empty = tmp_path / "kb" / "none"
+    empty.mkdir()
+    refs = [KnowledgeRef(name=n, kind="dir", skill=True) for n in ("mine", "pack", "none")]
+    dest = tmp_path / "cfg" / "skills"
+    argv = with_skills(["echo", "started"], refs, str(dest))
+    argv = [a.replace("/sandbox/workspace/knowledge", str(tmp_path / "kb")) for a in argv]
+    import subprocess
+
+    r = subprocess.run(argv, capture_output=True, text=True)
+    assert r.stdout.strip() == "started"
+    assert (dest / "mine" / "SKILL.md").read_text() == "# mine" and (dest / "mine" / "ref" / "a.md").is_file()
+    assert (dest / "x" / "SKILL.md").is_file() and (dest / "y" / "SKILL.md").is_file()
+    assert not (dest / "README.md").exists() and not (dest / "pack").exists()
+    assert "none is marked skill but holds no SKILL.md" in r.stderr
+
+
+def test_no_skills_or_no_skills_directory_leaves_the_command_alone():
+    from myorch.runner.runner import with_skills
+
+    ref = KnowledgeRef(name="s", kind="dir", skill=True)
+    assert with_skills(["claude"], [], "/d") == ["claude"]
+    assert with_skills(["bash"], [ref], None) == ["bash"]  # the script harness has no skills
+
+
+def test_each_harness_says_where_its_skills_go():
+    h = default_harnesses()
+    assert h["claude-code"].skills_dir("/sandbox/workspace/.claude/s1") == "/sandbox/workspace/.claude/s1/skills"
+    assert h["script"].skills_dir("/x") is None
+
+
+def test_skills_are_not_listed_as_knowledge_in_the_prompt():
+    from myorch.core.prompt import build_prompt
+
+    refs = [KnowledgeRef(name="notes", kind="dir", version="sha256:1"), KnowledgeRef(name="zz-skills", kind="dir", version="sha256:2", skill=True)]
+    p = build_prompt(STEP, CTX, {}, False, refs)
+    assert "notes" in p and "zz-skills" not in p
+    assert "Knowledge (read-only)" not in build_prompt(STEP, CTX, {}, False, [refs[1]])
+
+
+def test_a_skill_source_resolves_with_its_flag_and_mcp_cannot_be_one(tmp_path):
+    s = kb.Source(kind="dir", path=str(tmp_path), skill=True)
+    assert "skill" in kb.registered_fields(s)
+    assert any("skills" in p for p in kb.Source(kind="mcp", url="https://x", provider="p", token_env="T", tools=["a"], skill=True).problems())
+
+
+def test_a_project_lists_its_skills_separately_from_its_knowledge(kbroot, tmp_path):
+    skills = tmp_path / "skills"
+    (skills / "lint").mkdir(parents=True)
+    (skills / "lint" / "SKILL.md").write_text("# lint")
+    (kbroot / "_sources" / "team-skills.yaml").write_text(f"kind: dir\npath: {skills}\nskill: true\n")
+    (kbroot / "mdm" / "project.yaml").write_text(yaml.safe_dump({
+        "repo": "o/mdm", "image": "dev:img", "knowledge": ["notes"], "skills": ["team-skills"],
+        "identity": {"account": "me", "git_name": "Me", "git_email": "me@x", "self_is_operator": True}}))
+    assert kb.defaults(kbroot, "mdm") == ["notes", "team-skills"]  # both are chosen the same way at start
+    rows = {r["name"]: r for r in kb.catalog(KStore(), kbroot, "mdm")}
+    assert rows["team-skills"]["skill"] is True and rows["team-skills"]["default_in"] == ["mdm"]
+    assert rows["notes"]["skill"] is False
+    store = KStore()
+    kb.sync(store, kbroot, "team-skills", "mdm")
+    [ref] = kb.resolve(store, kbroot, "mdm", ["team-skills"])
+    assert ref.skill is True
+    # a name under `skills:` must be a skill source
+    (kbroot / "mdm" / "project.yaml").write_text(yaml.safe_dump({
+        "repo": "o/mdm", "image": "dev:img", "skills": ["wiki"],
+        "identity": {"account": "me", "git_name": "Me", "git_email": "me@x", "self_is_operator": True}}))
+    with pytest.raises(kb.KnowledgeError, match="not registered with skill: true"):
+        kb.resolve(store, kbroot, "mdm", None)

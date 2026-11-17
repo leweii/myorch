@@ -112,6 +112,7 @@ def build_prompt(
             "Run `git status` first (and `git diff` when needed) to see where things are, then decide what to keep and where to continue."
         )
     parts.append(_workspace_section(ctx, repo_writable))
+    knowledge = [k for k in knowledge or [] if not k.skill]  # skills are installed for the harness, not listed
     if knowledge:
         parts.append(_knowledge_section(knowledge))
 

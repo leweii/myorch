@@ -89,6 +89,7 @@ The final authority for the fields is the `Project` model in `src/myorch/project
 | `repo_docs` | | Knowledge the repository carries itself (`CLAUDE.md`, `.claude/skills/`, etc.). The prompt points the agent to it |
 | `required_inputs` | | Inputs this project requires, e.g. `[ticket]`. Applies only to flows that declare the input |
 | `knowledge` | | Which knowledge sources this project's runs mount by default (a list of names). You can add or remove some when you start a run. See "Knowledge sources" |
+| `skills` | | Which skill sources (registered with `skill: true`) this project's runs install by default (a list of names). Chosen at start like `knowledge`. See "Skills" |
 | `sweep` | | Which files the sweep flow looks at: `paths` (directories or files; leave out for the whole repository), `include`, `exclude` (globs, `**` allowed), `chunk` (files per batch, default 20, 1–200) |
 | `policy` | | Name of the policy file in the project pack. Used when a profile says `policy: project` |
 | `shared` | | Read-write directories (caches) shared across runs and mounted in every step, e.g. `[gradle]` → `/sandbox/workspace/shared/gradle`. The data is in `shared/<project>/gradle` on the volume |
@@ -299,6 +300,24 @@ Who gets them:
 - When a run starts, the mandate records the snapshot version of each knowledge source. If a knowledge source changes later, this run still sees the same content.
 
 ### MCP allows only registered tools
+### Skills
+
+A `dir` or `git` knowledge source with `skill: true` holds agent skills instead of reference material. It is registered, scanned, snapshotted and chosen exactly like the other sources (a folder on the host, or a GitHub repository cloned with a provider; list it in the project's `skills`, change it per run with `--kb` or in the **New run** panel). The difference is what a step does with it: the snapshot is not listed in the prompt. Before the harness starts, the runner copies the skills into the directory where that harness looks for them.
+
+```yaml
+# myorch-knowledge/_sources/team-skills.yaml
+kind: git
+repo: acme/agent-skills
+ref: main
+provider: github-read
+skill: true
+```
+
+- A snapshot with a `SKILL.md` at its root is one skill, named after the source. Otherwise every `<dir>/SKILL.md` and `skills/<dir>/SKILL.md` in it is a skill, named after its directory (so a repository of many skills works as it is). Use `include` to take only some.
+- Where the skills go depends on the harness (`skills_dir` in `runner/harnesses/`): `claude-code` gets `$CLAUDE_CONFIG_DIR/skills/<name>/` (the step's session directory, so the repository is not touched). The `script` harness has no skills. A new harness declares its own directory.
+- The console's **Resources** view lists skill sources in their own group, and a project's page shows its `skills`.
+- A snapshot without any `SKILL.md` writes a warning to the step's log. `knowledge: false` on a step also leaves out its skills. An MCP source cannot hold skills.
+
 
 When an agent step starts, `/sandbox/bin/myorch-mcp` runs before claude:
 

@@ -163,6 +163,9 @@ class Project(BaseModel):
     shared: list[str] = Field(default_factory=list)  # shared dirs mounted in every step (caches), see storage
     # How a change is reviewed before the approval gate. Only "local": nothing leaves the sandbox
     # before approval; the change is reviewed in the console (myorch ui) or with `myorch review <run>`.
+    # Agent skills installed into this project's runs: names of sources registered with `skill: true`
+    # (same registry as knowledge). Chosen at start like knowledge (--kb, the New run panel).
+    skills: list[str] = Field(default_factory=list)
     # People no longer talk to myorch on GitHub, so the draft-PR mode is gone.
     review: Literal["local"] = "local"
     allow: list[str] = Field(default_factory=list)  # GitHub logins that may instruct myorch (channels)

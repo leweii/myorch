@@ -26,6 +26,9 @@ class ScriptAdapter:
             "bash", "-c", task.instruction,
         ]
 
+    def skills_dir(self, session_dir: str) -> str | None:
+        return None
+
     def model_providers(self) -> list[str]:
         return []
 

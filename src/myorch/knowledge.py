@@ -66,6 +66,7 @@ class Source(BaseModel):
     auth: Literal["bearer", "basic"] = "bearer"  # mcp: "Bearer <token>", or Basic base64(email:<token>)
     email: str = ""  # mcp, basic: the token owner's email (e.g. an Atlassian personal API token)
     tools: list[str] = Field(default_factory=list)  # mcp: the only tools agents may call (others are denied)
+    skill: bool = False  # dir, git: the folder holds agent skills (SKILL.md); installed per harness, see runner/runner.py
     token_read_only: bool = False  # mcp, optional: the registrant notes the provider's token can only read (not enforced)
     allow_findings: list[str] = Field(default_factory=list)  # "file:line" secret-scan hits accepted as false positives
     # filled in by load_sources
@@ -108,6 +109,8 @@ class Source(BaseModel):
             if not self.provider:
                 out.append("provider is not set (the OpenShell provider that can clone this repository)")
         else:
+            if self.skill:
+                out.append("an MCP source cannot hold skills (skill: true needs kind dir or git)")
             if not self.url.startswith("https://"):
                 out.append("url must start with https://")
             if not self.provider or not self.token_env:
@@ -396,7 +399,8 @@ def defaults(kb_root: Path, project: str | None) -> list[str]:
         return []
     from myorch import project as projects
 
-    return list(projects.load_project(kb_root, project).knowledge)
+    p = projects.load_project(kb_root, project)
+    return list(dict.fromkeys([*p.knowledge, *p.skills]))
 
 
 def choose(default: list[str], tokens: list[str]) -> list[str]:
@@ -459,11 +463,18 @@ def resolve(store, kb_root: Path, project: str | None, names: list[str] | None) 
     if not names:
         return []
     sources = load_sources(kb_root, project)
+    listed_as_skills = set()
+    if project:
+        from myorch import project as projects
+
+        listed_as_skills = set(projects.load_project(kb_root, project).skills)
     refs = []
     for n in names:
         s = sources.get(n)
         if s is None:
             raise KnowledgeError(f"Knowledge source {n} is not registered, or project {project or '(none)'} cannot use it")
+        if n in listed_as_skills and not s.skill:
+            raise KnowledgeError(f"{n} is in project {project}'s skills but is not registered with skill: true")
         if s.kind == "mcp":
             if s.problems():
                 raise KnowledgeError(f"Knowledge source {n} cannot be mounted: {'; '.join(s.problems())}")
@@ -474,7 +485,7 @@ def resolve(store, kb_root: Path, project: str | None, names: list[str] | None) 
         if not versions:
             raise KnowledgeError(f"Knowledge source {n} has no snapshot (sync did not succeed): myorch knowledge sync {n}"
                                  + (f" --project {project}" if s.level != "global" else "") + " shows why")
-        refs.append(KnowledgeRef(name=n, kind=s.kind, version=versions[0]["version"], index=s.index))
+        refs.append(KnowledgeRef(name=n, kind=s.kind, version=versions[0]["version"], index=s.index, skill=s.skill))
     return refs
 
 
@@ -496,7 +507,8 @@ def catalog(store, kb_root: Path, project: str | None = None) -> list[dict[str, 
     default_of: dict[str, list[str]] = {}
     for p in projects.list_projects(kb_root):
         try:
-            for n in projects.load_project(kb_root, p).knowledge:
+            pack = projects.load_project(kb_root, p)
+            for n in [*pack.knowledge, *pack.skills]:
                 default_of.setdefault(n, []).append(p)
         except Exception:  # a broken pack is reported by the project list
             continue
@@ -514,7 +526,7 @@ def catalog(store, kb_root: Path, project: str | None = None) -> list[dict[str, 
         except RuntimeError:  # Docker down
             versions = []
         out.append({"name": n, "kind": s.kind, "level": s.level, "file": s.file, "where": where, "expanded": expanded,
-                    "index": s.index, "tools": s.tools, "projects": s.projects, "default_in": default_of.get(n, []),
+                    "index": s.index, "skill": s.skill, "tools": s.tools, "projects": s.projects, "default_in": default_of.get(n, []),
                     "fields": registered_fields(s),
                     "latest": versions[0] if versions else None, "versions": len(versions), "problems": s.problems()})
     return out
@@ -523,8 +535,8 @@ def catalog(store, kb_root: Path, project: str | None = None) -> list[dict[str, 
 # ---- registering from the console ---------------------------------------------------------
 
 FIELDS = {  # what a registration may set, per kind (the rest of Source is filled in by load_sources)
-    "dir": ("path", "include", "exclude", "index", "projects", "max_size", "allow_findings"),
-    "git": ("repo", "ref", "provider", "image", "include", "exclude", "index", "projects", "max_size", "allow_findings"),
+    "dir": ("path", "skill", "include", "exclude", "index", "projects", "max_size", "allow_findings"),
+    "git": ("repo", "ref", "provider", "image", "skill", "include", "exclude", "index", "projects", "max_size", "allow_findings"),
     "mcp": ("url", "provider", "token_env", "auth", "email", "tools", "token_read_only", "index", "projects"),
 }
 

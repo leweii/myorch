@@ -101,6 +101,7 @@ class KnowledgeRef(BaseModel, frozen=True):
     auth: Literal["bearer", "basic"] = "bearer"  # mcp: how the header is built (tools/myorch-mcp)
     email: str = ""  # mcp, basic: the token owner's email
     tools: list[str] = Field(default_factory=list)  # mcp: the only tools agents may call
+    skill: bool = False  # dir, git: agent skills; copied into the harness's skills directory instead of listed as knowledge
 
 
 class Mandate(BaseModel, frozen=True):

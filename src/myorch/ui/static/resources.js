@@ -1,5 +1,5 @@
 // Resources: what runs use, as opposed to the flows that define the work. The side bar's Resources view lists
-// projects, knowledge bases (a folder or a git repository) and MCP servers; each opens as a tab (ref {t: project|kb|kbform,
+// projects, knowledge bases (a folder or a git repository), agent skills (the same, marked skill) and MCP servers; each opens as a tab (ref {t: project|kb|kbform,
 // id}). Knowledge bases and MCP servers are the same thing in myorch/knowledge.py (kind dir, git or mcp): one
 // registry file each, one git commit per change. Uses el/kv/fileView/api/openTab/closeTab from app.js; the
 // project dialog is projects.js. All text from the registry is inserted as textContent.
@@ -8,6 +8,7 @@
 const RS = { rows: null, projects: null, form: null, check: null, filter: "", groups: {} };
 const KB_TYPE = { dir: "local folder", git: "git repository", mcp: "MCP server" };
 const KB_BADGE = { dir: "DIR", git: "GIT", mcp: "MCP" };
+const badgeOf = (k) => (k.skill ? "SKL" : KB_BADGE[k.kind] || k.kind);
 
 function kbKey(k) { return `${k.project || ""}/${k.name}`; }
 function resCur() { const t = activeTab(); return t?.kind === "res" ? t.ref : null; }
@@ -66,11 +67,11 @@ function resRenderList() {
     sub(p.error || p.repo));
   const kbItem = (k) => el("div", { class: `item${resIs("kb", kbKey(k)) ? " active" : ""}`, "data-q": `${k.name} ${k.project || ""}`.toLowerCase(),
     onclick: () => resOpenRef({ t: "kb", id: kbKey(k) }), ondblclick: () => resOpenRef({ t: "kb", id: kbKey(k) }, false) },
-    el("div", { class: "line1" }, el("span", { class: "ic k-script", text: KB_BADGE[k.kind] || k.kind }), el("span", { class: "id", text: k.name }),
+    el("div", { class: "line1" }, el("span", { class: "ic k-script", text: badgeOf(k) }), el("span", { class: "id", text: k.name }),
       k.problems.length ? el("span", { class: "tag cond", text: "problems" })
         : el("span", { class: "tag ghost", text: k.project || (k.level === "template" ? "template" : "global") })),
-    sub(k.kind === "mcp" ? "live queries" : k.latest ? `synced ${fmtTime(k.latest.synced_at)}` : "not synced yet (it syncs when a run starts)"));
-  const bases = RS.rows.filter((k) => k.kind !== "mcp"), mcps = RS.rows.filter((k) => k.kind === "mcp");
+    sub(k.kind === "mcp" ? "live queries" : k.skill && k.latest ? `skills, synced ${fmtTime(k.latest.synced_at)}` : k.latest ? `synced ${fmtTime(k.latest.synced_at)}` : "not synced yet (it syncs when a run starts)"));
+  const bases = RS.rows.filter((k) => k.kind !== "mcp" && !k.skill), skills = RS.rows.filter((k) => k.skill), mcps = RS.rows.filter((k) => k.kind === "mcp");
   const group = (key, name, items, add, empty) => {
     const open = RS.groups[key] ?? true;
     const body = el("div", { class: "list grp-body", hidden: !open }, items.length ? items : el("div", { class: "muted small pad", text: empty }));
@@ -86,6 +87,7 @@ function resRenderList() {
   box.replaceChildren(filter,
     group("projects", "Projects", RS.projects.map(projectItem), { title: "New project…", run: () => openProjectDialog() }, "No projects yet."),  // projects.js
     group("kb", "Knowledge bases", bases.map(kbItem), { title: "Register a knowledge base: a folder or a git repository", run: () => kbOpenForm(null, "dir") }, "None yet. A folder or a git repository agents may read."),
+    group("skills", "Skills", skills.map(kbItem), { title: "Register skills: a folder or a git repository with SKILL.md files", run: () => kbOpenForm(null, "dir", true) }, "None yet. Folders or repositories of agent skills, installed per harness."),
     group("mcp", "MCP servers", mcps.map(kbItem), { title: "Register an MCP server", run: () => kbOpenForm(null, "mcp") }, "None yet. Live queries, only the tools you allow."));
   resFilter(box);
   box.scrollTop = keep;
@@ -130,6 +132,10 @@ function projectView(p) {
     el("div", { class: "chips2" }, (p.knowledge || []).length ? p.knowledge.map((n) => row(n)
       ? el("button", { class: "ghost small", text: n, onclick: () => resOpenRef({ t: "kb", id: kbKey(row(n)) }, false) }) : el("span", { class: "tag cond", title: "not registered", text: n }))
       : el("span", { class: "muted small", text: "none" })),
+    el("h4", { text: "Skills installed by default" }),
+    el("div", { class: "chips2" }, (p.skills || []).length ? p.skills.map((n) => row(n)
+      ? el("button", { class: "ghost small", text: n, onclick: () => resOpenRef({ t: "kb", id: kbKey(row(n)) }, false) }) : el("span", { class: "tag cond", title: "not registered", text: n }))
+      : el("span", { class: "muted small", text: "none" })),
     el("div", { class: "evbar" }, el("button", { text: "New run on this project", onclick: () => openNewRun({ project: p.name }) }))]  // newrun.js
     : [el("p", { class: p ? "warn" : "muted", text: p ? `This project's pack has an error: ${p.error}` : "This project no longer exists." })]);
   const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
@@ -141,9 +147,9 @@ function kbView(k) {
   const main = el("section", { class: "fd-main" }, k ? [
     el("div", { class: "fd-title" }, el("span", { class: "big", text: k.name }), el("span", { class: "file", text: `myorch-knowledge/${k.file}` })),
     k.problems.length ? el("div", { class: "warn", text: k.problems.join("; ") }) : null,
-    kv([["Type", KB_TYPE[k.kind]], ["Registered in", k.level], ["Location", k.where], ["Expanded", k.expanded],
+    kv([["Type", k.skill ? `skills in a ${KB_TYPE[k.kind]}` : KB_TYPE[k.kind]], ["Registered in", k.level], ["Location", k.where], ["Expanded", k.expanded],
       ["Read first", k.index], ["Tools", (k.tools || []).join(", ")], ["Projects that may use it", (k.projects || []).join(", ") || "all projects"],
-      ["Mounted by default in", (k.default_in || []).join(", ")],
+      [k.skill ? "Installed by default in" : "Mounted by default in", (k.default_in || []).join(", ")],
       ["Latest snapshot", k.latest ? `${k.latest.version} · ${fmtTime(k.latest.synced_at)} · ${k.latest.files} files · ${(k.latest.bytes / 1024).toFixed(1)} KB` : (k.kind === "mcp" ? "MCP has no snapshots" : "not synced (it syncs when a run starts)")],
       ["Versions kept", k.kind === "mcp" ? null : String(k.versions)]]),
     k.kind !== "mcp" ? el("p", { class: "muted small", text: k.kind === "dir"
@@ -153,16 +159,16 @@ function kbView(k) {
       : el("div", { class: "evbar" },
         el("button", { text: "Edit", onclick: () => kbOpenForm(k) }),
         el("button", { class: "ghost danger", text: "Unregister", onclick: () => kbRemove(k) }))] : el("p", { class: "muted", text: "This resource no longer exists." }));
-  const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: "Knowledge is mounted read-only into agent steps: /sandbox/workspace/knowledge/<name>/. MCP knowledge is reached through an OpenShell provider; the agent can call only the registered tools." }));
+  const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: k?.skill ? "Skills: a folder with a SKILL.md is one skill; a repository with <dir>/SKILL.md or skills/<dir>/SKILL.md is many. Before an agent step starts, they are copied into the directory its harness reads skills from (Claude Code: the step's session directory). They are chosen and versioned like knowledge." : "Knowledge is mounted read-only into agent steps: /sandbox/workspace/knowledge/<name>/. MCP knowledge is reached through an OpenShell provider; the agent can call only the registered tools." }));
   return [main, side];
 }
 
 // ---- registering a knowledge base or MCP server (myorch/knowledge.py register / check / unregister) ---------
 
-const blankKbForm = (kind) => ({ edit: false, name: "", project: "", kind, fields: {} });
+const blankKbForm = (kind, skill = false) => ({ edit: false, name: "", project: "", kind, skill, fields: {} });
 
-function kbOpenForm(k, kind = "dir") {
-  RS.form = k ? { edit: true, name: k.name, project: k.project || "", kind: k.kind, fields: { ...(k.fields || {}) } } : blankKbForm(kind);
+function kbOpenForm(k, kind = "dir", skill = false) {
+  RS.form = k ? { edit: true, name: k.name, project: k.project || "", kind: k.kind, skill: !!k.skill, fields: { ...(k.fields || {}) } } : blankKbForm(kind, skill);
   RS.check = null;
   if (resIs("kbform")) resRender(); else resOpenRef({ t: "kbform" }, false);
 }
@@ -192,7 +198,7 @@ function kbFormView(f) {
   const projects = (RS.projects || []).filter((p) => !p.error).map((p) => p.name);
   const read = () => {
     const box = $("#kbForm");
-    const data = { kind: box.querySelector('[name="kind"]').value };
+    const data = { kind: box.querySelector('[name="kind"]').value, ...(f.skill ? { skill: true } : {}) };
     box.querySelectorAll("[data-f]").forEach((e) => { data[e.dataset.f] = e.type === "checkbox" ? e.checked : e.value; });
     return { name: box.querySelector('[name="name"]').value.trim(), project: box.querySelector('[name="project"]').value || null, data };
   };
@@ -204,7 +210,7 @@ function kbFormView(f) {
     input.value = Array.isArray(v) ? v.join(", ") : v ?? (type === "auth" ? "bearer" : "");
     return el("label", {}, label, input);
   };
-  const kindSel = el("select", { name: "kind", disabled: f.edit }, ["dir", "git", "mcp"].map((k) => el("option", { value: k, text: KB_TYPE[k] })));
+  const kindSel = el("select", { name: "kind", disabled: f.edit }, (f.skill ? ["dir", "git"] : ["dir", "git", "mcp"]).map((k) => el("option", { value: k, text: KB_TYPE[k] })));
   kindSel.value = f.kind;
   kindSel.addEventListener("change", () => { RS.form = { ...f, kind: kindSel.value, fields: {} }; RS.check = null; resRender(); });
   const nameIn = el("input", { name: "name", placeholder: "lowercase letters, digits and -, e.g. mdm-docs", disabled: f.edit });
@@ -231,7 +237,7 @@ function kbFormView(f) {
     } catch (e) { RS.check = { error: e.message }; }
     resRender();
   };
-  const noun = f.kind === "mcp" ? "MCP server" : "knowledge base";
+  const noun = f.skill ? "skills" : f.kind === "mcp" ? "MCP server" : "knowledge base";
   const main = el("section", { class: "fd-main" },
     el("div", { class: "fd-title" }, el("span", { class: "big", text: f.edit ? `Edit ${f.name}` : `Register ${noun}` }),
       el("span", { class: "file", text: "Written to myorch-knowledge as one git commit" })),
@@ -253,6 +259,7 @@ function kbFormView(f) {
   const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
     f.kind === "mcp" ? "MCP server: the agent can call only the tools in Allowed tools; myorch-mcp disables the rest at start. If the tool list cannot be read, the whole server is unavailable. The token is kept in the OpenShell gateway; the sandbox sees only a placeholder. For the Atlassian MCP, an organisation admin must first turn on API token access."
     : f.kind === "git" ? "git knowledge base: cloned with the provider in a one-off sandbox, filtered, scanned for secrets, and stored as a snapshot. When a run starts, it is cloned again if the snapshot is older than 1 hour."
+    : f.skill ? "Skills: the folder or repository is scanned for secrets and snapshotted like knowledge, then its SKILL.md directories are copied into the harness's skills directory when an agent step starts."
     : "Folder knowledge base: synced automatically when a run starts. It is scanned for secrets; if one is found, it is not synced and the run does not start. Check first tells you which files it will take in." }));
   return [main, side];
 }

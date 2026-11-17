@@ -27,6 +27,11 @@ class HarnessAdapter(Protocol):
         """Non-interactive argv; runs with cwd at the repo (or the workspace before checkout)."""
         ...
 
+    def skills_dir(self, session_dir: str) -> str | None:
+        """Where this harness looks for agent skills (one directory per skill, each with a SKILL.md);
+        the runner copies the run's skills there before the harness starts. None: no skills."""
+        ...
+
     def model_providers(self) -> list[str]:
         """OpenShell providers this harness needs for model access."""
         ...
