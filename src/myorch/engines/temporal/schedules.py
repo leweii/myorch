@@ -138,11 +138,12 @@ async def list_schedules(client: Client) -> list[dict[str, Any]]:
                     inp = (await client.data_converter.decode([arg], [LaunchInput]))[0]
                 except Exception:
                     inp = None
-        when = d.schedule.state.note or (", ".join(f"every {i.every}" for i in spec.intervals) if spec.intervals else "?")
+        when = when_of(d.schedule.state.note, spec)
         out.append({
             "name": s.id.removeprefix(PREFIX), "when": when, "paused": d.schedule.state.paused,
             "flow": inp.flow if inp else "?", "project": inp.project if inp else None,
             "inputs": inp.inputs if inp else {}, "initiator": inp.initiator if inp else "",
+            "knowledge": inp.knowledge if inp else None, "skip_if_running": inp.skip_if_running if inp else True,
             "next": [t.isoformat(timespec="minutes") for t in info.next_action_times[:3]],
             "recent": [{"at": a.started_at.isoformat(timespec="minutes") if a.started_at else "",
                         "launch": getattr(a.action, "workflow_id", "")} for a in info.recent_actions[-3:]],
@@ -150,9 +151,25 @@ async def list_schedules(client: Client) -> list[dict[str, Any]]:
     return out
 
 
+# What the SDK writes into the note when pause/unpause are given none: it would replace what the person wrote.
+SDK_NOTES = ("Paused via Python SDK", "Unpaused via Python SDK")
+
+
+def when_of(note: str, spec: ScheduleSpec) -> str:
+    """When a schedule fires, as written at `add` (kept in the note), else as far as the spec tells."""
+    if note and note not in SDK_NOTES:
+        return note
+    if spec.intervals:
+        return ", ".join(f"every {i.every}" for i in spec.intervals)
+    return "cron (the original expression was overwritten; see temporal schedule describe)" if spec.calendars or spec.cron_expressions else "?"
+
+
 async def pause(client: Client, name: str, paused: bool) -> None:
+    """Pause or resume, keeping the note (when it fires, as written at `add`)."""
     h = client.get_schedule_handle(schedule_id(name))
-    await (h.pause() if paused else h.unpause())
+    note = (await h.describe()).schedule.state.note or ""
+    note = None if note in SDK_NOTES else note or None
+    await (h.pause(note=note) if paused else h.unpause(note=note))
 
 
 async def delete(client: Client, name: str) -> None:

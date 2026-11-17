@@ -40,6 +40,7 @@ WAITING = ("waiting_input", "waiting_approval")
 MAX_FILE_CHARS = 200_000
 VIA = "web"  # the channel name of the console (channels.yaml identities)
 SEARCH_LIMIT = 500  # a search in the run list returns at most this many runs (before the project filter)
+SCHEDULE_RUNS = 10  # runs listed per schedule (of the recent runs the console reads)
 
 RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,99}$")
 
@@ -268,6 +269,35 @@ class Service:
             "base": (st.project or {}).get("base"), "source": "engine",
             "knowledge": [k.model_dump() for k in (m.knowledge if m else [])],
         }
+
+    # ---- schedules ----------------------------------------------------------------------
+
+    async def schedules(self) -> list[dict[str, Any]]:
+        """Temporal schedules made with `myorch schedule add` (engines/temporal/schedules.py), each with the
+        runs it started: run_started carries source schedule:<name>."""
+        from myorch.engines.temporal import schedules as sch
+
+        rows = await sch.list_schedules(self.relay.client)
+        if not rows:
+            return rows
+        started: dict[str, list[dict[str, Any]]] = {}
+        for r in await self.engine_runs():  # newest first
+            src = r.get("source") or ""
+            if src.startswith("schedule:"):
+                started.setdefault(src.removeprefix("schedule:"), []).append(
+                    {k: r.get(k) for k in ("run_id", "status", "requested_at", "pr_url")})
+        return [{**s, "runs": started.get(s["name"], [])[:SCHEDULE_RUNS]} for s in rows]
+
+    async def schedule_action(self, name: str, op: str) -> None:
+        """pause | resume | trigger. Creating and deleting stay on the command line (myorch schedule)."""
+        from myorch.engines.temporal import schedules as sch
+
+        if op in ("pause", "resume"):
+            await sch.pause(self.relay.client, name, op == "pause")
+        elif op == "trigger":
+            await sch.trigger(self.relay.client, name)
+        else:
+            raise ValueError(f"unknown schedule action {op!r}")
 
     # ---- knowledge ----------------------------------------------------------------------
 

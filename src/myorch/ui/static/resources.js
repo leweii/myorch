@@ -2,10 +2,11 @@
 // projects, knowledge bases (a folder or a git repository), agent skills (the same, marked skill) and MCP servers; each opens as a tab (ref {t: project|kb|kbform,
 // id}). Knowledge bases and MCP servers are the same thing in myorch/knowledge.py (kind dir, git or mcp): one
 // registry file each, one git commit per change. Uses el/kv/fileView/api/openTab/closeTab from app.js; the
-// project dialog is projects.js. All text from the registry is inserted as textContent.
+// project dialog is projects.js. Schedules (ref t: schedule) are Temporal schedules made with `myorch schedule add`;
+// here they can be read, paused, resumed and fired once. All text from the registry is inserted as textContent.
 "use strict";
 
-const RS = { rows: null, projects: null, form: null, check: null, filter: "", groups: {} };
+const RS = { rows: null, projects: null, schedules: [], schedError: "", form: null, check: null, filter: "", groups: {} };
 const KB_TYPE = { dir: "local folder", git: "git repository", mcp: "MCP server" };
 const KB_BADGE = { dir: "DIR", git: "GIT", mcp: "MCP" };
 const badgeOf = (k) => (k.skill ? "SKL" : KB_BADGE[k.kind] || k.kind);
@@ -16,7 +17,10 @@ const resIs = (t, id) => { const c = resCur(); return !!c && c.t === t && (id ==
 function resOpenRef(ref, preview = true) { openTab({ kind: "res", ref }, { preview }); }
 
 async function resLoad() {
+  // Schedules live in Temporal: when it cannot be reached the rest of the view still loads.
+  const sched = api("/api/schedules").then((r) => { RS.schedules = r; RS.schedError = ""; }, (e) => { RS.schedError = e.message; });
   [RS.rows, RS.projects] = await Promise.all([api("/api/knowledge?all=1"), api("/api/projects")]);
+  await sched;
   S.projects = RS.projects;  // newrun.js reads the same list
 }
 
@@ -71,6 +75,11 @@ function resRenderList() {
       k.problems.length ? el("span", { class: "tag cond", text: "problems" })
         : el("span", { class: "tag ghost", text: k.project || (k.level === "template" ? "template" : "global") })),
     sub(k.kind === "mcp" ? "live queries" : k.skill && k.latest ? `skills, synced ${fmtTime(k.latest.synced_at)}` : k.latest ? `synced ${fmtTime(k.latest.synced_at)}` : "not synced yet (it syncs when a run starts)"));
+  const schedItem = (c) => el("div", { class: `item${resIs("schedule", c.name) ? " active" : ""}`, "data-q": `${c.name} ${c.flow} ${c.project || ""}`.toLowerCase(),
+    onclick: () => resOpenRef({ t: "schedule", id: c.name }), ondblclick: () => resOpenRef({ t: "schedule", id: c.name }, false) },
+    el("div", { class: "line1" }, el("span", { class: "id", text: c.name }),
+      c.paused ? el("span", { class: "tag cond", text: "paused" }) : el("span", { class: "tag ghost", text: c.project || c.flow })),
+    sub(`${c.when} · ${c.paused ? "does not fire" : c.next[0] ? `next ${fmtTime(c.next[0])}` : "no next time"}`));
   const bases = RS.rows.filter((k) => k.kind !== "mcp" && !k.skill), skills = RS.rows.filter((k) => k.skill), mcps = RS.rows.filter((k) => k.kind === "mcp");
   const group = (key, name, items, add, empty) => {
     const open = RS.groups[key] ?? true;
@@ -78,7 +87,7 @@ function resRenderList() {
     const head = el("div", { class: `grp${open ? " open" : ""}`, "data-open": open ? "1" : "",
       onclick: () => { RS.groups[key] = body.hidden; body.hidden = !body.hidden; head.classList.toggle("open", !body.hidden); head.dataset.open = body.hidden ? "" : "1"; } },
       el("span", { class: "caret", text: "▸" }), el("span", { class: "gname", text: name }), el("span", { class: "n", text: String(items.length) }),
-      el("button", { type: "button", class: "add", title: add.title, "aria-label": add.title, text: "+", onclick: (e) => { e.stopPropagation(); add.run(); } }));
+      add ? el("button", { type: "button", class: "add", title: add.title, "aria-label": add.title, text: "+", onclick: (e) => { e.stopPropagation(); add.run(); } }) : null);
     return el("div", { class: "grpbox" }, head, body);
   };
   const filter = el("input", { type: "search", class: "fd-filter", placeholder: "Filter by name", value: RS.filter,
@@ -88,7 +97,9 @@ function resRenderList() {
     group("projects", "Projects", RS.projects.map(projectItem), { title: "New project…", run: () => openProjectDialog() }, "No projects yet."),  // projects.js
     group("kb", "Knowledge bases", bases.map(kbItem), { title: "Register a knowledge base: a folder or a git repository", run: () => kbOpenForm(null, "dir") }, "None yet. A folder or a git repository agents may read."),
     group("skills", "Skills", skills.map(kbItem), { title: "Register skills: a folder or a git repository with SKILL.md files", run: () => kbOpenForm(null, "dir", true) }, "None yet. Folders or repositories of agent skills, installed per harness."),
-    group("mcp", "MCP servers", mcps.map(kbItem), { title: "Register an MCP server", run: () => kbOpenForm(null, "mcp") }, "None yet. Live queries, only the tools you allow."));
+    group("mcp", "MCP servers", mcps.map(kbItem), { title: "Register an MCP server", run: () => kbOpenForm(null, "mcp") }, "None yet. Live queries, only the tools you allow."),
+    group("schedules", "Schedules", RS.schedules.map(schedItem), null,
+      RS.schedError ? `Cannot read the schedules: ${RS.schedError}` : "None yet. Create one with: myorch schedule add <name> --flow <flow> --cron '0 9 * * 1'"));
   resFilter(box);
   box.scrollTop = keep;
   if (typing) { filter.focus(); filter.setSelectionRange(filter.value.length, filter.value.length); }
@@ -115,6 +126,7 @@ function resRenderMain() {
   if (!ref || !RS.rows) return;
   const [main, side] = ref.t === "kbform" && RS.form ? kbFormView(RS.form)
     : ref.t === "kb" ? kbView(RS.rows.find((k) => kbKey(k) === ref.id))
+    : ref.t === "schedule" ? schedView(RS.schedules.find((c) => c.name === ref.id))
     : projectView(RS.projects.find((p) => p.name === ref.id));
   const keep = pane.querySelector(".fd-main")?.scrollTop || 0;
   pane.replaceChildren(main, side);
@@ -136,6 +148,10 @@ function projectView(p) {
     el("div", { class: "chips2" }, (p.skills || []).length ? p.skills.map((n) => row(n)
       ? el("button", { class: "ghost small", text: n, onclick: () => resOpenRef({ t: "kb", id: kbKey(row(n)) }, false) }) : el("span", { class: "tag cond", title: "not registered", text: n }))
       : el("span", { class: "muted small", text: "none" })),
+    el("h4", { text: "Schedules" }),
+    el("div", { class: "chips2" }, RS.schedules.filter((c) => c.project === p.name).map((c) =>
+      el("button", { class: "ghost small", title: c.when, text: c.paused ? `${c.name} (paused)` : c.name, onclick: () => resOpenRef({ t: "schedule", id: c.name }, false) }))
+      .concat(RS.schedules.some((c) => c.project === p.name) ? [] : [el("span", { class: "muted small", text: "none" })])),
     el("div", { class: "evbar" }, el("button", { text: "New run on this project", onclick: () => openNewRun({ project: p.name }) }))]  // newrun.js
     : [el("p", { class: p ? "warn" : "muted", text: p ? `This project's pack has an error: ${p.error}` : "This project no longer exists." })]);
   const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
@@ -161,6 +177,42 @@ function kbView(k) {
         el("button", { class: "ghost danger", text: "Unregister", onclick: () => kbRemove(k) }))] : el("p", { class: "muted", text: "This resource no longer exists." }));
   const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text: k?.skill ? "Skills: a folder with a SKILL.md is one skill; a repository with <dir>/SKILL.md or skills/<dir>/SKILL.md is many. Before an agent step starts, they are copied into the directory its harness reads skills from (Claude Code: the step's session directory). They are chosen and versioned like knowledge." : "Knowledge is mounted read-only into agent steps: /sandbox/workspace/knowledge/<name>/. MCP knowledge is reached through an OpenShell provider; the agent can call only the registered tools." }));
   return [main, side];
+}
+
+// ---- a schedule (engines/temporal/schedules.py) -------------------------------------------------------------
+
+function schedView(c) {
+  const runItem = (r) => el("div", { class: "item", title: r.run_id, onclick: () => openTab({ kind: "run", run: r.run_id }) },  // app.js
+    el("div", { class: "line1" }, st(r.status), el("span", { class: "id", text: r.run_id }), el("span", { class: "tag ghost", text: fmtTime(r.requested_at) })));
+  // An input can be a whole task description: long or multi-line values are folded to their first line.
+  const inputVal = (v) => (v.length <= 120 && !v.includes("\n")) ? v
+    : el("details", { class: "sched-input" }, el("summary", { text: `${v.split("\n")[0].slice(0, 120)}…` }), el("pre", { class: "small", text: v }));
+  const inputs = Object.entries(c?.inputs || {}).filter(([, v]) => v !== "").map(([k, v]) => [`Input ${k}`, inputVal(String(v))]);
+  const main = el("section", { class: "fd-main" }, c ? [
+    el("div", { class: "fd-title" }, el("span", { class: "big", text: c.name }), el("span", { class: "file", text: `Temporal schedule myorch-${c.name}` })),
+    kv([["When", c.when], ["State", c.paused ? "paused: it does not fire" : "active"],
+      ["Next", c.paused ? null : c.next.map(fmtTime).join(", ") || "none"],
+      ["Flow", `flows/${c.flow}.yaml`], ["Project", c.project], ...inputs,
+      ["Knowledge", c.knowledge === null ? "the project's defaults at launch" : c.knowledge.join(", ") || "none"],
+      ["Runs as", c.initiator], ["While its last run runs", c.skip_if_running ? "the next firing is skipped" : "it starts another run"]]),
+    el("h4", { text: "Runs it started" }),
+    c.runs.length ? el("div", { class: "list" }, c.runs.map(runItem))
+      : el("p", { class: "muted small", text: "None among the recent runs." }),
+    el("div", { class: "evbar" },
+      el("button", { text: c.paused ? "Resume" : "Pause", onclick: () => schedAct(c, c.paused ? "resume" : "pause") }),
+      el("button", { class: "ghost", text: "Run now", onclick: () => schedAct(c, "trigger") }))]
+    : [el("p", { class: "muted", text: RS.schedError ? `Cannot read the schedules: ${RS.schedError}` : "This schedule no longer exists." })]);
+  const side = el("aside", { class: "fd-side" }, el("p", { class: "muted small", text:
+    "A schedule starts its flow the way the console does, as the person who created it; the run's source is schedule:<name>. The flow file and the knowledge are read when it fires, so edits reach the next run. Create, change or delete schedules with myorch schedule (add, delete) on the command line." }));
+  return [main, side];
+}
+
+async function schedAct(c, op) {
+  if (op === "trigger" && !confirm(`Start ${c.flow}${c.project ? ` on ${c.project}` : ""} now, as schedule ${c.name}?`)) return;
+  try {
+    await api(`/api/schedules/${encodeURIComponent(c.name)}/${op}`, { method: "POST" });
+    await resLoad(); resRender();
+  } catch (e) { alert(e.message); }
 }
 
 // ---- registering a knowledge base or MCP server (myorch/knowledge.py register / check / unregister) ---------

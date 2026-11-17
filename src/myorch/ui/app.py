@@ -249,6 +249,20 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         except (ValueError, RuntimeError) as e:  # KnowledgeError is a ValueError
             return err(str(e))
 
+    async def schedules(_: Request) -> Response:
+        try:
+            return JSONResponse(await svc.schedules())
+        except Exception as e:  # Temporal unreachable: the console shows why instead of failing the view
+            return err(f"Cannot read the schedules: {e}")
+
+    async def schedule_action(req: Request) -> Response:
+        """POST /api/schedules/{name}/{op}: pause | resume | trigger."""
+        try:
+            await svc.schedule_action(req.path_params["name"], req.path_params["op"])
+            return JSONResponse({"ok": True})
+        except Exception as e:  # unknown schedule or action, Temporal down
+            return err(str(e))
+
     async def step_knowledge(req: Request) -> Response:
         try:
             return JSONResponse(await svc.step_knowledge_use(req.path_params["rid"], req.path_params["iid"]))
@@ -361,6 +375,8 @@ def create_app(*, client, store, config: Path, kb_root: Path, data_root: Path, p
         Route("/api/runs/{rid}/attachments", attach, methods=["POST"]),
         Route("/api/runs/{rid}/steps/{iid}", step_files),
         Route("/api/runs/{rid}/steps/{iid}/knowledge", step_knowledge),
+        Route("/api/schedules", schedules),
+        Route("/api/schedules/{name}/{op:str}", schedule_action, methods=["POST"]),
         Route("/api/knowledge", knowledge),
         Route("/api/knowledge/{op:str}", knowledge_edit, methods=["POST"]),
         Route("/api/evals", eval_cases),

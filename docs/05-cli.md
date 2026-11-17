@@ -224,6 +224,8 @@ uv run myorch schedule pause|unpause|delete|trigger <name>
 - It uses a Temporal Schedule. `trigger` fires it once right away.
 - The flow is expanded and the knowledge source versions are resolved only when it fires. So changes to `flows/` or newly synced snapshots take effect at the next firing.
 - The run's source is recorded as `schedule:<name>`.
+- The console lists schedules under **Resources › Schedules**: when each fires and next fires, what it starts, and the runs it started. It can pause, resume and fire one once (**Run now**). Creating and deleting stay here on the command line.
+- Pausing and resuming keep what `--cron` / `--every` said. Before 2026-11-17 a pause replaced it with "Paused via Python SDK"; such a schedule shows "cron (the original expression was overwritten …)" until it is created again.
 
 ---
 

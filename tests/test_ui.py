@@ -201,3 +201,59 @@ def test_a_run_is_started_with_its_images_named_in_the_request(tmp_path):
         asyncio.run(svc.start("development", "sp", {}, "x", images=[b"<svg/>"]))
     with pytest.raises(ValueError, match="at most"):
         asyncio.run(svc.start("development", "sp", {}, "x", images=[_png()] * 7))
+
+
+def test_schedules_show_the_runs_they_started_and_can_be_paused_resumed_and_fired(tmp_path, monkeypatch):
+    import asyncio
+
+    from myorch.engines.temporal import schedules as sch
+    from myorch.ui.service import Service
+
+    calls = []
+
+    async def list_schedules(client):
+        return [{"name": "weekly", "when": "cron 0 9 * * 1 (Asia/Shanghai)", "paused": False, "flow": "development",
+                 "project": "blog", "inputs": {}, "initiator": "jakobhe", "knowledge": None, "skip_if_running": True,
+                 "next": ["2026-11-23T09:00+08:00"], "recent": []},
+                {"name": "idle", "when": "every 1d", "paused": True, "flow": "sweep", "project": None, "inputs": {},
+                 "initiator": "jakobhe", "knowledge": [], "skip_if_running": True, "next": [], "recent": []}]
+
+    async def pause(client, name, paused):
+        calls.append(("pause" if paused else "resume", name))
+
+    async def trigger(client, name):
+        calls.append(("trigger", name))
+
+    monkeypatch.setattr(sch, "list_schedules", list_schedules)
+    monkeypatch.setattr(sch, "pause", pause)
+    monkeypatch.setattr(sch, "trigger", trigger)
+
+    class Relay:
+        client = store = None
+
+        async def runs(self, limit, label=None):
+            return [{"run_id": "development-2", "status": "RUNNING", "source": "schedule:weekly", "requested_at": "b"},
+                    {"run_id": "development-1", "status": "COMPLETED", "source": "console", "requested_at": "a"},
+                    {"run_id": "development-0", "status": "COMPLETED", "source": "schedule:weekly", "requested_at": "z"}]
+
+    svc = Service(Relay(), tmp_path, tmp_path, "jakobhe", log_dir=tmp_path / "log")
+    rows = {r["name"]: r for r in asyncio.run(svc.schedules())}
+    assert [r["run_id"] for r in rows["weekly"]["runs"]] == ["development-2", "development-0"]  # newest first, only its own
+    assert rows["idle"]["runs"] == []
+    for op in ("pause", "resume", "trigger"):
+        asyncio.run(svc.schedule_action("weekly", op))
+    assert calls == [("pause", "weekly"), ("resume", "weekly"), ("trigger", "weekly")]
+    with pytest.raises(ValueError, match="unknown schedule action"):
+        asyncio.run(svc.schedule_action("weekly", "delete"))  # deleting stays on the command line
+
+
+def test_when_a_schedule_fires_survives_pausing():
+    from datetime import timedelta
+
+    from temporalio.client import ScheduleCalendarSpec, ScheduleIntervalSpec, ScheduleSpec
+
+    from myorch.engines.temporal.schedules import when_of
+
+    assert when_of("cron 0 9 * * 1 (Asia/Shanghai)", ScheduleSpec()) == "cron 0 9 * * 1 (Asia/Shanghai)"
+    assert when_of("Paused via Python SDK", ScheduleSpec(intervals=[ScheduleIntervalSpec(every=timedelta(hours=6))])) == "every 6:00:00"
+    assert when_of("Unpaused via Python SDK", ScheduleSpec(calendars=[ScheduleCalendarSpec()])).startswith("cron (")
