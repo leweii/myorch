@@ -53,9 +53,12 @@ item:
     # The project's media repository (project.media): commit what the run added and push it first, so the
     # files are there before a page that uses them. Only additions and changes inside its paths.
     media="$MYORCH_WORKSPACE/media"
+    # It is a sparse, blobless clone: git may fetch a missing object at any time (`add` reads the root
+    # .gitignore, which is outside the sparse paths), and the private repository needs the token for that.
+    mgit() { git -C "$media" -c "http.extraHeader=Authorization: Basic $basic" "$@"; }
     : > /tmp/media-files.txt
     if [ -n "${MYORCH_PROJECT_MEDIA_REPO:-}" ] && [ -d "$media/.git" ]; then
-      git -C "$media" add -A
+      mgit add -A
       python3 - "$media" <<'PY'
     import os, subprocess, sys
     media = sys.argv[1]
@@ -76,9 +79,9 @@ item:
     open("/tmp/media-files.txt", "w").write("".join(f + "\n" for f in files))
     PY
       if [ -s /tmp/media-files.txt ]; then
-        git -C "$media" commit --quiet -m "$MYORCH_BRANCH: $(wc -l < /tmp/media-files.txt | tr -d ' ') file(s) from myorch run $MYORCH_RUN_ID"
-        git -C "$media" -c "http.extraHeader=Authorization: Basic $basic" push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE" \
-          || { git -C "$media" reset --quiet --soft HEAD~1
+        mgit commit --quiet -m "$MYORCH_BRANCH: $(wc -l < /tmp/media-files.txt | tr -d ' ') file(s) from myorch run $MYORCH_RUN_ID"
+        mgit push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE" \
+          || { mgit reset --quiet --soft HEAD~1
                echo "Could not push to $MYORCH_PROJECT_MEDIA_REPO $MYORCH_PROJECT_MEDIA_BASE (it moved, or the token cannot push there). Nothing was pushed; continue the run with from_run." >&2; exit 4; }
       fi
     fi

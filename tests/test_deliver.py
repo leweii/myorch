@@ -364,3 +364,42 @@ def test_media_deletions_and_files_outside_paths_are_refused(tmp_path: Path, cha
     assert ("deletes projects/old.png" if change == "delete" else "2020-post/b.png is outside projects/") in res.stderr
     assert git(morigin, "rev-parse", "master") == before
     assert subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/MD-5-run"], cwd=origin).returncode != 0
+
+
+def test_media_in_a_sparse_blobless_clone_of_a_private_repository(tmp_path: Path):
+    """checkout-branch clones the media repository with --filter=blob:none and only its paths checked out, so the
+    root .gitignore is a missing blob that `git add` fetches on demand. The repository is private: like GitHub,
+    the remote here answers only git calls that carry the token (development-8f05459f failed with exit 128)."""
+    ws, repo, origin = workspace(tmp_path)
+    morigin = tmp_path / "media.git"
+    seed = tmp_path / "seed"
+    git(tmp_path, "init", "-q", "--bare", "-b", "master", str(morigin))
+    git(morigin, "config", "uploadpack.allowFilter", "true")
+    git(morigin, "config", "uploadpack.allowAnySHA1InWant", "true")
+    git(tmp_path, "init", "-q", "-b", "master", str(seed))
+    (seed / ".gitignore").write_text("/.idea\n.DS_Store\n")
+    (seed / "projects").mkdir()
+    (seed / "projects" / "old.png").write_bytes(b"old")
+    (seed / "2020-post").mkdir()
+    (seed / "2020-post" / "a.png").write_bytes(b"post")
+    git(seed, "add", "-A")
+    git(seed, "commit", "-qm", "base")
+    git(seed, "push", "-q", str(morigin), "HEAD:master")
+    serve = tmp_path / "serve"  # the remote: refuses a call without an Authorization header, as GitHub does
+    serve.write_text('#!/bin/sh\nunset GIT_DIR\ncase "$GIT_CONFIG_PARAMETERS" in *"Authorization: Basic"*) exec git "$1" "$2" ;; esac\n'
+                     'echo "fatal: could not read Username for \'https://github.com\'" >&2; exit 128\n')
+    serve.chmod(0o755)
+    media, auth = ws / "media", ["-c", "protocol.ext.allow=always", "-c", "http.extraHeader=Authorization: Basic eA=="]
+    git(tmp_path, *auth, "clone", "-q", "--depth", "1", "--filter=blob:none", "--no-checkout", "--branch", "master",
+        f"ext::{serve} %s {morigin}", str(media))
+    git(media, "config", "protocol.ext.allow", "always")
+    git(media, "sparse-checkout", "set", "--no-cone", "/projects/")
+    git(media, *auth, "checkout", "-q")
+    assert not (media / ".gitignore").exists()
+    (media / "projects" / "sound-pin").mkdir()
+    (media / "projects" / "sound-pin" / "menu.png").write_bytes(b"png")
+    res, manifest = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 0, res.stderr
+    assert git(morigin, "show", "master:projects/sound-pin/menu.png") == "png"
+    assert git(morigin, "show", "master:.gitignore") == "/.idea\n.DS_Store"  # the commit kept the files outside the paths
+    assert json.loads(manifest.read_text())["outputs"]["delivery"]["media"]["files"] == ["projects/sound-pin/menu.png"]

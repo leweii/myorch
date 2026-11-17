@@ -172,20 +172,25 @@ steps:
       # in /sandbox/workspace/media. deliver pushes what the run added there. A replay never gets one.
       if [ -n "${MYORCH_PROJECT_MEDIA_REPO:-}" ] && [ -z "$MYORCH_INPUT_AT" ]; then
         media="$MYORCH_WORKSPACE/media"
+        mauth=(-c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)")
         rm -rf "$media"
-        git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" \
+        git "${mauth[@]}" \
           clone --quiet --depth 1 --filter=blob:none --no-checkout --branch "$MYORCH_PROJECT_MEDIA_BASE" \
           "https://github.com/$MYORCH_PROJECT_MEDIA_REPO.git" "$media"
         if [ -n "${MYORCH_PROJECT_MEDIA_PATHS:-}" ]; then
           # shellcheck disable=SC2086
           git -C "$media" sparse-checkout set --no-cone $(for p in $MYORCH_PROJECT_MEDIA_PATHS; do echo "/${p%/}/"; done)
         fi
-        git -C "$media" -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" checkout --quiet
+        git -C "$media" "${mauth[@]}" checkout --quiet
+        # git reads every .gitignore and .gitattributes on the way to a path, also the ones outside the sparse
+        # paths (the root's), and would fetch them then: without the token (agents, `git status`) that fails.
+        git -C "$media" ls-files -s -- ':(glob)**/.gitignore' ':(glob)**/.gitattributes' | awk '{print $2}' \
+          | git -C "$media" "${mauth[@]}" cat-file --batch > /dev/null
         git -C "$media" config user.name "$MYORCH_GIT_NAME"
         git -C "$media" config user.email "$MYORCH_GIT_EMAIL"
         # Continuing: bring over what the previous run added but never pushed.
         if [ -n "$MYORCH_INPUT_FROM_RUN" ] && [ -d "$prev/media/.git" ]; then
-          git -c safe.directory='*' -C "$prev/media" ls-files -z -m -o --exclude-standard \
+          git -c safe.directory='*' "${mauth[@]}" -C "$prev/media" ls-files -z -m -o --exclude-standard \
             | (cd "$prev/media" && xargs -0 -r cp --parents -t "$media")
         fi
         echo "- checkout-branch: media repository $MYORCH_PROJECT_MEDIA_REPO in $media (${MYORCH_PROJECT_MEDIA_PATHS:-all paths}); files added there are pushed by deliver" >> "$MYORCH_WORKSPACE/memory/MEMORY.md"
