@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Refreshes ~/orca/kb/github-inventory every Monday 08:50, ten minutes before the schedule blog-projects-weekly (09:00).
+     Install:   cp deploy/com.myorch.github-inventory.plist ~/Library/LaunchAgents/ && launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.myorch.github-inventory.plist
+     Remove:    launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/com.myorch.github-inventory.plist -->
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>com.myorch.github-inventory</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/python3</string>
+    <string>/Users/jakobhe/orca/myorch/deploy/github-inventory.py</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict><key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string></dict>
+  <key>StartCalendarInterval</key>
+  <dict><key>Weekday</key><integer>1</integer><key>Hour</key><integer>8</integer><key>Minute</key><integer>50</integer></dict>
+  <key>StandardOutPath</key><string>/tmp/myorch-github-inventory.log</string>
+  <key>StandardErrorPath</key><string>/tmp/myorch-github-inventory.log</string>
+</dict>
+</plist>

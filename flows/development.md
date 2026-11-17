@@ -1,6 +1,6 @@
 # development
 
-The development flow: from one requirement to a pushed branch. All projects share this one flow. In one session it writes the requirements, the technical design and the code changes. The change then goes through review, a risk verdict and human approval. Finally the approved commit is pushed to this run's branch. With the project setting `open_pr` (mdm), `deliver` then opens the pull request and the console shows its link; otherwise a person opens it. myorch never merges: a person decides on merging. Before approval the change does not leave the sandbox and nothing is pushed.
+The development flow: from one requirement to a pushed branch. All projects share this one flow. In one session it writes the requirements, the technical design and the code changes. The change then goes through review, a risk verdict and human approval. Finally the approved commit is pushed to this run's branch. With the project setting `open_pr` (mdm), `deliver` then opens the pull request and the console shows its link; otherwise a person opens it. myorch never merges: a person decides on merging. Before approval the change does not leave the sandbox and nothing is pushed. A project with `auto_publish` (blog) has no approval: the reviewed commit is pushed to the run's branch and to the base branch.
 
 The differences between projects are all in the project pack; you do not pick them when you start a run (see [Differences by project](#differences-by-project)):
 
@@ -36,7 +36,7 @@ The graph above is expanded for mdm, which has the most steps. blog and myorch h
 | Step | What it does | Artifacts |
 |---|---|---|
 | `sync-master` | Clones or updates the repository, force-aligns with `origin/<base>`, initializes submodules. The first clone goes through the mirror repository in the project's shared directory; after that only increments are fetched ([`lib/sync-base.yaml`](lib/sync-base.yaml)) | `outputs.base_sha` |
-| `checkout-branch` | Creates this run's branch. The branch name comes from the project pack's `branch` (mdm: `MD-<ticket number>-myorch-<run ID>`; blog and myorch: `myorch/<run ID>`). Runs the project's `setup.sh`. When continuing, it switches to the previous run's branch; when replaying, to `at`. See the two sections below | `outputs.branch`, `outputs.since` |
+| `checkout-branch` | Creates this run's branch. The branch name comes from the project pack's `branch` (mdm: `MD-<ticket number>-myorch-<run ID>`; blog and myorch: `myorch/<run ID>`). Runs the project's `setup.sh`. With the project's `media`, clones that repository's `paths` into `/sandbox/workspace/media` (continuing: carries over the previous run's unpushed files there). When continuing, it switches to the previous run's branch; when replaying, to `at`. See the two sections below | `outputs.branch`, `outputs.since` |
 | `fetch-ticket` | Only when the project has Jira. Reads the ticket with the Jira REST API (read-only), writes it as `docs/external/ticket.md`, downloads screenshots. See "Reading the ticket" | `docs/external/ticket.md`, `docs/external/attachments/` |
 | `develop` | Does it all in one session: writes the requirements document, writes the technical design, asks all questions that need a human decision at once, changes the code, runs the checks, writes the implementation record, commits once. See "develop" | `docs/requirements.md`, `docs/design.md`, `docs/implementation.md`, one commit |
 | `review-fix` loop | `ci` (the project's `checks.sh`) → `review` (count per project) and `security` in parallel → `verify` checks the findings and computes `blocking` → `fix` (only when `blocking > 0`) → `pack-choose`, `pack-apply` (only when `fix` proposed project pack changes). The number of rounds and what happens when they run out depend on the project. See "The review loop" | `docs/ci/round-N.md`, `docs/review/round-N/` |
@@ -46,7 +46,7 @@ The graph above is expanded for mdm, which has the most steps. blog and myorch h
 | `takeaway-commit` | Same condition. Commits the two files to the repository at `myorch/<date>-<run ID>/` | one commit |
 | `risk-rules` | Computes the number of approvers by rules: changed paths and content, unresolved review findings, failed checks, commits that were not reviewed | `outputs.approvers`, `head_sha` and others |
 | `classify-risk` | Reads the actual diff, judges independently how many approvers are needed, writes a risk note for the approvers | `docs/risk.md` |
-| `human-review` | Human approval. For the number of approvers see "Risk and approval". Passes automatically when the number is 0 | |
+| `human-review` | Human approval. For the number of approvers see "Risk and approval". Passes automatically when the number is 0. Skipped in projects with `auto_publish` (blog) | |
 | `deliver` | Checks that HEAD is the approved commit, pushes the branch, writes the delivery note; with `open_pr`, opens the pull request | `docs/delivery.md`, `outputs.delivery`, `outputs.pr_url` |
 
 - When `develop` decides no code change is needed (`proceed` is false), all later steps are skipped and the run ends normally.
@@ -181,7 +181,7 @@ min(approvers registered for the project, max(risk-rules count, min(classify-ris
 
 - All three projects currently register only one approver, so the number is at most 1.
   - mdm: the core-ng template's default is 1. Database migrations, interface modules, build and dependencies, CI and deployment, environment config, entity field annotations and destructive SQL need 2. mdm's protos submodule needs 2 and spec documents need 1. So every run needs exactly 1.
-  - blog: `default: 1`; every run needs 1.
+  - blog: `default: 1`, but with `auto_publish` the gate is skipped: the number is computed and shown, it does not gate.
   - myorch: `default: 0`; the platform's boundaries (code for sandbox, credentials, profiles, deployment, scheduling and approval) need 2. When both judgments give 0 (for example only docs changed), approval passes automatically and `deliver` pushes the branch right away. Only the branch is pushed; merging and deployment are done by a person.
 - The person who started the run must be one of the approvers (`require_initiator`). An agent's approval does not count.
 - Approval is bound to a commit: `head_sha` is recorded when approval opens, and `deliver` checks it before pushing.
@@ -236,13 +236,13 @@ There is only this one flow. Before 2026-11-10 each project had its own copy (`c
 | takeaway | Yes | No | No |
 | `incident` | No | No | Yes |
 | prompts | From the core-ng template: `develop.md` (Gradle dependencies, `*-interface` contract comments), `review.md` (checks for `*-interface`) | `develop.md` (Jekyll: keep documents short, writing rules, what to ask a person), `review.md` (build, links, writing rules, accidental publishing) | `develop.md` (incident cause analysis, platform matters the design must cover, "What to do after merging"), `risk.md` |
-| Approval | 1 person | Always 1 person (`default: 1` in `risk-rules.yaml`) | 0 or 1 person, by risk |
+| Approval | 1 person | None (`auto_publish`): the reviewed commit goes straight to master | 0 or 1 person, by risk |
 
 To change how one project works: change its project pack (`flows.development`, `prompts/`, `risk-rules.yaml`), then run `uv run myorch project sync <project>`. Changing `flows/development.yaml` or a fragment affects all projects.
 
 ### blog
 
-Personal blog (`leweii/leweii.github.io`). Changes are small, so review is light: 1 reviewer looks once, blocking findings are fixed once and not reviewed again, and the loop accepts when it runs out of rounds. Nobody reviewed the commits after the fix; `risk-rules` lists them, and the "review" section of the delivery note lists the problems that were not fixed. The branch is `myorch/<run ID>`; it never pushes to master: pushing to master puts the blog live.
+Personal blog (`leweii/leweii.github.io`). Changes are small, so review is light: 1 reviewer looks once, blocking findings are fixed once and not reviewed again, and the loop accepts when it runs out of rounds. Nobody reviewed the commits after the fix; `risk-rules` lists them, and the "review" section of the delivery note lists the problems that were not fixed. Images go to the media repository (`media` in `project.yaml`: `leweii/pic.leweii.github.io`, only under `projects/`), which `checkout-branch` clones into `/sandbox/workspace/media` and `deliver` pushes before the blog; the Projects page and detail pages follow the pack's `guide/projects-page.md`. The branch is `myorch/<run ID>`. Since 2026-11-17 (`auto_publish`) nobody approves: `human-review` is skipped and `deliver` pushes the reviewed commit to the branch and then fast-forwards master, which puts it live. If master moved meanwhile, `deliver` fails and nothing is published.
 
 - `prompts/develop.md`: for posts, read the writing rules; for theme changes, read the development guide. Keep the requirements document and technical design short, and write "Not applicable" for parts that do not apply. The opinions and facts in a post, whether it is public (`published`, encrypted posts), and site-wide changes (`_config.yml`, layouts, dependencies, deployment) must all be asked of a person.
 - `prompts/review.md`: will the build break, will links break, will pages render wrong; writing rules, front matter, accidental publishing.

@@ -168,6 +168,28 @@ steps:
       fi
       git config user.name "$MYORCH_GIT_NAME"
       git config user.email "$MYORCH_GIT_EMAIL"
+      # The project's media repository (project.media, e.g. the blog's images): only its `paths`, no history,
+      # in /sandbox/workspace/media. deliver pushes what the run added there. A replay never gets one.
+      if [ -n "${MYORCH_PROJECT_MEDIA_REPO:-}" ] && [ -z "$MYORCH_INPUT_AT" ]; then
+        media="$MYORCH_WORKSPACE/media"
+        rm -rf "$media"
+        git -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" \
+          clone --quiet --depth 1 --filter=blob:none --no-checkout --branch "$MYORCH_PROJECT_MEDIA_BASE" \
+          "https://github.com/$MYORCH_PROJECT_MEDIA_REPO.git" "$media"
+        if [ -n "${MYORCH_PROJECT_MEDIA_PATHS:-}" ]; then
+          # shellcheck disable=SC2086
+          git -C "$media" sparse-checkout set --no-cone $(for p in $MYORCH_PROJECT_MEDIA_PATHS; do echo "/${p%/}/"; done)
+        fi
+        git -C "$media" -c "http.extraHeader=Authorization: Basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)" checkout --quiet
+        git -C "$media" config user.name "$MYORCH_GIT_NAME"
+        git -C "$media" config user.email "$MYORCH_GIT_EMAIL"
+        # Continuing: bring over what the previous run added but never pushed.
+        if [ -n "$MYORCH_INPUT_FROM_RUN" ] && [ -d "$prev/media/.git" ]; then
+          git -c safe.directory='*' -C "$prev/media" ls-files -z -m -o --exclude-standard \
+            | (cd "$prev/media" && xargs -0 -r cp --parents -t "$media")
+        fi
+        echo "- checkout-branch: media repository $MYORCH_PROJECT_MEDIA_REPO in $media (${MYORCH_PROJECT_MEDIA_PATHS:-all paths}); files added there are pushed by deliver" >> "$MYORCH_WORKSPACE/memory/MEMORY.md"
+      fi
       # Project-specific preparation (link baked dependencies, write build config, ...).
       if [ -f "$MYORCH_WORKSPACE/project/setup.sh" ]; then bash "$MYORCH_WORKSPACE/project/setup.sh"; fi
       if [ -n "$since" ]; then
@@ -834,7 +856,8 @@ steps:
   # (myorch ui, the Changes tab) or with `myorch review <run>`, and approved there.
   - id: human-review
     needs: [classify-risk]
-    when: "steps.develop.outputs.proceed != false and not inputs.at"   # a replay (inputs.at set) never asks for approval
+    # A replay (inputs.at set) never asks for approval; neither does a project with flows.development.auto_publish.
+    when: "steps.develop.outputs.proceed != false and not inputs.at and not project.flows.development.auto_publish"
     approval:
       # The stricter of the two classifiers (the model's at most 2), capped at the people the
       # project has registered as approvers.
@@ -851,6 +874,11 @@ steps:
   # without it, people open the PR themselves.
   - use: lib/deliver.yaml
     id: deliver
-    needs: [human-review]
+    needs: [human-review, risk-rules]
     when: "steps.develop.outputs.proceed != false and not inputs.at"   # a replay (inputs.at set) never delivers
-    with: {approved: "{{approvals.human-review.subject}}", open_pr: "{{project.flows.development.open_pr}}"}
+    # With auto_publish nobody approves: the commit risk-rules fixed (head_sha) is what is pushed, also to the base branch.
+    with:
+      approved: "{{approvals.human-review.subject}}"
+      open_pr: "{{project.flows.development.open_pr}}"
+      publish: "{{project.flows.development.auto_publish}}"
+      reviewed: "{{steps.risk-rules.outputs.head_sha}}"

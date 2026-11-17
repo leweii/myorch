@@ -71,6 +71,7 @@ The final authority for the fields is the `Project` model in `src/myorch/project
 | `repo` | ✓ | `owner/name` |
 | `base` | | Base branch, default `main` |
 | `submodules` | | Other repositories (`owner/name`) to clone along with it. The GitHub provider has read-only access to them |
+| `media` | | A second repository runs may add files to: `repo` (`owner/name`), `base` (default `main`), `paths` (directories runs may write to; empty: anywhere). `checkout-branch` clones only `paths` (sparse, no history) into `/sandbox/workspace/media`; `deliver` commits what the run added there and pushes it to `base`, fast-forward only, before the project's branch. Deletions and files outside `paths` are refused. The GitHub provider can push to it (regenerate the profile with `myorch project github-profile`, and give the token access). blog: its images, `leweii/pic.leweii.github.io`, which syncs to img.jakobhe.com |
 | `identity.account` | ✓ | The GitHub account to act as (used when generating the GitHub provider profile) |
 | `identity.git_name` / `git_email` | ✓ | Author of commits. In the sandbox these are `MYORCH_GIT_NAME` and `MYORCH_GIT_EMAIL` |
 | `identity.self_is_operator`, `identity.trigger` | | Reserved fields (how myorch was summoned in the days of the GitHub channel). No code uses them now |
@@ -93,7 +94,7 @@ The final authority for the fields is the `Project` model in `src/myorch/project
 | `sweep` | | Which files the sweep flow looks at: `paths` (directories or files; leave out for the whole repository), `include`, `exclude` (globs, `**` allowed), `chunk` (files per batch, default 20, 1–200) |
 | `policy` | | Name of the policy file in the project pack. Used when a profile says `policy: project` |
 | `shared` | | Read-write directories (caches) shared across runs and mounted in every step, e.g. `[gradle]` → `/sandbox/workspace/shared/gradle`. The data is in `shared/<project>/gradle` on the volume |
-| `flows.development` | | How the shared development flow runs: `reviewers`, `max_rounds`, `security`, `on_exhausted`, `takeaway`, `incident`, `open_pr`. See "Project settings for the shared flows" |
+| `flows.development` | | How the shared development flow runs: `reviewers`, `max_rounds`, `security`, `on_exhausted`, `takeaway`, `incident`, `open_pr`, `auto_publish`. See "Project settings for the shared flows" |
 | `approvers` | | People who can approve changes in this project. The number of approvers that development's risk verdict asks for is capped at the size of this list. Empty means no cap |
 | `review` | | Only one value, `local` (default): changes do not leave the sandbox before approval. Can be left out |
 | `allow` | | Reserved field (GitHub accounts that can command myorch). No code uses it now |
@@ -153,6 +154,7 @@ Flows are shared by all projects. The project decides their shape. `flows.develo
 | `takeaway` | `false` | | Commits the task information and takeaway to `myorch/<date>-<run_id>/` in the project repository. learn reads them from the base branch. Only turn it on in repositories that welcome such a directory |
 | `incident` | `false` | | Shows the `incident` input: a run that went wrong (in any project), mounted read-only for develop. How to use it is written in the project's `prompts/develop.md` |
 | `open_pr` | `false` | | After approval, `deliver` also opens the pull request with the project's GitHub provider (or reuses the branch's open one) and outputs `pr_url`. The console shows it in the run's conversation, and Slack and the run list show it too. The provider needs `POST /repos/<repo>/pulls` (`myorch project github-profile` allows it). Off: people open the PR themselves |
+| `auto_publish` | `false` | | **No human approval.** `human-review` is skipped, whoever started the run, and `deliver` pushes the reviewed commit (the one `risk-rules` fixed) to the run's branch and then to the base branch, fast-forward only. If the base moved or is protected the step fails and nothing is published. Risk rules are still computed and shown, they just do not gate. Meant for a repository where the owner wants every change live (blog). The provider token needs push access to the base branch |
 
 - Templates can set these. The project overrides the template (`project.yaml` is deep-merged).
 - Flows pass `{{project.flows.development.x}}` to fragment parameters (passed with its type, see [8. Flow syntax · Fragments](08-flow-syntax.md#fragments-use)), and use expressions such as `if: "project.flows.development.takeaway"` to decide whether some steps and inputs exist (see [8. Flow syntax · Per-project trimming](08-flow-syntax.md#per-project-trimming-if)).

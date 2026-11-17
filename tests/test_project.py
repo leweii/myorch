@@ -127,6 +127,17 @@ def test_github_provider_profile_scopes_to_the_project(root):
     assert prof["id"] == "github-mdm"
 
 
+def test_github_provider_profile_lets_runs_push_to_the_media_repo(root):
+    from myorch.project import Media, github_provider_profile
+
+    project = load_project(root, "mdm").model_copy(update={"media": Media(repo="o/pic", base="master", paths=["projects/"])})
+    git = [r["allow"] for r in yaml.safe_load(github_provider_profile(project))["endpoints"][0]["rules"]]
+    assert {"method": "POST", "path": "/o/pic.git/git-receive-pack"} in git
+    assert {"method": "POST", "path": "/o/pic.git/git-upload-pack"} in git
+    ro = [r["allow"] for r in yaml.safe_load(github_provider_profile(project, read_only=True))["endpoints"][0]["rules"]]
+    assert {"method": "POST", "path": "/o/pic.git/git-receive-pack"} not in ro
+
+
 def test_github_provider_profile_read_only(root):
     from myorch.project import github_provider_profile
 

@@ -237,8 +237,130 @@ def test_without_open_pr_no_platform_api_is_called(tmp_path: Path):
     assert json.loads(manifest.read_text())["outputs"]["pr_url"] == "" and gh_calls(calls) == []
 
 
+def publish_step(auto: bool = True) -> dict:
+    project = {**PROJECT, "flows": {"development": {"auto_publish": auto}}}
+    flow = yaml.safe_load(read_flow_file(FLOWS / "development.yaml", {"task": "x"}, project))
+    return next(s for s in flow["steps"] if s.get("id") == "deliver"), next(s for s in flow["steps"] if s.get("id") == "human-review")
+
+
+def run_published(tmp_path: Path, ws: Path, repo: Path, reviewed: str):
+    deliver, _ = publish_step()
+    script = deliver["prompt"].replace("{{approvals.human-review.subject}}", "").replace("{{steps.risk-rules.outputs.head_sha}}", reviewed)
+    out = tmp_path / "out"
+    out.mkdir(exist_ok=True)
+    env = {**os.environ, "MYORCH_PROJECT_BASE": "main", "MYORCH_PROJECT_REPO": "o/r", "MYORCH_BRANCH": "MD-5-run",
+           "MYORCH_WORKSPACE": str(ws), "MYORCH_OUT_DIR": str(out), "MYORCH_INPUT_TICKET": "MD-5",
+           "GITHUB_TOKEN": "unused", "MYORCH_PROJECT_PR_TEMPLATE": "", "MYORCH_RUN_ID": "development-1"}
+    return subprocess.run(["bash", "-c", script], cwd=repo, env=env, capture_output=True, text=True), out / "manifest.json"
+
+
+def test_auto_publish_skips_approval_and_pushes_the_reviewed_commit_to_base(tmp_path: Path):
+    deliver, review = publish_step()
+    from myorch.core.expr import evaluate
+    ctx = {"inputs": {"at": ""}, "steps": {"develop": {"outputs": {"proceed": True}}}}
+    assert evaluate(review["when"], {**ctx, "project": {"flows": {"development": {"auto_publish": True}}}}) is False
+    assert evaluate(review["when"], {**ctx, "project": {"flows": {"development": {"auto_publish": False}}}}) is True
+    ws, repo, origin = workspace(tmp_path)
+    head = git(repo, "rev-parse", "HEAD")
+    res, manifest = run_published(tmp_path, ws, repo, head)
+    assert res.returncode == 0, res.stderr
+    assert git(origin, "rev-parse", "refs/heads/main") == head and git(origin, "rev-parse", "refs/heads/MD-5-run") == head
+    d = json.loads(manifest.read_text())["outputs"]["delivery"]
+    assert d["published"] is True and "Published straight to main without approval" in d["description"]
+
+
+def test_auto_publish_refuses_a_commit_that_was_not_reviewed(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    reviewed = git(repo, "rev-parse", "HEAD")
+    (repo / "A.java").write_text("class A { int y; }\n")
+    git(repo, "commit", "-qam", "unreviewed")
+    res, _ = run_published(tmp_path, ws, repo, reviewed)
+    assert res.returncode == 3 and "HEAD changed" in res.stderr
+    assert git(origin, "rev-parse", "refs/heads/main") != git(repo, "rev-parse", "HEAD")
+
+
+def test_auto_publish_does_not_overwrite_a_base_that_moved(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    other = tmp_path / "other"
+    git(tmp_path, "clone", "-q", str(origin), str(other))
+    (other / "B.txt").write_text("b\n")
+    git(other, "add", "-A")
+    git(other, "commit", "-qm", "someone else")
+    git(other, "push", "-q", "origin", "main")
+    moved = git(origin, "rev-parse", "refs/heads/main")
+    res, _ = run_published(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"))
+    assert res.returncode == 4 and "could not fast-forward" in res.stderr
+    assert git(origin, "rev-parse", "refs/heads/main") == moved
+
+
+def test_without_auto_publish_the_approval_gate_stays():
+    deliver, review = publish_step(auto=False)
+    assert 'export DELIVER_PUBLISH="false"' in deliver["prompt"]
+    off = yaml.safe_load(read_flow_file(FLOWS / "development.yaml", {"task": "x"}, PROJECT))
+    assert any(s.get("id") == "human-review" and "approval" in s for s in off["steps"])
+
+
 def test_open_pr_follows_the_project_setting():
     on = {**PROJECT, "flows": {"development": {"open_pr": True}}}
     flow = yaml.safe_load(read_flow_file(FLOWS / "development.yaml", {"task": "x"}, on))
     step = next(s for s in flow["steps"] if s.get("id") == "deliver")
     assert 'export DELIVER_OPEN_PR="true"' in step["prompt"]
+
+
+def media_repo(tmp_path: Path, ws: Path) -> Path:
+    """A media repository (project.media) as checkout-branch leaves it: a clone of its base in <ws>/media."""
+    origin = tmp_path / "media.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "master", str(origin))
+    media = ws / "media"
+    git(tmp_path, "clone", "-q", str(origin), str(media))
+    (media / "projects").mkdir()
+    (media / "projects" / "old.png").write_bytes(b"old")
+    (media / "2020-post").mkdir()
+    (media / "2020-post" / "a.png").write_bytes(b"post")
+    git(media, "add", "-A")
+    git(media, "commit", "-qm", "base")
+    git(media, "push", "-q", "origin", "HEAD:master")
+    return origin
+
+
+MEDIA_ENV = {"MYORCH_PROJECT_MEDIA_REPO": "o/pic", "MYORCH_PROJECT_MEDIA_BASE": "master", "MYORCH_PROJECT_MEDIA_PATHS": "projects/"}
+
+
+def test_media_files_are_pushed_before_the_branch(tmp_path: Path):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    (ws / "media" / "projects" / "sound-pin").mkdir()
+    (ws / "media" / "projects" / "sound-pin" / "menu.png").write_bytes(b"png")
+    res, manifest = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 0, res.stderr
+    assert git(morigin, "show", "master:projects/sound-pin/menu.png") == "png"
+    assert git(origin, "rev-parse", "refs/heads/MD-5-run") == git(repo, "rev-parse", "HEAD")
+    d = json.loads(manifest.read_text())["outputs"]["delivery"]
+    assert d["media"] == {"repo": "o/pic", "files": ["projects/sound-pin/menu.png"]}
+    assert "Also pushed to o/pic (master), before the branch: projects/sound-pin/menu.png" in d["description"]
+
+
+def test_no_media_changes_push_nothing_there(tmp_path: Path):
+    ws, repo, _ = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    before = git(morigin, "rev-parse", "master")
+    res, manifest = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode == 0, res.stderr
+    assert git(morigin, "rev-parse", "master") == before
+    assert json.loads(manifest.read_text())["outputs"]["delivery"]["media"] is None
+
+
+@pytest.mark.parametrize("change", ["delete", "outside"])
+def test_media_deletions_and_files_outside_paths_are_refused(tmp_path: Path, change: str):
+    ws, repo, origin = workspace(tmp_path)
+    morigin = media_repo(tmp_path, ws)
+    before = git(morigin, "rev-parse", "master")
+    if change == "delete":
+        (ws / "media" / "projects" / "old.png").unlink()
+    else:
+        (ws / "media" / "2020-post" / "b.png").write_bytes(b"x")
+    res, _ = run(tmp_path, ws, repo, git(repo, "rev-parse", "HEAD"), env_extra=MEDIA_ENV)
+    assert res.returncode != 0
+    assert ("deletes projects/old.png" if change == "delete" else "2020-post/b.png is outside projects/") in res.stderr
+    assert git(morigin, "rev-parse", "master") == before
+    assert subprocess.run(["git", "rev-parse", "--verify", "-q", "refs/heads/MD-5-run"], cwd=origin).returncode != 0

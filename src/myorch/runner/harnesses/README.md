@@ -5,7 +5,7 @@ Where the [myorch docs](https://leweii.github.io/myorch/) describe what is in th
 
 | | Described in |
 |---|---|
-| [`(this directory)`](.) | [1. Overview: directories and core concepts › Glossary](https://leweii.github.io/myorch/#01-overview--glossary) · [3. Architecture › Code map](https://leweii.github.io/myorch/#03-architecture--code-map) |
+| [`(this directory)`](.) | [1. Overview: directories and core concepts › Glossary](https://leweii.github.io/myorch/#01-overview--glossary) · [3. Architecture › Code map](https://leweii.github.io/myorch/#03-architecture--code-map) · [7. Project packs › Skills](https://leweii.github.io/myorch/#07-projects--skills) |
 | [`base.py`](base.py) | [myorch docs › Platform features](https://leweii.github.io/myorch/#index--platform-features) |
 | [`claude_code.py`](claude_code.py) | [3. Architecture › Code map](https://leweii.github.io/myorch/#03-architecture--code-map) |
 | [`script.py`](script.py) | [3. Architecture › Code map](https://leweii.github.io/myorch/#03-architecture--code-map) |

@@ -3667,6 +3667,8 @@ uv run myorch schedule pause|unpause|delete|trigger &lt;name&gt;
 <li>It uses a Temporal Schedule. <code>trigger</code> fires it once right away.</li>
 <li>The flow is expanded and the knowledge source versions are resolved only when it fires. So changes to <a class="code" href="https://github.com/leweii/myorch/tree/main/flows"><code>flows/</code></a> or newly synced snapshots take effect at the next firing.</li>
 <li>The run's source is recorded as <code>schedule:&lt;name&gt;</code>.</li>
+<li>The console lists schedules under <strong>Resources › Schedules</strong>: when each fires and next fires, what it starts, and the runs it started. It can pause, resume and fire one once (<strong>Run now</strong>). Creating and deleting stay here on the command line.</li>
+<li>Pausing and resuming keep what <code>--cron</code> / <code>--every</code> said. Before 2026-11-17 a pause replaced it with "Paused via Python SDK"; such a schedule shows "cron (the original expression was overwritten …)" until it is created again.</li>
 </ul>
 <hr />
 <h2 id="05-cli--view-runs">View runs</h2>
@@ -4232,6 +4234,11 @@ uv run myorch run flows/onboard.yaml --project &lt;name&gt;  # analyses the repo
 <td>Other repositories (<code>owner/name</code>) to clone along with it. The GitHub provider has read-only access to them</td>
 </tr>
 <tr>
+<td><code>media</code></td>
+<td></td>
+<td>A second repository runs may add files to: <code>repo</code> (<code>owner/name</code>), <code>base</code> (default <code>main</code>), <code>paths</code> (directories runs may write to; empty: anywhere). <code>checkout-branch</code> clones only <code>paths</code> (sparse, no history) into <code>/sandbox/workspace/media</code>; <code>deliver</code> commits what the run added there and pushes it to <code>base</code>, fast-forward only, before the project's branch. Deletions and files outside <code>paths</code> are refused. The GitHub provider can push to it (regenerate the profile with <code>myorch project github-profile</code>, and give the token access). blog: its images, <code>leweii/pic.leweii.github.io</code>, which syncs to img.jakobhe.com</td>
+</tr>
+<tr>
 <td><code>identity.account</code></td>
 <td>✓</td>
 <td>The GitHub account to act as (used when generating the GitHub provider profile)</td>
@@ -4322,6 +4329,11 @@ uv run myorch run flows/onboard.yaml --project &lt;name&gt;  # analyses the repo
 <td>Which knowledge sources this project's runs mount by default (a list of names). You can add or remove some when you start a run. See "Knowledge sources"</td>
 </tr>
 <tr>
+<td><code>skills</code></td>
+<td></td>
+<td>Which skill sources (registered with <code>skill: true</code>) this project's runs install by default (a list of names). Chosen at start like <code>knowledge</code>. See "Skills"</td>
+</tr>
+<tr>
 <td><code>sweep</code></td>
 <td></td>
 <td>Which files the sweep flow looks at: <code>paths</code> (directories or files; leave out for the whole repository), <code>include</code>, <code>exclude</code> (globs, <code>**</code> allowed), <code>chunk</code> (files per batch, default 20, 1–200)</td>
@@ -4339,7 +4351,7 @@ uv run myorch run flows/onboard.yaml --project &lt;name&gt;  # analyses the repo
 <tr>
 <td><code>flows.development</code></td>
 <td></td>
-<td>How the shared development flow runs: <code>reviewers</code>, <code>max_rounds</code>, <code>security</code>, <code>on_exhausted</code>, <code>takeaway</code>, <code>incident</code>, <code>open_pr</code>. See "Project settings for the shared flows"</td>
+<td>How the shared development flow runs: <code>reviewers</code>, <code>max_rounds</code>, <code>security</code>, <code>on_exhausted</code>, <code>takeaway</code>, <code>incident</code>, <code>open_pr</code>, <code>auto_publish</code>. See "Project settings for the shared flows"</td>
 </tr>
 <tr>
 <td><code>approvers</code></td>
@@ -4448,6 +4460,12 @@ jira: {url: &quot;https://&lt;site&gt;&quot;, key: MD, auth: basic, email: &lt;e
 <td><code>false</code></td>
 <td></td>
 <td>After approval, <code>deliver</code> also opens the pull request with the project's GitHub provider (or reuses the branch's open one) and outputs <code>pr_url</code>. The console shows it in the run's conversation, and Slack and the run list show it too. The provider needs <code>POST /repos/&lt;repo&gt;/pulls</code> (<code>myorch project github-profile</code> allows it). Off: people open the PR themselves</td>
+</tr>
+<tr>
+<td><code>auto_publish</code></td>
+<td><code>false</code></td>
+<td></td>
+<td><strong>No human approval.</strong> <code>human-review</code> is skipped, whoever started the run, and <code>deliver</code> pushes the reviewed commit (the one <code>risk-rules</code> fixed) to the run's branch and then to the base branch, fast-forward only. If the base moved or is protected the step fails and nothing is published. Risk rules are still computed and shown, they just do not gate. Meant for a repository where the owner wants every change live (blog). The provider token needs push access to the base branch</td>
 </tr>
 </tbody>
 </table>
@@ -4654,6 +4672,21 @@ default: 0
 <li>The project's <code>knowledge</code> sets which ones are mounted by default. You can add or remove some when you start a run: on the command line with <code>myorch run … --kb a,-b</code> (<code>a</code> added, <code>-b</code> removed), in the console by ticking them in <strong>New run</strong>.</li>
 <li>By default they are mounted only in agent steps. An agent step with <code>knowledge: false</code> does not get them. A script step gets them only with <code>knowledge: true</code>. MCP knowledge sources are only given to agent steps.</li>
 <li>When a run starts, the mandate records the snapshot version of each knowledge source. If a knowledge source changes later, this run still sees the same content.</li>
+</ul>
+<h3 id="07-projects--skills">Skills</h3>
+<p>A <code>dir</code> or <code>git</code> knowledge source with <code>skill: true</code> holds agent skills instead of reference material. It is registered, scanned, snapshotted and chosen exactly like the other sources (a folder on the host, or a GitHub repository cloned with a provider; list it in the project's <code>skills</code>, change it per run with <code>--kb</code> or in the <strong>New run</strong> panel). The difference is what a step does with it: the snapshot is not listed in the prompt. Before the harness starts, the runner copies the skills into the directory where that harness looks for them.</p>
+<pre><code class="language-yaml"># myorch-knowledge/_sources/team-skills.yaml
+kind: git
+repo: acme/agent-skills
+ref: main
+provider: github-read
+skill: true
+</code></pre>
+<ul>
+<li>A snapshot with a <code>SKILL.md</code> at its root is one skill, named after the source. Otherwise every <code>&lt;dir&gt;/SKILL.md</code> and <code>skills/&lt;dir&gt;/SKILL.md</code> in it is a skill, named after its directory (so a repository of many skills works as it is). Use <code>include</code> to take only some.</li>
+<li>Where the skills go depends on the harness (<code>skills_dir</code> in <a class="code" href="https://github.com/leweii/myorch/tree/main/src/myorch/runner/harnesses"><code>runner/harnesses/</code></a>): <code>claude-code</code> gets <code>$CLAUDE_CONFIG_DIR/skills/&lt;name&gt;/</code> (the step's session directory, so the repository is not touched). The <code>script</code> harness has no skills. A new harness declares its own directory.</li>
+<li>The console's <strong>Resources</strong> view lists skill sources in their own group, and a project's page shows its <code>skills</code>.</li>
+<li>A snapshot without any <code>SKILL.md</code> writes a warning to the step's log. <code>knowledge: false</code> on a step also leaves out its skills. An MCP source cannot hold skills.</li>
 </ul>
 <h3 id="07-projects--mcp-allows-only-registered-tools">MCP allows only registered tools</h3>
 <p>When an agent step starts, <code>/sandbox/bin/myorch-mcp</code> runs before claude:</p>
@@ -5482,8 +5515,8 @@ item:                             # one step (has id) or one loop (has loop). Th
 </tr>
 <tr>
 <td><code>deliver</code></td>
-<td>A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note <code>docs/delivery.md</code>, outputs <code>delivery</code>. Refuses to push when the branch changed after approval or the current branch is the base branch. With <code>open_pr</code>, also opens (or reuses) the pull request and outputs <code>pr_url</code>; otherwise calls no platform API</td>
-<td><code>approved</code> (required: the approved commit), <code>open_pr</code> (default <code>false</code>; development passes the project's <code>flows.development.open_pr</code>)</td>
+<td>A single step (script, dev-git): after approval, pushes the approved commit, writes the delivery note <code>docs/delivery.md</code>, outputs <code>delivery</code>. Refuses to push when the branch changed after approval or the current branch is the base branch. With <code>open_pr</code>, also opens (or reuses) the pull request and outputs <code>pr_url</code>; otherwise calls no platform API. With the project's <code>media</code>, first commits and pushes what the run added in <code>/sandbox/workspace/media</code> (additions inside its <code>paths</code> only)</td>
+<td><code>approved</code> (required: the approved commit), <code>open_pr</code> (default <code>false</code>; development passes the project's <code>flows.development.open_pr</code>), <code>publish</code> and <code>reviewed</code> (default <code>false</code> and empty; with the project's <code>flows.development.auto_publish</code> there is no approval: <code>reviewed</code> is the commit <code>risk-rules</code> fixed, and it is also pushed to the base branch, fast-forward only)</td>
 <td>development</td>
 </tr>
 </tbody>

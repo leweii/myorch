@@ -21,13 +21,15 @@ description: After approval, pushes the branch, writes the delivery notes and, i
 params:
   approved: {type: string, required: true}   # the approved commit
   open_pr:  {type: bool, default: false}      # also open (or reuse) the pull request and output pr_url
+  publish:  {type: bool, default: false}      # no approval ran: push the reviewed commit to the base branch too (fast-forward only)
+  reviewed: {type: string, default: ""}       # with publish: the commit that was reviewed (what `approved` is otherwise)
 
 item:
   harness: script
   profile: dev-git
   limits: { timeout: 10m, retries: 1 }
   outputs:
-    delivery: "What was pushed (channels use it to tell people): branch, base, commit, title, ticket, repo, description, pr_template"
+    delivery: "What was pushed (channels use it to tell people): branch, base, commit, title, ticket, repo, description, pr_template, published, media (repo and files pushed to the project's media repository, or null)"
     pr_url: "The pull request's link, when open_pr is set (empty otherwise)"
   prompt: |
     set -euo pipefail
@@ -37,6 +39,10 @@ item:
     fi
     export DELIVER_APPROVED="{{params.approved}}"
     export DELIVER_OPEN_PR="{{params.open_pr}}"
+    export DELIVER_PUBLISH="{{params.publish}}"
+    case "$DELIVER_PUBLISH" in true|True|1|yes) publish=1 ;; *) publish=0 ;; esac
+    # Published without an approval gate: the commit the risk step fixed takes the place of the approved one.
+    if [ "$publish" = 1 ] && [ -z "$DELIVER_APPROVED" ]; then DELIVER_APPROVED="{{params.reviewed}}"; fi
     head=$(git rev-parse HEAD)
     # Push exactly what was approved: refuse if the branch moved after the approval gate.
     if [ -z "$DELIVER_APPROVED" ] || [ "$head" != "$DELIVER_APPROVED" ]; then
@@ -44,7 +50,44 @@ item:
       exit 3
     fi
     basic=$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')
+    # The project's media repository (project.media): commit what the run added and push it first, so the
+    # files are there before a page that uses them. Only additions and changes inside its paths.
+    media="$MYORCH_WORKSPACE/media"
+    : > /tmp/media-files.txt
+    if [ -n "${MYORCH_PROJECT_MEDIA_REPO:-}" ] && [ -d "$media/.git" ]; then
+      git -C "$media" add -A
+      python3 - "$media" <<'PY'
+    import os, subprocess, sys
+    media = sys.argv[1]
+    paths = [p.rstrip("/") + "/" for p in os.environ.get("MYORCH_PROJECT_MEDIA_PATHS", "").split()]
+    out = subprocess.run(["git", "-C", media, "-c", "core.quotepath=false", "diff", "--cached", "--name-status", "--no-renames"],
+                         capture_output=True, text=True, check=True).stdout
+    bad, files = [], []
+    for line in out.splitlines():
+        status, path = line.split("\t", 1)
+        if status.startswith("D"):
+            bad.append(f"deletes {path}")  # the sync to the CDN deletes it too, and old pages lose it
+        elif paths and not any(path.startswith(p) for p in paths):
+            bad.append(f"{path} is outside {' '.join(paths)}")
+        else:
+            files.append(path)
+    if bad:
+        sys.exit("Not pushing the media repository: " + "; ".join(bad) + ". Nothing was pushed.")
+    open("/tmp/media-files.txt", "w").write("".join(f + "\n" for f in files))
+    PY
+      if [ -s /tmp/media-files.txt ]; then
+        git -C "$media" commit --quiet -m "$MYORCH_BRANCH: $(wc -l < /tmp/media-files.txt | tr -d ' ') file(s) from myorch run $MYORCH_RUN_ID"
+        git -C "$media" -c "http.extraHeader=Authorization: Basic $basic" push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_MEDIA_BASE" \
+          || { git -C "$media" reset --quiet --soft HEAD~1
+               echo "Could not push to $MYORCH_PROJECT_MEDIA_REPO $MYORCH_PROJECT_MEDIA_BASE (it moved, or the token cannot push there). Nothing was pushed; continue the run with from_run." >&2; exit 4; }
+      fi
+    fi
     git -c "http.extraHeader=Authorization: Basic $basic" push --quiet -u origin "HEAD:refs/heads/$MYORCH_BRANCH"
+    if [ "$publish" = 1 ]; then
+      # Fast-forward only (no --force): if the base branch moved since this run started, fail instead of overwriting it.
+      git -c "http.extraHeader=Authorization: Basic $basic" push --quiet origin "HEAD:refs/heads/$MYORCH_PROJECT_BASE" \
+        || { echo "Pushed $MYORCH_BRANCH, but could not fast-forward $MYORCH_PROJECT_BASE (it moved, or is protected). Nothing was published; continue the run with from_run." >&2; exit 4; }
+    fi
     python3 - <<'PY'
     import glob, json, os, re, subprocess
     ws = os.environ["MYORCH_WORKSPACE"]
@@ -145,6 +188,18 @@ item:
     risk_md = read("docs/risk.md")
     risk = "\n\n".join(s for s in (section(risk_md, "Verdict"), section(risk_md, "For the approvers to check")) if s) or "(no risk note)"
 
+    published = os.environ.get("DELIVER_PUBLISH", "").strip().lower() in ("true", "1", "yes")
+    undo = (f"Published straight to {base} without approval: undo with git revert of the commits this run added to {base} (up to {commit[:12]}). The branch {branch} stays."
+            if published else
+            f"Before merging: drop the branch {branch}. After merging: revert the commits this merge brought in ({base}..{commit[:12]}).")
+
+    media_repo = os.environ.get("MYORCH_PROJECT_MEDIA_REPO", "")
+    media_files = [l for l in open("/tmp/media-files.txt", encoding="utf-8").read().splitlines() if l] if os.path.exists("/tmp/media-files.txt") else []
+    if media_files:
+        media_base = os.environ.get("MYORCH_PROJECT_MEDIA_BASE", "")
+        changed += (f"\n\nAlso pushed to {media_repo} ({media_base}), before the branch: "
+                    + ", ".join(media_files[:20]) + (f" and {len(media_files) - 20} more" if len(media_files) > 20 else ""))
+        undo += f" The files in {media_repo} stay; delete them there only once no page uses them."
     head_lines = f"# {title}\n" + (f"Ticket: {ticket}\n" if ticket else "")
     description = f"""{head_lines}
     ## What changed
@@ -164,7 +219,7 @@ item:
     {risk}
 
     ## How to undo
-    Before merging: drop the branch {branch}. After merging: revert the commits this merge brought in ({base}..{commit[:12]}).
+    {undo}
     """
     description = description.strip() + "\n"
     os.makedirs(os.path.join(ws, "docs"), exist_ok=True)
@@ -174,8 +229,11 @@ item:
     pr_template = open(tpl, encoding="utf-8").read().strip() if tpl and os.path.exists(tpl) else ""
 
     delivery = {"branch": branch, "base": base, "commit": commit, "title": title, "ticket": ticket,
-                "repo": repo, "description": description, "pr_template": pr_template}
+                "repo": repo, "description": description, "pr_template": pr_template, "published": published,
+                "media": {"repo": media_repo, "files": media_files} if media_files else None}
     summary = f"Pushed {branch} ({commit[:12]}); delivery notes in docs/delivery.md"
+    if published:
+        summary = f"Published {commit[:12]} to {base} (no approval; also pushed as {branch}); delivery notes in docs/delivery.md"
 
     pr_url = ""
     if os.environ.get("DELIVER_OPEN_PR", "").strip().lower() in ("true", "1", "yes"):

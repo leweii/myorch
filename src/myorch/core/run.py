@@ -255,7 +255,11 @@ class RunState(BaseModel):
             "inputs": self.inputs,
             "run": {"id": self.run_id, "branch": self.branch()},
             "steps": steps,
-            "approvals": {k: v.model_dump() for k, v in self.approvals.items()},
+            # A gate that never opened (skipped by its `when`, e.g. development with auto_publish) still
+            # renders: {{approvals.<step>.subject}} is "" and the step reading it decides what that means.
+            "approvals": {**{s.id: {**ApprovalRecord().model_dump(), "subject": ""}
+                             for s in self.flow.all_steps() if s.approval is not None},
+                          **{k: v.model_dump() for k, v in self.approvals.items()}},
         }
         if loop_id is not None:
             ctx["loop"] = {"round": rnd}

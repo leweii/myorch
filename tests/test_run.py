@@ -259,3 +259,21 @@ def test_failure_escalation_question_and_replies():
     assert parse_failure_reply("Stop the flow") == ("abort", "")
     assert parse_failure_reply("don't change build.gradle yet, look at the test data") == ("hint", "don't change build.gradle yet, look at the test data")
     assert parse_failure_reply("Skip the tests and commit")[0] == "hint"  # only an exact option text picks it
+
+
+def test_a_skipped_gate_renders_an_empty_subject():
+    """development with auto_publish skips human-review; deliver still reads {{approvals.human-review.subject}}."""
+    from myorch.core.flow import render_template
+    flow = """
+flow: dev
+steps:
+  - {id: implement, harness: script, profile: p}
+  - {id: human, needs: [implement], when: "false", approval: {count: 1}}
+  - {id: ship, harness: script, profile: p, needs: [human], prompt: "approved={{approvals.human.subject}}"}
+"""
+    s = RunState.create("r1", flow, {})
+    assert started(s.plan()) == ["implement"]
+    finish(s, "implement")
+    assert started(s.plan()) == ["ship"]
+    assert s.instances["human"].status == "skipped"
+    assert render_template(s.flow.step("ship").prompt, s.context(s.instances["ship"])) == "approved="
