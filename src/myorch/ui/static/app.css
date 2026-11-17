@@ -773,3 +773,14 @@ button.add:hover { background: var(--hover); color: var(--accent); }
 #pane-new.drop .nr-msg textarea { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 #nrAttachBar { margin-top: 10px; margin-bottom: 0; }
 .nr-msg textarea { box-sizing: border-box; }
+
+/* ---- tab menu, pinned and dragged tabs (app.js tabMenu, moveTab) ------------------------------------------ */
+.etab .pin { flex: none; width: 20px; height: 20px; padding: 0; border: 0; background: transparent; color: var(--accent); font-size: 7px; line-height: 1; }
+.etab .pin:hover { background: var(--hover); }
+.etab.pinned { background: color-mix(in srgb, var(--accent-soft) 45%, transparent); }
+.etab.dragging { opacity: .45; }
+.etab.drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+.etab.drop-after { box-shadow: inset -2px 0 0 var(--accent); }
+.dd-panel.ctx { min-width: 220px; }
+.ctx .dd-opt { padding-left: 10px; }
+.dd-hint { margin-left: auto; padding-left: 22px; color: var(--text-faint); font-size: 11.5px; }

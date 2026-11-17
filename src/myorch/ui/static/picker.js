@@ -1,3 +1,5 @@
+// Menus drawn by the page, not the browser: a dropdown in place of the native <select> menu, and showMenu for
+// a context menu at a point (the tabs' right click, app.js). One is open at a time.
 // A dropdown in place of the browser's native <select> menu. Every <select> in the page is upgraded
 // (also the ones scripts add later): the select stays in the DOM, hidden, and remains the source of
 // truth, so code that reads .value / FormData or listens for "change" is unchanged. A select with
@@ -92,3 +94,48 @@ new MutationObserver((muts) => muts.forEach((m) => m.addedNodes.forEach((n) => {
   if (n.nodeType !== 1) return;
   if (n.tagName === "SELECT") enhanceSelect(n); else enhanceAll(n);
 }))).observe(document.body, { childList: true, subtree: true });
+
+
+// A context menu at a point. items: {label, run, disabled, hint} or "-" for a separator.
+function showMenu(x, y, items) {
+  if (ddOpen) ddOpen.close();
+  const rows = items.map((it) => (it === "-" ? el("div", { class: "dd-sep" })
+    : el("button", { type: "button", role: "menuitem", class: "dd-opt", disabled: it.disabled ? "disabled" : null, onclick: () => { close(); it.run(); } },
+      el("span", { text: it.label }), it.hint ? el("span", { class: "dd-hint", text: it.hint }) : null)));
+  const panel = el("div", { class: "dd-panel ctx", role: "menu" }, rows);
+  document.body.append(panel);
+  panel.style.left = `${Math.max(8, Math.min(x, innerWidth - panel.offsetWidth - 8))}px`;
+  panel.style.top = `${Math.max(8, Math.min(y, innerHeight - panel.offsetHeight - 8))}px`;
+  const live = () => [...panel.querySelectorAll(".dd-opt:not(:disabled)")];
+  live()[0]?.focus();
+
+  const onDown = (e) => { if (!panel.contains(e.target)) close(); };
+  const onKey = (e) => {
+    if (e.key === "Escape") { e.stopPropagation(); close(); }
+    else if (e.key === "Tab") close();
+    else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(e.key)) {
+      e.preventDefault();
+      const list = live(), i = list.indexOf(document.activeElement);
+      list[e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : (i + (e.key === "ArrowDown" ? 1 : -1) + list.length) % list.length]?.focus();
+    }
+  };
+  const onScroll = (e) => { if (!panel.contains(e.target)) close(); };
+  function close() {
+    panel.remove();
+    document.removeEventListener("mousedown", onDown, true);
+    document.removeEventListener("contextmenu", onDown, true);
+    document.removeEventListener("keydown", onKey, true);
+    window.removeEventListener("resize", close);
+    window.removeEventListener("blur", close);
+    window.removeEventListener("scroll", onScroll, true);
+    if (ddOpen === handle) ddOpen = null;
+  }
+  const handle = { close };
+  ddOpen = handle;
+  document.addEventListener("mousedown", onDown, true);
+  document.addEventListener("contextmenu", onDown, true);  // a right click elsewhere closes this one (and opens its own)
+  document.addEventListener("keydown", onKey, true);
+  window.addEventListener("resize", close);
+  window.addEventListener("blur", close);
+  window.addEventListener("scroll", onScroll, true);
+}

@@ -274,6 +274,7 @@ function openTab(spec, opts = {}) {
     else TABS.list.splice(cur ? TABS.list.indexOf(cur) + 1 : TABS.list.length, 0, t);
     have = t;
   }
+  normalizePins();
   activate(have.key);
   return have;
 }
@@ -295,17 +296,46 @@ function activate(key) {
   renderRunTree();
 }
 
-function closeTab(key) {
-  const i = TABS.list.findIndex((t) => t.key === key);
-  if (i < 0) return;
-  const [t] = TABS.list.splice(i, 1);
-  if (t.kind === "run") delete DRAFT[t.run];
-  if (TABS.active !== key) { renderTabbar(); saveTabs(); return; }
-  const next = TABS.list[i] || TABS.list[i - 1];
+function closeTab(key) { closeTabs([key]); }
+
+// Close several tabs at once. If the shown one goes, the one that takes its place (or `prefer`) is shown.
+function closeTabs(keys, prefer = null) {
+  const gone = new Set(keys), closing = TABS.list.filter((t) => gone.has(t.key));
+  if (!closing.length) return;
+  const at = TABS.list.findIndex((t) => t.key === TABS.active);
+  const before = TABS.list.slice(0, Math.max(at, 0)).filter((t) => gone.has(t.key)).length;
+  for (const t of closing) {
+    if (t.kind === "run") delete DRAFT[t.run];
+    if (t.kind !== "new") { const { key, ...spec } = t; CLOSED.push(spec); }
+  }
+  CLOSED.splice(0, Math.max(0, CLOSED.length - 20));
+  TABS.list = TABS.list.filter((t) => !gone.has(t.key));
+  if (!gone.has(TABS.active)) { renderTabbar(); saveTabs(); return; }
+  const next = TABS.list.find((t) => t.key === prefer) || TABS.list[Math.min(at - before, TABS.list.length - 1)];
   if (next) { TABS.active = null; activate(next.key); return; }
   TABS.active = null;
   Object.assign(S, { run: null, step: null, detail: null, newMode: false });
   renderTabbar(); showPane(null); setHash(null); saveTabs(); renderRunTree();
+}
+
+const CLOSED = [];  // what was closed, newest last: "Reopen closed tab"
+function reopenClosed() {
+  while (CLOSED.length) {
+    const spec = CLOSED.pop();
+    if (!TABS.list.some((t) => t.key === tabKey(spec))) { openTab({ ...spec, pinned: false }); return; }
+  }
+}
+
+// Pinned tabs sit first and are left alone by "Close others/all/to the right/left".
+function normalizePins() {
+  TABS.list = [...TABS.list.filter((t) => t.pinned), ...TABS.list.filter((t) => !t.pinned)];
+}
+function togglePin(key) {
+  const t = TABS.list.find((x) => x.key === key);
+  if (!t) return;
+  t.pinned = !t.pinned;
+  if (t.pinned) t.preview = false;
+  normalizePins(); renderTabbar(); saveTabs();
 }
 
 function saveTabs() {
@@ -318,6 +348,7 @@ function restoreTabs() {
   const moved = (t) => (t.kind === "flow" && ["kb", "kbform"].includes(t.ref?.t) ? { ...t, kind: "res" } : t);
   TABS.list = s.list.filter((t) => t.kind && t.kind !== "new").map(moved).map((t) => ({ ...t, key: tabKey(t) }));
   s.active = s.active?.replace(/^flow:(kb|kbform):/, "res:$1:");
+  normalizePins();
   const a = TABS.list.find((t) => t.key === s.active) || TABS.list[TABS.list.length - 1];
   if (a) activate(a.key);
 }
@@ -342,20 +373,89 @@ function tabInfo(t) {
   }
 }
 
+const copyText = (text) => navigator.clipboard?.writeText(text).catch(() => {});
+const FINISHED = new Set(["succeeded", "failed", "rejected", "cancelled"]);
+const runStatusOf = (t) => (t.run ? DETAIL.get(t.run)?.status || runOf(t.run)?.status || "" : "");
+
+function tabMenu(t, x, y) {
+  const list = TABS.list, i = list.findIndex((o) => o.key === t.key);
+  const loose = (arr) => arr.filter((o) => !o.pinned && o.key !== t.key).map((o) => o.key);  // pinned tabs stay
+  const others = loose(list), right = loose(list.slice(i + 1)), left = loose(list.slice(0, i));
+  const finished = list.filter((o) => !o.pinned && FINISHED.has(runStatusOf(o))).map((o) => o.key);
+  const link = hashOf(t);
+  const copy = copyText;
+  showMenu(x, y, [
+    { label: "Close", run: () => closeTab(t.key) },
+    { label: "Close others", disabled: !others.length, run: () => closeTabs(others, t.key) },
+    { label: "Close to the right", disabled: !right.length, run: () => closeTabs(right, t.key) },
+    { label: "Close to the left", disabled: !left.length, run: () => closeTabs(left, t.key) },
+    { label: "Close tabs of finished runs", disabled: !finished.length, run: () => closeTabs(finished, t.key) },
+    { label: "Close all", disabled: !list.some((o) => !o.pinned), run: () => closeTabs(list.filter((o) => !o.pinned).map((o) => o.key)) },
+    "-",
+    ...(t.preview ? [{ label: "Keep open", hint: "double click", run: () => { t.preview = false; renderTabbar(); saveTabs(); } }] : []),
+    { label: t.pinned ? "Unpin" : "Pin", run: () => togglePin(t.key) },
+    ...(link || t.run ? ["-"] : []),
+    ...(link ? [{ label: "Copy link", run: () => copy(`${location.origin}${location.pathname}${link}`) }] : []),
+    ...(t.run ? [{ label: "Copy run id", run: () => copy(t.run) }] : []),
+    "-",
+    { label: "Reopen closed tab", disabled: !CLOSED.length, run: reopenClosed },
+  ]);
+}
+
+// Right click on the empty part of the tab bar.
+function tabbarMenu(x, y) {
+  showMenu(x, y, [
+    { label: "New run", run: () => openNewRun() },
+    { label: "Reopen closed tab", disabled: !CLOSED.length, run: reopenClosed },
+    "-",
+    { label: "Close all", disabled: !TABS.list.some((o) => !o.pinned), run: () => closeTabs(TABS.list.filter((o) => !o.pinned).map((o) => o.key)) },
+  ]);
+}
+
+// Drag a tab to put it somewhere else: the bar shows the edge it would land on.
+const TAB_DRAG = "text/x-myorch-tab";
+function dropSide(e, tabEl) { const r = tabEl.getBoundingClientRect(); return e.clientX < r.left + r.width / 2 ? "before" : "after"; }
+function moveTab(key, target, side) {
+  if (key === target) return;
+  const [t] = TABS.list.splice(TABS.list.findIndex((o) => o.key === key), 1);
+  const j = TABS.list.findIndex((o) => o.key === target);
+  TABS.list.splice(side === "before" ? j : j + 1, 0, t);
+  normalizePins(); renderTabbar(); saveTabs();
+}
+
 function renderTabbar() {
   const bar = $("#tabbar");
   bar.replaceChildren(...TABS.list.map((t) => {
     const info = tabInfo(t);
-    return el("div", { class: `etab${t.key === TABS.active ? " on" : ""}${t.preview ? " preview" : ""}`, role: "tab", title: info.tip,
-      "aria-selected": String(t.key === TABS.active),
+    const tab = el("div", { class: `etab${t.key === TABS.active ? " on" : ""}${t.preview ? " preview" : ""}${t.pinned ? " pinned" : ""}`, role: "tab", title: info.tip,
+      "aria-selected": String(t.key === TABS.active), draggable: "true",
       onclick: () => { if (t.key !== TABS.active) activate(t.key); },
       ondblclick: () => { t.preview = false; renderTabbar(); saveTabs(); },
-      onauxclick: (e) => { if (e.button === 1) { e.preventDefault(); closeTab(t.key); } } },
+      onauxclick: (e) => { if (e.button === 1) { e.preventDefault(); if (!t.pinned) closeTab(t.key); } },
+      oncontextmenu: (e) => { e.preventDefault(); tabMenu(t, e.clientX, e.clientY); },
+      ondragstart: (e) => { e.dataTransfer.setData(TAB_DRAG, t.key); e.dataTransfer.effectAllowed = "move"; tab.classList.add("dragging"); },
+      ondragend: () => { tab.classList.remove("dragging"); bar.querySelectorAll(".drop-before, .drop-after").forEach((x) => x.classList.remove("drop-before", "drop-after")); },
+      ondragover: (e) => {
+        if (![...(e.dataTransfer?.types || [])].includes(TAB_DRAG)) return;
+        e.preventDefault();
+        const side = dropSide(e, tab);
+        tab.classList.toggle("drop-before", side === "before"); tab.classList.toggle("drop-after", side === "after");
+      },
+      ondragleave: () => tab.classList.remove("drop-before", "drop-after"),
+      ondrop: (e) => {
+        const key = e.dataTransfer?.getData(TAB_DRAG);
+        if (!key) return;
+        e.preventDefault();
+        moveTab(key, t.key, dropSide(e, tab));
+      } },
       info.icon, el("span", { class: "tt", text: info.title }), info.sub ? el("span", { class: "ts", text: info.sub }) : null,
-      el("button", { type: "button", class: "tx", title: "Close (middle click works too)", text: "×", onclick: (e) => { e.stopPropagation(); closeTab(t.key); } }));
+      t.pinned ? el("button", { type: "button", class: "pin", title: "Pinned: click to unpin", text: "◆", onclick: (e) => { e.stopPropagation(); togglePin(t.key); } })
+        : el("button", { type: "button", class: "tx", title: "Close (middle click works too)", text: "×", onclick: (e) => { e.stopPropagation(); closeTab(t.key); } }));
+    return tab;
   }), el("button", { type: "button", class: "tnew", title: "New run", text: "+", onclick: () => openNewRun() }));
   bar.querySelector(".etab.on")?.scrollIntoView({ block: "nearest", inline: "nearest" });
 }
+$("#tabbar").addEventListener("contextmenu", (e) => { if (e.target === $("#tabbar") || e.target.closest(".tnew")) { e.preventDefault(); tabbarMenu(e.clientX, e.clientY); } });
 
 // The address names the active tab, so a link opens the same thing (#run=…, &step=, &tab=changes|docs, #new, #flow=…).
 function hashOf(t) {
@@ -905,11 +1005,16 @@ function panelOpen(run, step, { focus = true, reveal = true } = {}) {
   if (reveal) setPanelOpen(true, false);
   panelSave(); renderPanel();
 }
-function panelClose(key) {
-  const i = PANEL.tabs.findIndex((t) => t.key === key);
-  if (i < 0) return;
-  PANEL.tabs.splice(i, 1);
-  if (PANEL.active === key) PANEL.active = (PANEL.tabs[i] || PANEL.tabs[i - 1])?.key || null;
+function panelClose(key) { panelCloseMany([key]); }
+
+// Close several panel tabs; if the shown one goes, its neighbour (or `prefer`) is shown.
+function panelCloseMany(keys, prefer = null) {
+  const gone = new Set(keys);
+  if (!PANEL.tabs.some((t) => gone.has(t.key))) return;
+  const at = PANEL.tabs.findIndex((t) => t.key === PANEL.active);
+  const before = PANEL.tabs.slice(0, Math.max(at, 0)).filter((t) => gone.has(t.key)).length;
+  PANEL.tabs = PANEL.tabs.filter((t) => !gone.has(t.key));
+  if (gone.has(PANEL.active)) PANEL.active = (PANEL.tabs.find((t) => t.key === prefer) || PANEL.tabs[Math.min(at - before, PANEL.tabs.length - 1)])?.key || null;
   if (!PANEL.tabs.length) setPanelOpen(false, false);
   panelSave(); renderPanel();
 }
@@ -950,7 +1055,8 @@ function renderPanel() {
 
 function renderPanelBar() {
   $("#ptabs").replaceChildren(...PANEL.tabs.map((t) => el("div", { class: `ptab${t.key === PANEL.active ? " on" : ""}`, title: `${t.run} · ${t.step}`,
-    onclick: () => { PANEL.active = t.key; panelSave(); renderPanel(); }, onauxclick: (e) => { if (e.button === 1) panelClose(t.key); } },
+    onclick: () => { PANEL.active = t.key; panelSave(); renderPanel(); }, onauxclick: (e) => { if (e.button === 1) panelClose(t.key); },
+    oncontextmenu: (e) => { e.preventDefault(); panelTabMenu(t, e.clientX, e.clientY); } },
     st(panelStatus(t)), el("span", { class: "tt", text: t.step }), el("span", { class: "ts", text: runLabel(t.run) }),
     el("button", { type: "button", class: "tx", text: "×", title: "Close", onclick: (e) => { e.stopPropagation(); panelClose(t.key); } }))),
     ...(PANEL.tabs.length ? [] : [el("span", { class: "muted small", text: "Live output: open a running step, or click its \"Live output\"." })]));
@@ -963,6 +1069,58 @@ function renderPanelBar() {
     b(PANEL.max ? "⤡ Restore" : "⤢ Maximise", PANEL.max ? "Restore (Esc)" : "Fill the editor area", () => setPanelMax(!PANEL.max)),
     b("⌄", "Hide", () => setPanelOpen(false))].filter(Boolean));
 }
+
+const PFINISHED = new Set(["succeeded", "failed", "skipped", "blocked", "cancelled", "rejected"]);
+
+function panelTabMenu(t, x, y) {
+  const list = PANEL.tabs, i = list.findIndex((o) => o.key === t.key), ks = (arr) => arr.map((o) => o.key);
+  const others = ks(list.filter((o) => o.key !== t.key)), right = ks(list.slice(i + 1)), left = ks(list.slice(0, i));
+  const finished = ks(list.filter((o) => PFINISHED.has(panelStatus(o))));
+  const shown = t.key === PANEL.active && PANEL.body;
+  showMenu(x, y, [
+    { label: "Close", run: () => panelClose(t.key) },
+    { label: "Close others", disabled: !others.length, run: () => panelCloseMany(others, t.key) },
+    { label: "Close to the right", disabled: !right.length, run: () => panelCloseMany(right, t.key) },
+    { label: "Close to the left", disabled: !left.length, run: () => panelCloseMany(left, t.key) },
+    { label: "Close finished steps", disabled: !finished.length, run: () => panelCloseMany(finished, t.key) },
+    { label: "Close all", run: () => panelCloseMany(ks(list)) },
+    "-",
+    { label: "Open step", run: () => openTab({ kind: "step", run: t.run, step: t.step }) },
+    { label: "Open full log", run: () => openTab({ kind: "file", run: t.run, step: t.step, log: true }) },
+    { label: "Open run", run: () => openTab({ kind: "run", run: t.run }) },
+    "-",
+    { label: "Copy output", disabled: !shown, hint: shown ? "" : "shown tab only", run: () => copyText(PANEL.body.innerText) },
+    { label: "Copy run id", run: () => copyText(t.run) },
+    { label: "Copy step id", run: () => copyText(t.step) },
+  ]);
+}
+
+// The empty part of the panel's bar.
+function panelBarMenu(x, y) {
+  showMenu(x, y, [
+    { label: PANEL.wrap ? "Don't wrap lines" : "Wrap lines", run: () => { PANEL.wrap = !PANEL.wrap; PANEL.body?.classList.toggle("nowrap", !PANEL.wrap); renderPanelBar(); } },
+    { label: PANEL.max ? "Restore" : "Maximise", run: () => setPanelMax(!PANEL.max) },
+    { label: "Hide panel", run: () => setPanelOpen(false) },
+    "-",
+    { label: "Close all tabs", disabled: !PANEL.tabs.length, run: () => panelCloseMany(PANEL.tabs.map((o) => o.key)) },
+  ]);
+}
+
+// Right click in the output: copy, select all, scroll. Shift + right click keeps the browser's own menu.
+function panelOutputMenu(x, y) {
+  const picked = String(getSelection() || ""), body = PANEL.body, t = PANEL.tabs.find((o) => o.key === PANEL.active);
+  showMenu(x, y, [
+    { label: "Copy", disabled: !picked, run: () => copyText(picked) },
+    { label: "Select all", run: () => { const r = document.createRange(); r.selectNodeContents(body); getSelection().removeAllRanges(); getSelection().addRange(r); } },
+    { label: "Copy all output", run: () => copyText(body.innerText) },
+    "-",
+    { label: "Scroll to the end", run: () => { PANEL.stick = true; body.scrollTop = body.scrollHeight; } },
+    { label: PANEL.wrap ? "Don't wrap lines" : "Wrap lines", run: () => { PANEL.wrap = !PANEL.wrap; body.classList.toggle("nowrap", !PANEL.wrap); renderPanelBar(); } },
+    ...(t ? [{ label: "Open full log", run: () => openTab({ kind: "file", run: t.run, step: t.step, log: true }) }] : []),
+  ]);
+}
+$(".pbar").addEventListener("contextmenu", (e) => { if (e.target.closest(".ptab, button")) return; e.preventDefault(); panelBarMenu(e.clientX, e.clientY); });
+$("#pbody").addEventListener("contextmenu", (e) => { if (e.shiftKey || !PANEL.body || !PANEL.body.contains(e.target)) return; e.preventDefault(); panelOutputMenu(e.clientX, e.clientY); });
 
 function panelConnect(key) {
   if (PANEL.es) PANEL.es.close();
