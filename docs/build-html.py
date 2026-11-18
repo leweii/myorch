@@ -1,4 +1,10 @@
-"""Build the User manual, one page with sidebar navigation: docs/index.html (the home page).
+"""Build the User manual, one file with sidebar navigation: docs/index.html (the home page).
+
+The page shows one chapter at a time: chapters grouped on the left (GROUPS), the chapter in the middle
+with a kicker, its title and lead, its outline on the right ("On this page"), previous / next at the end.
+Every anchor (#ch-<chapter>, #<chapter>--<heading>) opens its chapter, so links from the code keep
+working. Without JavaScript all chapters are shown one after another. Fonts (Inter Tight, Geist Mono,
+SIL OFL) are in docs/fonts/, so the page needs no network.
 
     uv run --with markdown python docs/build-html.py
 
@@ -22,6 +28,7 @@ from __future__ import annotations
 
 import functools
 import html
+import json
 import os
 import re
 import subprocess
@@ -235,7 +242,7 @@ FLOWS = REPO / "flows"                          # the flows' prose (flows/<flow>
 WORKFLOWS = DOCS / "workflows" / "README.md"    # the Flow manual's home
 DIAGRAMS = DOCS / "diagrams"                    # the HTML drawings embedded into the chapters
 WORDS = {"title": "myorch docs", "manual": "User manual", "flow_manual": "Flow manual", "home": "Home",
-         "theme": "Theme", "light": "Light", "dark": "Dark", "auto": "System", "filter": "Filter chapters  /",
+         "theme": "Theme", "light": "Light", "dark": "Dark", "auto": "System", "filter": "Search the docs",
          "source": "Source of this page:"}
 
 
@@ -295,15 +302,30 @@ def render(path: Path, mentions: Mentions) -> tuple[str, str, list]:
     return key, f'<section class="chapter" id="ch-{key}">{body}</section>', [title, subs]
 
 
+# The sidebar's groups, in reading order (docs/README.md): each chapter's kicker is "<group> · <number>".
+GROUPS = {"index": "Understand", "01": "Understand", "02": "Understand", "03": "Understand",
+          "04": "Use", "05": "Use", "06": "Use", "07": "Use", "08": "Use",
+          "09": "Maintain", "10": "Maintain", "11": "Maintain"}
+NUMBER = re.compile(r"^\d+\.\s+")   # "7. Project packs": the number moves to the kicker
+
+
 def build(mentions: Mentions) -> dict[Path, str]:
-    sections, nav = [], []
+    sections, nav, group = [], [], None
     labels = {"index": WORDS["home"]}
     for path in chapters():
         key, sec, (title, subs) = render(path, mentions)
+        num = key.split("-", 1)[0]
+        g = GROUPS.get(num, "More")
+        kicker = f"{g} · {num}" if key != "index" else f"{g} · {WORDS['home']}"
+        sec = sec.replace(f'<section class="chapter" id="ch-{key}">', f'<section class="chapter" id="ch-{key}" data-kicker="{kicker}">', 1)
+        sec = re.sub(r"(<h1 id=\"[^\"]+\">)\d+\.\s+", r"\1", sec, count=1)
         sections.append(sec)
-        label = labels.get(key) or html.unescape(title)
+        if g != group:
+            nav.append(f'<li class="grp-t">{g}</li>')
+            group = g
+        label = labels.get(key) or NUMBER.sub("", html.unescape(title))
         items = "".join(f'<li><a href="#{s["id"]}">{s["name"]}</a></li>' for s in subs) if key != "index" else ""
-        nav.append(f'<li class="ch"><a class="ch-link" href="#ch-{key}">{label}</a>'
+        nav.append(f'<li class="ch"><a class="ch-link" href="#ch-{key}">{html.escape(label)}</a>'
                    + (f'<ul class="sub">{items}</ul>' if items else "") + "</li>")
     xlink = f'<a class="xlink" href="workflows/index.html">{WORDS["flow_manual"]} →</a>'
     out = page(WORDS["manual"], WORDS["title"], xlink, "", "\n".join(nav), "\n".join(sections))
@@ -326,37 +348,54 @@ def main() -> None:
     print(f"wrote docs/index.html and {readmes} code README.md files ({len(changed)} changed)")
 
 
-def page(sub: str, title: str, xlink: str, css: str, nav: str, body: str) -> str:
-    """The page shell. docs/workflows/build.py uses it too, so both manuals look the same."""
+def page(sub: str, title: str, xlink: str, css: str, nav: str, body: str, root: str = "") -> str:
+    """The page shell. docs/workflows/build.py uses it too, so both manuals look the same.
+    root is the way from the page to docs/ ("" for docs/index.html, "../" one level down), for the fonts."""
     w = WORDS
     return (TEMPLATE.replace("{{TITLE}}", title).replace("{{SUB}}", sub).replace("{{XLINK}}", xlink)
             .replace("{{THEME}}", w["theme"]).replace("{{LIGHT}}", w["light"]).replace("{{DARK}}", w["dark"])
-            .replace("{{AUTO}}", w["auto"]).replace("{{FILTER}}", w["filter"])
+            .replace("{{AUTO}}", w["auto"]).replace("{{FILTER}}", w["filter"]).replace("{{ROOT}}", root)
+            .replace("{{TITLE_JSON}}", json.dumps(title))
             .replace("{{CSS}}", css).replace("{{NAV}}", nav).replace("{{BODY}}", body))
 
 
-# Tokens shared with the console (src/myorch/ui/static/app.css): one neutral family, five inks, one
-# accent. Dark is a second set of the same names; "System" leaves html[data-theme] unset.
+# Tokens. The names are shared with the diagrams (docs/diagrams/gen.py) and the Flow manual's CSS, so a
+# value changed here changes them too. Light: warm paper, near-black ink, one blue accent. Dark is a second
+# set of the same names; "System" leaves html[data-theme] unset.
 LIGHT = """
-    --canvas: #f6f6f5; --surface: #fff; --well: #f3f3f2; --raised: #fff;
-    --line: rgba(15,15,20,.08); --line-strong: rgba(15,15,20,.15);
-    --text-strong: #17171a; --text: #3b3b41; --text-faint: #6e6e76; --text-ghost: #a3a3aa;
-    --accent: #2563eb; --accent-soft: #edf2fe; --accent-text: #1d4fd7;
+    --canvas: #f7f7f6; --surface: #fdfdfc; --well: #efefec; --raised: #fdfdfc;
+    --line: rgba(20,20,30,.085); --line-strong: rgba(20,20,30,.16);
+    --text-strong: #141418; --text: #2b2b31; --text-faint: #62626c; --text-ghost: #9a9aa3;
+    --accent: #526ce8; --accent-soft: rgba(82,108,232,.10); --accent-border: rgba(82,108,232,.26); --accent-text: #3f57d4;
     --success: #15803d; --success-soft: #ebf6ee; --danger: #c2321f; --danger-soft: #fcefec;
     --warning: #a16207; --warning-soft: #fbf4e4;
-    --shadow-card: 0 1px 2px rgba(15,15,20,.05), 0 0 0 1px var(--line);
-    --hc: rgba(15,15,20,.09);
+    --shadow-card: 0 1px 2px rgba(20,20,30,.05), 0 0 0 1px var(--line);
+    --lift1: 0 1px 2px rgba(20,20,30,.05), 0 4px 12px rgba(20,20,30,.04);
+    --lift2: 0 2px 6px rgba(20,20,30,.05), 0 14px 28px rgba(20,20,30,.07);
+    --code-bg: #18181b; --code-text: #f4f4f5; --code-link: #a9b7ff;
+    --top-bg: rgba(247,247,246,.88); --side-bg: rgba(253,253,252,.65); --hover: rgba(20,20,30,.045);
+    --hc: rgba(20,20,30,.09);
     color-scheme: light;"""
 DARK = """
-    --canvas: #0e0e10; --surface: #151518; --well: #1c1c20; --raised: #232328;
+    --canvas: #0f0f12; --surface: #16161a; --well: #1f1f25; --raised: #1a1a1f;
     --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
-    --text-strong: #f4f4f5; --text: #d2d2d7; --text-faint: #9d9da6; --text-ghost: #66666e;
-    --accent: #5b9bff; --accent-soft: rgba(91,155,255,.14); --accent-text: #8ab8ff;
+    --text-strong: #f4f4f5; --text: #d4d4d8; --text-faint: #9d9da6; --text-ghost: #6b6b74;
+    --accent: #7d8ff2; --accent-soft: rgba(125,143,242,.14); --accent-border: rgba(125,143,242,.34); --accent-text: #a3b0f7;
     --success: #4ade80; --success-soft: rgba(74,222,128,.12); --danger: #ff7a66; --danger-soft: rgba(255,122,102,.12);
     --warning: #f5b94a; --warning-soft: rgba(245,185,74,.12);
     --shadow-card: 0 0 0 1px var(--line);
+    --lift1: 0 0 0 1px var(--line);
+    --lift2: 0 0 0 1px var(--line), 0 14px 28px rgba(0,0,0,.35);
+    --code-bg: #0a0a0c; --code-text: #e9e9ec; --code-link: #a3b0f7;
+    --top-bg: rgba(15,15,18,.86); --side-bg: rgba(22,22,26,.6); --hover: rgba(255,255,255,.05);
     --hc: rgba(255,255,255,.08);
     color-scheme: dark;"""
+
+LOGO = ('<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="mo-g" x1="3" y1="3" x2="21" y2="21" '
+        'gradientUnits="userSpaceOnUse"><stop stop-color="#0b8fd0"/><stop offset=".5" stop-color="#526ce8"/><stop offset="1" '
+        'stop-color="#8a4ed9"/></linearGradient></defs><circle cx="6" cy="6" r="2.6" fill="url(#mo-g)"/><circle cx="18" cy="12" '
+        'r="2.6" fill="url(#mo-g)"/><circle cx="6" cy="18" r="2.6" fill="url(#mo-g)"/><path d="M8.4 7.2 15.6 10.8M15.6 13.2 8.4 '
+        '16.8" stroke="url(#mo-g)" stroke-width="2" stroke-linecap="round"/></svg>')
 
 TEMPLATE = """<!DOCTYPE html>
 <html lang="en">
@@ -364,183 +403,341 @@ TEMPLATE = """<!DOCTYPE html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{TITLE}}</title>
+<link rel="preload" href="{{ROOT}}fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-  // Apply the saved theme before the first paint (same key and values as the console's theme.js).
-  (() => { let t = null; try { t = localStorage.getItem("myorch.theme"); } catch {}
+  // Before the first paint: the saved theme (same key and values as the console's theme.js), and "js" so
+  // the page shows one chapter at a time (without JavaScript every chapter is shown, one after another).
+  (() => { const d = document.documentElement; d.classList.add("js"); let t = null; try { t = localStorage.getItem("myorch.theme"); } catch {}
     t = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[t] || t;
-    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; })();
+    if (t === "light" || t === "dark") d.dataset.theme = t; })();
 </script>
 <style>
-  /* Quiet and legible: one neutral family, hierarchy from size, weight and space rather than boxes.
-     Borders only where they separate; the accent marks links and where you are. */
+  @font-face { font-family: "Inter Tight"; src: url({{ROOT}}fonts/inter-tight-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url({{ROOT}}fonts/geist-mono-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
   :root {""" + LIGHT + """
-    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
-    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --top: 56px; --side: 280px;
+    --font: "Inter Tight", -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --top: 64px; --side: 288px; --toc: 232px;
+    --e-out: cubic-bezier(.16,1,.3,1);
   }
   :root[data-theme="dark"] {""" + DARK + """ }
   @media (prefers-color-scheme: dark) { :root:not([data-theme]) {""" + DARK + """ } }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top) + 24px); }
-  body { margin: 0; background: var(--surface); color: var(--text); font: 400 15px/1.8 var(--font);
-    -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top) + 28px); }
+  html, body { margin: 0; background: var(--canvas); color: var(--text); -webkit-font-smoothing: antialiased; }
+  body { font: 400 15.5px/1.75 var(--font); overflow-x: hidden; font-variant-numeric: tabular-nums; }
   ::selection { background: var(--accent-soft); color: var(--text-strong); }
+  a { color: var(--accent-text); text-decoration: none; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hidden { display: none !important; }
 
   /* ---- top bar ---- */
-  .top { position: fixed; inset: 0 0 auto 0; height: var(--top); z-index: 20; display: flex; align-items: center; gap: 12px;
-    padding: 0 20px 0 24px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--line); }
-  .brand { font-weight: 650; font-size: 16px; color: var(--text-strong); letter-spacing: -.01em; text-decoration: none; }
-  .brand-sub { color: var(--text-faint); font-size: 14px; }
-  .brand-sub::before { content: "/"; margin-right: 12px; color: var(--text-ghost); }
-  .top .spacer { flex: 1; }
-  .seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--well); border-radius: var(--r-md); }
-  .seg button { font: 500 13px/1.3 var(--font); color: var(--text-faint); background: transparent; border: 0; cursor: pointer;
-    padding: 5px 12px; border-radius: var(--r-sm); }
+  .top { position: sticky; top: 0; z-index: 60; height: var(--top); background: var(--top-bg);
+    backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
+  .topbar { max-width: 1480px; height: 100%; margin: 0 auto; padding: 0 32px; display: flex; align-items: center; gap: 14px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font: 650 17px var(--font); letter-spacing: -.015em; color: var(--text-strong); }
+  .brand svg { width: 24px; height: 24px; flex: none; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft);
+    border: 1px solid var(--accent-border); color: var(--accent-text); font: 600 12px/1.2 var(--font); }
+  .top-links { display: flex; align-items: center; gap: 6px; margin-left: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
+  .xlink { padding: 6px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500; color: var(--text-faint); transition: color .18s, background .18s; }
+  .xlink:hover { color: var(--text-strong); background: var(--hover); }
+  .spacer { flex: 1; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--well); }
+  .seg button { all: unset; cursor: pointer; font: 500 12px var(--mono); color: var(--text-faint); padding: 3px 10px; border-radius: 999px; transition: background .2s, color .2s; }
   .seg button:hover { color: var(--text-strong); }
-  .seg button.on { background: var(--raised); color: var(--text-strong); box-shadow: var(--shadow-card); }
+  .seg button.on { background: var(--raised); color: var(--text-strong); box-shadow: var(--lift1); }
+  .gh { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--raised); font: 500 13px var(--font); color: var(--text-strong); box-shadow: var(--lift1); }
+  .gh svg { width: 15px; height: 15px; }
+  .menu-btn { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--raised); cursor: pointer; color: var(--text-strong); }
+  .menu-btn svg { width: 18px; height: 18px; }
 
-  /* ---- sidebar ---- */
-  aside { position: fixed; top: var(--top); left: 0; bottom: 0; width: var(--side); overflow-y: auto;
-    border-right: 1px solid var(--line); padding: 20px 14px 40px; }
-  aside input { width: 100%; margin: 0 0 16px; padding: 7px 12px; border: 1px solid transparent; border-radius: var(--r-md);
-    font: 400 13.5px/1.4 var(--font); background: var(--well); color: var(--text-strong); }
-  aside input::placeholder { color: var(--text-ghost); }
-  aside input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-  aside ul { list-style: none; margin: 0; padding: 0; }
-  aside a { display: block; color: var(--text); text-decoration: none; border-radius: var(--r-sm); padding: 5px 10px; line-height: 1.45; }
-  aside a:hover { background: var(--well); color: var(--text-strong); }
-  aside a.ch-link { font-size: 14px; font-weight: 500; }
-  aside ul.sub { display: none; margin: 2px 0 8px 10px; padding-left: 8px; border-left: 1px solid var(--line); }
-  aside li.ch.open ul.sub { display: block; }
-  aside ul.sub a { font-size: 13px; color: var(--text-faint); padding: 4px 10px; }
-  aside a.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
-  aside ul.sub a.active { background: transparent; color: var(--accent-text); font-weight: 500; box-shadow: -9px 0 0 -8px var(--accent); }
+  /* ---- three columns: chapters, the chapter, its outline ---- */
+  .layout { max-width: 1480px; margin: 0 auto; display: grid; grid-template-columns: var(--side) minmax(0,1fr) var(--toc);
+    align-items: start; min-height: calc(100dvh - var(--top)); }
+  aside.side { position: sticky; top: var(--top); height: calc(100dvh - var(--top)); overflow-y: auto; padding: 24px 14px 48px 28px;
+    border-right: 1px solid var(--line); background: var(--side-bg); }
+  .side-head { padding: 0 6px 14px; }
+  .side-head b { display: block; font-size: 15px; font-weight: 650; color: var(--text-strong); letter-spacing: -.01em; }
+  .side-head span { display: block; margin-top: 3px; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+  .search { position: relative; margin: 0 4px 18px; }
+  .search input { width: 100%; height: 36px; padding: 0 36px 0 32px; border: 1px solid var(--line-strong); border-radius: 8px;
+    background: var(--raised); font-size: 13px; color: var(--text-strong); box-shadow: inset 0 1px 2px rgba(20,20,30,.03);
+    transition: border-color .18s, box-shadow .18s; }
+  .search input::placeholder { color: var(--text-ghost); }
+  .search input::-webkit-search-cancel-button, .search input::-webkit-search-decoration { appearance: none; }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search svg { position: absolute; left: 10px; top: 10.5px; width: 15px; height: 15px; color: var(--text-ghost); pointer-events: none; }
+  .search kbd { position: absolute; right: 8px; top: 8px; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--line-strong);
+    border-radius: 5px; background: var(--canvas); color: var(--text-faint); font: 500 11px/18px var(--mono); text-align: center; pointer-events: none; }
+  .search:has(input:not(:placeholder-shown)) kbd { opacity: 0; }
+  #nav, #nav ul { list-style: none; margin: 0; padding: 0; }
+  #nav .grp-t { margin: 20px 10px 4px; font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--text-ghost); }
+  #nav .grp-t:first-child { margin-top: 2px; }
+  #nav a { display: block; color: var(--text-faint); border-radius: 8px; transition: background .14s, color .14s; }
+  #nav a:hover { background: var(--hover); color: var(--text-strong); }
+  #nav a.ch-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin: 1px 0;
+    padding: 5px 10px; font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--text); }
+  #nav li.ch:has(ul.sub) > a.ch-link::after { content: ""; width: 6px; height: 6px; flex: none; margin-right: 3px;
+    border-right: 1.6px solid var(--text-ghost); border-bottom: 1.6px solid var(--text-ghost); transform: rotate(-45deg); transition: transform .16s ease; }
+  #nav li.ch.open > a.ch-link::after { transform: rotate(45deg); }
+  #nav a.ch-link.on { background: var(--accent-soft); color: var(--accent-text); }
+  #nav a.ch-link.on::after { border-color: var(--accent-text) !important; }
+  #nav ul.sub { display: none; margin: 2px 0 8px 13px; padding-left: 9px; border-left: 1.5px solid var(--line); }
+  #nav li.ch.open > ul.sub { display: block; }
+  #nav ul.sub a { padding: 4px 10px; font-size: 13px; line-height: 1.45; font-weight: 450; }
+  #nav ul.sub a.on { color: var(--accent-text); background: transparent; box-shadow: -10.5px 0 0 -9px var(--accent); }
+  #nav .role { color: var(--text-ghost); font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .empty { padding: 18px 10px; font-size: 13px; color: var(--text-faint); line-height: 1.55; }
 
-  /* ---- content ---- */
-  main { margin-left: var(--side); padding: calc(var(--top) + 40px) 56px 160px; }
-  .chapter { max-width: 980px; }
-  .chapter + .chapter { margin-top: 72px; padding-top: 56px; border-top: 1px solid var(--line); }
-  h1, h2, h3, h4 { color: var(--text-strong); line-height: 1.35; letter-spacing: -.01em; }
-  h1 { font-size: 30px; font-weight: 700; margin: 0 0 20px; }
-  h2 { font-size: 21px; font-weight: 650; margin: 48px 0 12px; }
-  h3 { font-size: 17px; font-weight: 600; margin: 32px 0 8px; }
-  h4 { font-size: 15px; font-weight: 600; margin: 24px 0 6px; }
-  p { margin: 10px 0; }
-  a { color: var(--accent-text); text-decoration: none; }
+  main { min-width: 0; padding: 48px clamp(32px,5vw,76px) 96px; }
+  .chapter { max-width: 860px; margin: 0 auto; scroll-margin-top: 64px; }   /* the browser's own jump to #ch-… lands at the top */
+  html:not(.js) .chapter + .chapter { margin-top: 72px; padding-top: 56px; border-top: 1px solid var(--line); }
+  html.js .chapter { display: none; }
+  html.js .chapter.cur { display: block; animation: rise .32s var(--e-out); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* the chapter's head: kicker, title, lead (the paragraph right after the title) */
+  .head { margin: 0 0 32px; padding: 0 0 26px; border-bottom: 1px solid var(--line); }
+  .kicker { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 4px 11px; border-radius: 999px;
+    background: var(--accent-soft); border: 1px solid var(--accent-border); color: var(--accent-text); font: 600 12px/1.3 var(--mono); letter-spacing: .02em; }
+  h1 { margin: 0 0 14px; font: 650 clamp(26px,2.6vw,34px)/1.24 var(--font); letter-spacing: -.025em; color: var(--text-strong); }
+  .head h1:last-child { margin-bottom: 0; }
+  .head p.lead { margin: 0; font-size: 16px; line-height: 1.72; color: var(--text-faint); }
+  h2, h3, h4 { color: var(--text-strong); }
+  h2 { margin: 44px 0 14px; padding-top: 8px; font: 650 21px/1.35 var(--font); letter-spacing: -.015em; }
+  .head + h2, .head + * > h2:first-child { margin-top: 6px; }
+  h3 { margin: 28px 0 10px; font: 600 16.5px/1.4 var(--font); letter-spacing: -.01em; }
+  h4 { margin: 22px 0 8px; font: 600 15px/1.4 var(--font); }
+  p { margin: 12px 0; line-height: 1.78; }
   a:hover { text-decoration: underline; text-underline-offset: 3px; }
-  b, strong { font-weight: 600; color: var(--text-strong); }
-  code { font-family: var(--mono); font-size: .85em; background: var(--well); color: var(--text-strong); padding: .15em .4em; border-radius: 4px; }
-  pre { background: var(--well); padding: 14px 18px; border-radius: var(--r-md); overflow-x: auto; line-height: 1.65; margin: 14px 0; }
-  pre code { background: none; padding: 0; font-size: 13px; color: var(--text-strong); }
-  .diagram { width: min(1200px, calc(100vw - var(--side) - 112px)); margin: 20px 0; padding: 20px; background: var(--well); border-radius: var(--r-lg); overflow-x: auto; }
-  table { border-collapse: collapse; margin: 16px 0; font-size: 14px; line-height: 1.65; display: block; overflow-x: auto; }
-  th, td { padding: 9px 14px 9px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-  th { font-size: 12.5px; font-weight: 600; color: var(--text-faint); white-space: nowrap; border-bottom-color: var(--line-strong); }
-  td:first-child, th:first-child { padding-left: 2px; }
-  tbody tr:hover td { background: color-mix(in srgb, var(--well) 60%, transparent); }
-  ul, ol { padding-left: 22px; margin: 10px 0; }
-  li { margin: 4px 0; }
+  b, strong { color: var(--text-strong); font-weight: 650; }
+  ul, ol { margin: 12px 0 18px; padding-left: 1.45em; }
+  li { margin: 6px 0; line-height: 1.74; }
   li::marker { color: var(--text-ghost); }
-  blockquote { margin: 16px 0; padding: 10px 16px; border-left: 3px solid var(--accent); background: var(--accent-soft);
-    border-radius: 0 var(--r-md) var(--r-md) 0; color: var(--text); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 34px 0; }
+  code { padding: 2px 6px; border-radius: 5px; background: var(--well); border: 1px solid var(--line); font: 500 .84em/1.4 var(--mono); color: var(--text-strong); }
+  pre { margin: 16px 0 22px; padding: 16px 20px; border-radius: 11px; background: var(--code-bg); color: var(--code-text); overflow-x: auto;
+    box-shadow: var(--lift2); font: 400 13px/1.75 var(--mono); }
+  pre code { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+  blockquote { margin: 18px 0 22px; padding: 14px 18px; border: 1px solid var(--accent-border); border-left: 3.5px solid var(--accent);
+    border-radius: 10px; background: color-mix(in srgb, var(--accent-soft) 55%, transparent); color: var(--text); font-size: 14.5px; }
   blockquote p { margin: 4px 0; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
-  .hidden { display: none !important; }
-  aside::-webkit-scrollbar { width: 8px; } aside::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; border: 2px solid var(--surface); }
-  @media (max-width: 960px) {
-    .diagram { width: auto; }
-    .top { position: sticky; } .brand-sub { display: none; }
-    aside { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
-    main { margin-left: 0; padding: 32px 20px 80px; }
-  }
-  .xlink { font-size: 13.5px; font-weight: 500; color: var(--text-faint); margin-right: 8px; }
-  .xlink:hover { color: var(--accent-text); text-decoration: none; }
+  .table-wrap { margin: 18px 0 24px; border: 1px solid var(--line-strong); border-radius: 12px; overflow-x: auto; background: var(--raised); box-shadow: var(--lift1); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+  html:not(.js) table { display: block; overflow-x: auto; margin: 16px 0; }
+  th, td { padding: 11px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { background: var(--well); color: var(--text-strong); font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--well) 45%, transparent); }
+  .diagram { margin: 22px 0 26px; padding: 20px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 13px;
+    box-shadow: var(--lift2); overflow-x: auto; }
+
   /* docs <-> code: a path that is a link to the file on GitHub, and each chapter's source */
-  a.code code { color: var(--accent-text); background: var(--accent-soft); }
+  a.code code { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-border); }
   a.code:hover { text-decoration: none; } a.code:hover code { text-decoration: underline; text-underline-offset: 3px; }
-  pre a.code { color: var(--accent-text); }
-  p.src { margin-top: 40px; font-size: 13px; color: var(--text-faint); }
+  pre a.code { color: var(--code-link); }
+  p.src { margin-top: 44px; font-size: 13px; color: var(--text-faint); }
+
+  /* previous / next */
+  .pager { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--line); }
+  .pager a { display: flex; flex-direction: column; gap: 5px; padding: 16px 20px; border: 1px solid var(--line-strong); border-radius: 12px;
+    background: var(--raised); box-shadow: var(--lift1); transition: border-color .16s, transform .16s, box-shadow .16s; }
+  .pager a:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--lift2); }
+  .pager a.next { grid-column: 2; text-align: right; }
+  .pager small { font: 500 12px var(--mono); color: var(--text-faint); }
+  .pager b { font-size: 15px; font-weight: 650; color: var(--text-strong); }
+
+  /* on this page */
+  aside.toc { position: sticky; top: var(--top); height: calc(100dvh - var(--top)); overflow-y: auto; padding: 48px 24px 40px 8px; }
+  .toc-box { padding-left: 14px; border-left: 1px solid var(--line); }
+  .toc-title { margin: 0 0 10px; font: 650 12px/1.4 var(--font); letter-spacing: .03em; text-transform: uppercase; color: var(--text-strong); }
+  aside.toc a { display: block; padding: 5px 0 5px 8px; margin-left: -8px; font-size: 12.5px; font-weight: 450; line-height: 1.45;
+    color: var(--text-faint); border-radius: 6px; transition: color .15s, background .15s; }
+  aside.toc a.h3 { padding-left: 20px; font-size: 12px; }
+  aside.toc a:hover, aside.toc a.on { color: var(--accent-text); background: var(--accent-soft); text-decoration: none; }
+
+  /* ghost scrollbars: invisible until hovered */
+  aside.side, aside.toc { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  aside.side:hover, aside.toc:hover { scrollbar-color: color-mix(in srgb, var(--text-strong) 18%, transparent) transparent; }
+  aside.side::-webkit-scrollbar, aside.toc::-webkit-scrollbar { width: 4px; }
+  aside.side::-webkit-scrollbar-thumb, aside.toc::-webkit-scrollbar-thumb { border-radius: 999px; background: transparent; }
+  aside.side:hover::-webkit-scrollbar-thumb, aside.toc:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-strong) 18%, transparent); }
+
+  @media (max-width: 1180px) {
+    .layout { grid-template-columns: 272px minmax(0,1fr); }
+    aside.toc { display: none; }
+  }
+  @media (max-width: 860px) {
+    .topbar { padding: 0 16px; }
+    .top-links, .badge, .gh { display: none; }
+    .seg button { padding: 3px 8px; }
+    .menu-btn { display: inline-flex; }
+    .layout { grid-template-columns: 1fr; }
+    aside.side { position: fixed; left: 0; top: var(--top); bottom: 0; width: 290px; height: auto; z-index: 55; background: var(--canvas);
+      box-shadow: var(--lift2); transform: translateX(-102%); transition: transform .24s var(--e-out); }
+    body.nav-open aside.side { transform: none; }
+    main { padding: 32px 20px 72px; }
+    .pager { grid-template-columns: 1fr; } .pager a.next { grid-column: 1; }
+  }
 {{CSS}}
 </style>
 </head>
 <body>
-<header class="top">
-  <a class="brand" href="#ch-index">myorch</a><span class="brand-sub">{{SUB}}</span>
+<header class="top"><div class="topbar">
+  <button class="menu-btn" id="menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <a class="brand" href="#ch-index">""" + LOGO + """myorch</a><span class="badge">{{SUB}}</span>
+  <nav class="top-links">{{XLINK}}</nav>
   <span class="spacer"></span>
-  {{XLINK}}
-  <a class="xlink" href="https://github.com/leweii/myorch">GitHub</a>
   <div class="seg" role="radiogroup" aria-label="{{THEME}}">
     <button data-theme-pick="light">{{LIGHT}}</button><button data-theme-pick="dark">{{DARK}}</button><button data-theme-pick="auto">{{AUTO}}</button>
   </div>
-</header>
-<aside>
-  <input id="q" type="search" placeholder="{{FILTER}}">
+  <a class="gh" href="https://github.com/leweii/myorch"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.6.2 2.9.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+</div></header>
+<div class="layout">
+<aside class="side">
+  <div class="side-head"><b>{{TITLE}}</b><span>{{SUB}}</span></div>
+  <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+    <input id="q" type="search" placeholder="{{FILTER}}" autocomplete="off"><kbd>/</kbd></div>
   <ul id="nav">
 {{NAV}}
   </ul>
+  <p class="empty hidden" id="empty">Nothing matches. Try a command, a flow or a file name.</p>
 </aside>
 <main>
 {{BODY}}
 </main>
+<aside class="toc"><div class="toc-box hidden" id="toc"><p class="toc-title">On this page</p><div id="toc-links"></div></div></aside>
+</div>
 <script>
-  const links = [...document.querySelectorAll('aside a')];
-  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
-  const targets = [...document.querySelectorAll('section.chapter, section.chapter h2')];
-  let current = null;
-  function setActive(id) {
-    if (id === current) return;
-    current = id;
-    links.forEach(a => a.classList.remove('active'));
-    document.querySelectorAll('aside li.ch').forEach(li => li.classList.remove('open'));
-    const a = byId.get(id); if (!a) return;
-    a.classList.add('active');
-    const ch = a.closest('li.ch');
-    ch?.classList.add('open');
-    ch?.querySelector('.ch-link')?.classList.add('active');
-    a.scrollIntoView({block: 'nearest'});
-  }
-  function onScroll() {
-    let best = null;
-    for (const t of targets) { if (t.getBoundingClientRect().top < 120) best = t; }
-    if (best) setActive(best.id);
-  }
-  window.addEventListener('scroll', onScroll, {passive: true});
-  onScroll();
-  const q = document.getElementById('q');
-  q.addEventListener('input', () => {
-    const v = q.value.trim().toLowerCase();
-    document.querySelectorAll('aside li.ch').forEach(li => {
-      const hit = !v || li.textContent.toLowerCase().includes(v);
-      li.classList.toggle('hidden', !hit);
-      li.classList.toggle('open', !!v && hit);
-      li.querySelectorAll('ul.sub li').forEach(s => s.classList.toggle('hidden', !!v && !s.textContent.toLowerCase().includes(v) && !li.querySelector('.ch-link').textContent.toLowerCase().includes(v)));
-    });
+(() => {
+  const chapters = [...document.querySelectorAll('section.chapter')];
+  const chLinks = [...document.querySelectorAll('#nav a.ch-link')];
+  const linkFor = new Map(chLinks.map(a => [a.getAttribute('href').slice(1), a]));
+  const subFor = new Map([...document.querySelectorAll('#nav ul.sub a')].map(a => [a.getAttribute('href').slice(1), a]));
+  const groupOf = a => { let li = a.closest('li.ch'); while ((li = li.previousElementSibling)) if (li.classList.contains('grp-t')) return li.textContent; return ''; };
+  const toc = document.getElementById('toc'), tocLinks = document.getElementById('toc-links');
+  let cur = null, heads = [];
+
+  // Each chapter: a head (kicker, title, lead), tables in cards, and previous / next cards at the end.
+  chapters.forEach(sec => {
+    const h1 = sec.querySelector(':scope > h1'); const a = linkFor.get(sec.id);
+    if (h1) {
+      const head = document.createElement('header'); head.className = 'head';
+      const kick = sec.dataset.kicker || (a && groupOf(a));
+      if (kick) head.innerHTML = '<span class="kicker"></span>', head.firstChild.textContent = kick;
+      h1.before(head); head.append(h1);
+      const p = head.nextElementSibling;
+      if (p && p.tagName === 'P' && !p.classList.contains('src')) { p.classList.add('lead'); head.append(p); }
+    }
+    sec.querySelectorAll('table').forEach(t => { if (t.parentElement.classList.contains('table-wrap')) return;
+      const w = document.createElement('div'); w.className = 'table-wrap'; t.before(w); w.append(t); });
+    const i = chLinks.indexOf(a), prev = chLinks[i - 1], next = chLinks[i + 1];
+    if (a && (prev || next)) {
+      const nav = document.createElement('nav'); nav.className = 'pager';
+      const card = (l, cls, label) => { const c = document.createElement('a'); c.className = cls; c.href = l.getAttribute('href');
+        c.innerHTML = '<small></small><b></b>'; c.firstChild.textContent = label; c.lastChild.textContent = l.firstChild.textContent.trim(); return c; };
+      if (prev) nav.append(card(prev, 'prev', '← Previous'));
+      if (next) nav.append(card(next, 'next', 'Next →'));
+      sec.append(nav);
+    }
   });
+
+  function show(sec) {
+    if (sec === cur) return;
+    cur?.classList.remove('cur'); cur = sec; sec.classList.add('cur');
+    chLinks.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + sec.id));
+    document.querySelectorAll('#nav li.ch').forEach(li => li.classList.toggle('open', li.contains(linkFor.get(sec.id) || null)));
+    const link = linkFor.get(sec.id), side = document.querySelector('aside.side');   // scroll the sidebar only, never the page
+    if (link) { const r = link.getBoundingClientRect(), sr = side.getBoundingClientRect();
+      if (r.top < sr.top || r.bottom > sr.bottom) side.scrollTop += r.top - sr.top - sr.height / 3; }
+    heads = [...sec.querySelectorAll('h2[id], h3[id]')];
+    tocLinks.replaceChildren(...heads.map(h => { const a = document.createElement('a'); a.href = '#' + h.id;
+      a.textContent = h.textContent; if (h.tagName === 'H3') a.className = 'h3'; return a; }));
+    toc.classList.toggle('hidden', !heads.length);
+    const t = sec.querySelector('h1')?.firstChild?.textContent.trim(), site = {{TITLE_JSON}};
+    document.title = t && t !== site ? `${t} · ${site}` : site;
+    fitDiagrams();
+  }
+  function route() {
+    let id = ''; try { id = decodeURIComponent(location.hash.slice(1)); } catch {}
+    const el = id && document.getElementById(id);
+    const sec = el ? el.closest('section.chapter') : chapters[0];
+    if (!sec) return;
+    show(sec);
+    // Jump, not glide: a chapter is a new page. Smooth scrolling stays on for links within the chapter.
+    const root = document.documentElement; root.style.scrollBehavior = 'auto';
+    if (el && el !== sec) el.scrollIntoView({block: 'start'}); else window.scrollTo(0, 0);
+    requestAnimationFrame(() => { root.style.scrollBehavior = ''; });
+    spy();
+  }
+  function spy() {
+    let best = null;
+    for (const h of heads) { if (h.getBoundingClientRect().top < 140) best = h; else break; }
+    const id = best && best.id;
+    tocLinks.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+    subFor.forEach((a, k) => a.classList.toggle('on', k === id));
+  }
+  window.addEventListener('hashchange', route);
+  window.addEventListener('load', route);   // after the browser's own jump to the anchor
+  window.addEventListener('scroll', spy, {passive: true});
+
+  // Filter: chapter and section titles first; a chapter whose text has the words shows too.
+  const q = document.getElementById('q'), empty = document.getElementById('empty');
+  q.addEventListener('input', () => {
+    const v = q.value.trim().toLowerCase(); let any = false;
+    document.querySelectorAll('#nav li.ch').forEach(li => {
+      const a = li.querySelector('.ch-link'), sec = document.getElementById(a.getAttribute('href').slice(1));
+      const subs = [...li.querySelectorAll('ul.sub li')];
+      const titleHit = a.textContent.toLowerCase().includes(v);
+      const subHits = subs.filter(s => s.textContent.toLowerCase().includes(v));
+      const bodyHit = !!v && !!sec && sec.textContent.toLowerCase().includes(v);
+      const hit = !v || titleHit || subHits.length > 0 || bodyHit;
+      li.classList.toggle('hidden', !hit); any = any || hit;
+      subs.forEach(s => s.classList.toggle('hidden', !!v && !titleHit && !subHits.includes(s)));
+      li.classList.toggle('open', v ? subHits.length > 0 : li.contains(linkFor.get(cur?.id) || null));
+    });
+    document.querySelectorAll('#nav li.grp-t').forEach(g => { let n = g.nextElementSibling, vis = false;
+      while (n && !n.classList.contains('grp-t')) { vis = vis || !n.classList.contains('hidden'); n = n.nextElementSibling; }
+      g.classList.toggle('hidden', !vis); });
+    empty.classList.toggle('hidden', any);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement !== q && !e.metaKey && !e.ctrlKey) { e.preventDefault(); q.focus(); }
+    else if (e.key === 'Escape' && document.activeElement === q) { q.value = ''; q.dispatchEvent(new Event('input')); q.blur(); }
+  });
+
+  // Small screens: the chapter list is a drawer.
+  document.getElementById('menu').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+  document.querySelector('aside.side').addEventListener('click', e => { if (e.target.closest('a')) document.body.classList.remove('nav-open'); });
+
   // Diagrams are drawn on a fixed canvas (docs/diagrams/gen.py); scale each one to the width it has.
   function fitDiagrams() {
-    document.querySelectorAll('.diagram .dg').forEach(d => {
+    document.querySelectorAll('section.chapter.cur .diagram .dg, html:not(.js) .diagram .dg').forEach(d => {
       const avail = d.parentElement.clientWidth - 40;
-      d.style.zoom = Math.min(1.15, avail / parseFloat(d.style.width));
+      if (avail > 0) d.style.zoom = Math.min(1.15, avail / parseFloat(d.style.width));
     });
   }
-  fitDiagrams();
   window.addEventListener('resize', fitDiagrams);
+
   // Theme (shared with the console): light, dark, or auto (follow the system).
-  (() => {
-    const apply = (t) => {
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else document.documentElement.removeAttribute("data-theme");
-      document.querySelectorAll("[data-theme-pick]").forEach(b => b.classList.toggle("on", b.dataset.themePick === t));
-    };
-    let cur = "auto"; try { cur = localStorage.getItem("myorch.theme") || "auto"; } catch {}
-    cur = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[cur] || cur;
-    if (!["light", "dark", "auto"].includes(cur)) cur = "auto";
-    apply(cur);
-    document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
-      apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
-    }));
-  })();
-  document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
+  const apply = (t) => {
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else document.documentElement.removeAttribute("data-theme");
+    document.querySelectorAll("[data-theme-pick]").forEach(b => b.classList.toggle("on", b.dataset.themePick === t));
+  };
+  let theme = "auto"; try { theme = localStorage.getItem("myorch.theme") || "auto"; } catch {}
+  theme = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[theme] || theme;
+  if (!["light", "dark", "auto"].includes(theme)) theme = "auto";
+  apply(theme);
+  document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
+    apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
+  }));
+
+  route();
+})();
 </script>
 </body>
 </html>

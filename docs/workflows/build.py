@@ -2,7 +2,7 @@
 
     uv run --with markdown python docs/workflows/build.py
 
-One page, sidebar navigation, same look as the User manual (docs/build-html.py's page shell):
+One file, sidebar navigation, one chapter at a time, same look as the User manual (docs/build-html.py's page shell):
 - Home: the manual's README.md, written by hand (roles, which flow when, starting and stepping in):
   docs/workflows/README.md.
 - One chapter per flow in flows/*.yaml. The step graph, the inputs and the step facts are generated
@@ -432,8 +432,6 @@ CSS = """
   h1 small { font-size: 16px; font-weight: 500; color: var(--text-faint); margin-left: 6px; }
   p.small, span.small { font-size: 13px; color: var(--text-faint); }
   p.err { color: var(--danger); }
-  aside .grp-t { font-size: 11.5px; font-weight: 600; color: var(--text-ghost); padding: 14px 10px 4px; text-transform: none; }
-  aside .role { color: var(--text-ghost); font-weight: 400; font-size: 12.5px; margin-left: 4px; }
 """
 
 
@@ -463,7 +461,7 @@ def build(fd: FlowDefs, ov: dict[str, Any]) -> None:
     nav.append(f'<li class="grp-t">{W["reference"]}</li><li class="ch"><a class="ch-link" href="#ch-{key}">{name}</a></li>')
 
     xlink = f'<a class="xlink" href="../index.html">{W["user_manual"]} →</a>'
-    out = shell.page(W["manual"], W["title"], xlink, CSS, "\n".join(nav), "\n".join(sections))
+    out = shell.page(W["manual"], W["title"], xlink, CSS, "\n".join(nav), "\n".join(sections), root="../")
     (HERE / "index.html").write_text(out, encoding="utf-8")
     print(f"wrote {HERE / 'index.html'} ({len(ov['flows'])} flows, {len(ov['fragments'])} fragments)")
 

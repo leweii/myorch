@@ -76,4 +76,4 @@ uv run myorch approve <run_id> <step>    # approve
 - `myorch-knowledge/README.md`: the description of the project pack directory.
 - [deploy/README.md](../deploy/README.md): docker compose installation, the install script for new machines, the credentials file, Slack, the Claude Code channel, publishing origin/main, ports, known limitations.
 - `docs/notes/`: records of individual designs, for example the channel layer, the delivery interface, the research on moving the gateway into Docker, the Slack adapter, the Claude Code channel.
-- `docs/index.html`: the web version of this directory and the docs' home page (single page, navigation on the left). Regenerate after changing any chapter: `uv run --with markdown python docs/build-html.py`.
+- `docs/index.html`: the web version of this directory and the docs' home page (one file; it shows one chapter at a time, with the chapters on the left, the chapter's outline on the right, and previous / next at the end). Regenerate after changing any chapter: `uv run --with markdown python docs/build-html.py`.

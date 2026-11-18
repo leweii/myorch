@@ -4,162 +4,265 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>myorch docs</title>
+<link rel="preload" href="fonts/inter-tight-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <script>
-  // Apply the saved theme before the first paint (same key and values as the console's theme.js).
-  (() => { let t = null; try { t = localStorage.getItem("myorch.theme"); } catch {}
+  // Before the first paint: the saved theme (same key and values as the console's theme.js), and "js" so
+  // the page shows one chapter at a time (without JavaScript every chapter is shown, one after another).
+  (() => { const d = document.documentElement; d.classList.add("js"); let t = null; try { t = localStorage.getItem("myorch.theme"); } catch {}
     t = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[t] || t;
-    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; })();
+    if (t === "light" || t === "dark") d.dataset.theme = t; })();
 </script>
 <style>
-  /* Quiet and legible: one neutral family, hierarchy from size, weight and space rather than boxes.
-     Borders only where they separate; the accent marks links and where you are. */
+  @font-face { font-family: "Inter Tight"; src: url(fonts/inter-tight-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
+  @font-face { font-family: "Geist Mono"; src: url(fonts/geist-mono-latin-wght-normal.woff2) format("woff2"); font-weight: 100 900; font-display: swap; }
   :root {
-    --canvas: #f6f6f5; --surface: #fff; --well: #f3f3f2; --raised: #fff;
-    --line: rgba(15,15,20,.08); --line-strong: rgba(15,15,20,.15);
-    --text-strong: #17171a; --text: #3b3b41; --text-faint: #6e6e76; --text-ghost: #a3a3aa;
-    --accent: #2563eb; --accent-soft: #edf2fe; --accent-text: #1d4fd7;
+    --canvas: #f7f7f6; --surface: #fdfdfc; --well: #efefec; --raised: #fdfdfc;
+    --line: rgba(20,20,30,.085); --line-strong: rgba(20,20,30,.16);
+    --text-strong: #141418; --text: #2b2b31; --text-faint: #62626c; --text-ghost: #9a9aa3;
+    --accent: #526ce8; --accent-soft: rgba(82,108,232,.10); --accent-border: rgba(82,108,232,.26); --accent-text: #3f57d4;
     --success: #15803d; --success-soft: #ebf6ee; --danger: #c2321f; --danger-soft: #fcefec;
     --warning: #a16207; --warning-soft: #fbf4e4;
-    --shadow-card: 0 1px 2px rgba(15,15,20,.05), 0 0 0 1px var(--line);
-    --hc: rgba(15,15,20,.09);
+    --shadow-card: 0 1px 2px rgba(20,20,30,.05), 0 0 0 1px var(--line);
+    --lift1: 0 1px 2px rgba(20,20,30,.05), 0 4px 12px rgba(20,20,30,.04);
+    --lift2: 0 2px 6px rgba(20,20,30,.05), 0 14px 28px rgba(20,20,30,.07);
+    --code-bg: #18181b; --code-text: #f4f4f5; --code-link: #a9b7ff;
+    --top-bg: rgba(247,247,246,.88); --side-bg: rgba(253,253,252,.65); --hover: rgba(20,20,30,.045);
+    --hc: rgba(20,20,30,.09);
     color-scheme: light;
-    --font: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    --mono: "SF Mono", ui-monospace, Menlo, Consolas, monospace;
-    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --top: 56px; --side: 280px;
+    --font: "Inter Tight", -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", "Microsoft YaHei", sans-serif;
+    --mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    --r-sm: 6px; --r-md: 8px; --r-lg: 12px; --top: 64px; --side: 288px; --toc: 232px;
+    --e-out: cubic-bezier(.16,1,.3,1);
   }
   :root[data-theme="dark"] {
-    --canvas: #0e0e10; --surface: #151518; --well: #1c1c20; --raised: #232328;
+    --canvas: #0f0f12; --surface: #16161a; --well: #1f1f25; --raised: #1a1a1f;
     --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
-    --text-strong: #f4f4f5; --text: #d2d2d7; --text-faint: #9d9da6; --text-ghost: #66666e;
-    --accent: #5b9bff; --accent-soft: rgba(91,155,255,.14); --accent-text: #8ab8ff;
+    --text-strong: #f4f4f5; --text: #d4d4d8; --text-faint: #9d9da6; --text-ghost: #6b6b74;
+    --accent: #7d8ff2; --accent-soft: rgba(125,143,242,.14); --accent-border: rgba(125,143,242,.34); --accent-text: #a3b0f7;
     --success: #4ade80; --success-soft: rgba(74,222,128,.12); --danger: #ff7a66; --danger-soft: rgba(255,122,102,.12);
     --warning: #f5b94a; --warning-soft: rgba(245,185,74,.12);
     --shadow-card: 0 0 0 1px var(--line);
+    --lift1: 0 0 0 1px var(--line);
+    --lift2: 0 0 0 1px var(--line), 0 14px 28px rgba(0,0,0,.35);
+    --code-bg: #0a0a0c; --code-text: #e9e9ec; --code-link: #a3b0f7;
+    --top-bg: rgba(15,15,18,.86); --side-bg: rgba(22,22,26,.6); --hover: rgba(255,255,255,.05);
     --hc: rgba(255,255,255,.08);
     color-scheme: dark; }
   @media (prefers-color-scheme: dark) { :root:not([data-theme]) {
-    --canvas: #0e0e10; --surface: #151518; --well: #1c1c20; --raised: #232328;
+    --canvas: #0f0f12; --surface: #16161a; --well: #1f1f25; --raised: #1a1a1f;
     --line: rgba(255,255,255,.08); --line-strong: rgba(255,255,255,.15);
-    --text-strong: #f4f4f5; --text: #d2d2d7; --text-faint: #9d9da6; --text-ghost: #66666e;
-    --accent: #5b9bff; --accent-soft: rgba(91,155,255,.14); --accent-text: #8ab8ff;
+    --text-strong: #f4f4f5; --text: #d4d4d8; --text-faint: #9d9da6; --text-ghost: #6b6b74;
+    --accent: #7d8ff2; --accent-soft: rgba(125,143,242,.14); --accent-border: rgba(125,143,242,.34); --accent-text: #a3b0f7;
     --success: #4ade80; --success-soft: rgba(74,222,128,.12); --danger: #ff7a66; --danger-soft: rgba(255,122,102,.12);
     --warning: #f5b94a; --warning-soft: rgba(245,185,74,.12);
     --shadow-card: 0 0 0 1px var(--line);
+    --lift1: 0 0 0 1px var(--line);
+    --lift2: 0 0 0 1px var(--line), 0 14px 28px rgba(0,0,0,.35);
+    --code-bg: #0a0a0c; --code-text: #e9e9ec; --code-link: #a3b0f7;
+    --top-bg: rgba(15,15,18,.86); --side-bg: rgba(22,22,26,.6); --hover: rgba(255,255,255,.05);
     --hc: rgba(255,255,255,.08);
     color-scheme: dark; } }
   * { box-sizing: border-box; }
-  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top) + 24px); }
-  body { margin: 0; background: var(--surface); color: var(--text); font: 400 15px/1.8 var(--font);
-    -webkit-font-smoothing: antialiased; font-variant-numeric: tabular-nums; }
+  html { scroll-behavior: smooth; scroll-padding-top: calc(var(--top) + 28px); }
+  html, body { margin: 0; background: var(--canvas); color: var(--text); -webkit-font-smoothing: antialiased; }
+  body { font: 400 15.5px/1.75 var(--font); overflow-x: hidden; font-variant-numeric: tabular-nums; }
   ::selection { background: var(--accent-soft); color: var(--text-strong); }
+  a { color: var(--accent-text); text-decoration: none; }
+  button, input { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .hidden { display: none !important; }
 
   /* ---- top bar ---- */
-  .top { position: fixed; inset: 0 0 auto 0; height: var(--top); z-index: 20; display: flex; align-items: center; gap: 12px;
-    padding: 0 20px 0 24px; background: color-mix(in srgb, var(--surface) 88%, transparent); backdrop-filter: blur(12px);
-    border-bottom: 1px solid var(--line); }
-  .brand { font-weight: 650; font-size: 16px; color: var(--text-strong); letter-spacing: -.01em; text-decoration: none; }
-  .brand-sub { color: var(--text-faint); font-size: 14px; }
-  .brand-sub::before { content: "/"; margin-right: 12px; color: var(--text-ghost); }
-  .top .spacer { flex: 1; }
-  .seg { display: inline-flex; padding: 2px; gap: 2px; background: var(--well); border-radius: var(--r-md); }
-  .seg button { font: 500 13px/1.3 var(--font); color: var(--text-faint); background: transparent; border: 0; cursor: pointer;
-    padding: 5px 12px; border-radius: var(--r-sm); }
+  .top { position: sticky; top: 0; z-index: 60; height: var(--top); background: var(--top-bg);
+    backdrop-filter: saturate(1.4) blur(14px); -webkit-backdrop-filter: saturate(1.4) blur(14px); border-bottom: 1px solid var(--line); }
+  .topbar { max-width: 1480px; height: 100%; margin: 0 auto; padding: 0 32px; display: flex; align-items: center; gap: 14px; }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font: 650 17px var(--font); letter-spacing: -.015em; color: var(--text-strong); }
+  .brand svg { width: 24px; height: 24px; flex: none; }
+  .badge { display: inline-flex; align-items: center; padding: 3px 9px; border-radius: 999px; background: var(--accent-soft);
+    border: 1px solid var(--accent-border); color: var(--accent-text); font: 600 12px/1.2 var(--font); }
+  .top-links { display: flex; align-items: center; gap: 6px; margin-left: 8px; padding-left: 14px; border-left: 1px solid var(--line); }
+  .xlink { padding: 6px 10px; border-radius: 7px; font-size: 13.5px; font-weight: 500; color: var(--text-faint); transition: color .18s, background .18s; }
+  .xlink:hover { color: var(--text-strong); background: var(--hover); }
+  .spacer { flex: 1; }
+  .seg { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 2px; background: var(--well); }
+  .seg button { all: unset; cursor: pointer; font: 500 12px var(--mono); color: var(--text-faint); padding: 3px 10px; border-radius: 999px; transition: background .2s, color .2s; }
   .seg button:hover { color: var(--text-strong); }
-  .seg button.on { background: var(--raised); color: var(--text-strong); box-shadow: var(--shadow-card); }
+  .seg button.on { background: var(--raised); color: var(--text-strong); box-shadow: var(--lift1); }
+  .gh { display: inline-flex; align-items: center; gap: 7px; height: 34px; padding: 0 13px; border-radius: 999px; border: 1px solid var(--line);
+    background: var(--raised); font: 500 13px var(--font); color: var(--text-strong); box-shadow: var(--lift1); }
+  .gh svg { width: 15px; height: 15px; }
+  .menu-btn { display: none; align-items: center; justify-content: center; width: 36px; height: 36px; border: 1px solid var(--line);
+    border-radius: 8px; background: var(--raised); cursor: pointer; color: var(--text-strong); }
+  .menu-btn svg { width: 18px; height: 18px; }
 
-  /* ---- sidebar ---- */
-  aside { position: fixed; top: var(--top); left: 0; bottom: 0; width: var(--side); overflow-y: auto;
-    border-right: 1px solid var(--line); padding: 20px 14px 40px; }
-  aside input { width: 100%; margin: 0 0 16px; padding: 7px 12px; border: 1px solid transparent; border-radius: var(--r-md);
-    font: 400 13.5px/1.4 var(--font); background: var(--well); color: var(--text-strong); }
-  aside input::placeholder { color: var(--text-ghost); }
-  aside input:focus { outline: none; border-color: var(--accent); background: var(--surface); }
-  aside ul { list-style: none; margin: 0; padding: 0; }
-  aside a { display: block; color: var(--text); text-decoration: none; border-radius: var(--r-sm); padding: 5px 10px; line-height: 1.45; }
-  aside a:hover { background: var(--well); color: var(--text-strong); }
-  aside a.ch-link { font-size: 14px; font-weight: 500; }
-  aside ul.sub { display: none; margin: 2px 0 8px 10px; padding-left: 8px; border-left: 1px solid var(--line); }
-  aside li.ch.open ul.sub { display: block; }
-  aside ul.sub a { font-size: 13px; color: var(--text-faint); padding: 4px 10px; }
-  aside a.active { background: var(--accent-soft); color: var(--accent-text); font-weight: 600; }
-  aside ul.sub a.active { background: transparent; color: var(--accent-text); font-weight: 500; box-shadow: -9px 0 0 -8px var(--accent); }
+  /* ---- three columns: chapters, the chapter, its outline ---- */
+  .layout { max-width: 1480px; margin: 0 auto; display: grid; grid-template-columns: var(--side) minmax(0,1fr) var(--toc);
+    align-items: start; min-height: calc(100dvh - var(--top)); }
+  aside.side { position: sticky; top: var(--top); height: calc(100dvh - var(--top)); overflow-y: auto; padding: 24px 14px 48px 28px;
+    border-right: 1px solid var(--line); background: var(--side-bg); }
+  .side-head { padding: 0 6px 14px; }
+  .side-head b { display: block; font-size: 15px; font-weight: 650; color: var(--text-strong); letter-spacing: -.01em; }
+  .side-head span { display: block; margin-top: 3px; font-size: 12px; color: var(--text-faint); line-height: 1.4; }
+  .search { position: relative; margin: 0 4px 18px; }
+  .search input { width: 100%; height: 36px; padding: 0 36px 0 32px; border: 1px solid var(--line-strong); border-radius: 8px;
+    background: var(--raised); font-size: 13px; color: var(--text-strong); box-shadow: inset 0 1px 2px rgba(20,20,30,.03);
+    transition: border-color .18s, box-shadow .18s; }
+  .search input::placeholder { color: var(--text-ghost); }
+  .search input::-webkit-search-cancel-button, .search input::-webkit-search-decoration { appearance: none; }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .search svg { position: absolute; left: 10px; top: 10.5px; width: 15px; height: 15px; color: var(--text-ghost); pointer-events: none; }
+  .search kbd { position: absolute; right: 8px; top: 8px; min-width: 20px; height: 20px; padding: 0 5px; border: 1px solid var(--line-strong);
+    border-radius: 5px; background: var(--canvas); color: var(--text-faint); font: 500 11px/18px var(--mono); text-align: center; pointer-events: none; }
+  .search:has(input:not(:placeholder-shown)) kbd { opacity: 0; }
+  #nav, #nav ul { list-style: none; margin: 0; padding: 0; }
+  #nav .grp-t { margin: 20px 10px 4px; font-size: 13px; font-weight: 600; line-height: 1.35; color: var(--text-ghost); }
+  #nav .grp-t:first-child { margin-top: 2px; }
+  #nav a { display: block; color: var(--text-faint); border-radius: 8px; transition: background .14s, color .14s; }
+  #nav a:hover { background: var(--hover); color: var(--text-strong); }
+  #nav a.ch-link { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; margin: 1px 0;
+    padding: 5px 10px; font-size: 13.5px; font-weight: 500; line-height: 1.4; color: var(--text); }
+  #nav li.ch:has(ul.sub) > a.ch-link::after { content: ""; width: 6px; height: 6px; flex: none; margin-right: 3px;
+    border-right: 1.6px solid var(--text-ghost); border-bottom: 1.6px solid var(--text-ghost); transform: rotate(-45deg); transition: transform .16s ease; }
+  #nav li.ch.open > a.ch-link::after { transform: rotate(45deg); }
+  #nav a.ch-link.on { background: var(--accent-soft); color: var(--accent-text); }
+  #nav a.ch-link.on::after { border-color: var(--accent-text) !important; }
+  #nav ul.sub { display: none; margin: 2px 0 8px 13px; padding-left: 9px; border-left: 1.5px solid var(--line); }
+  #nav li.ch.open > ul.sub { display: block; }
+  #nav ul.sub a { padding: 4px 10px; font-size: 13px; line-height: 1.45; font-weight: 450; }
+  #nav ul.sub a.on { color: var(--accent-text); background: transparent; box-shadow: -10.5px 0 0 -9px var(--accent); }
+  #nav .role { color: var(--text-ghost); font-weight: 400; font-size: 12px; margin-left: 4px; }
+  .empty { padding: 18px 10px; font-size: 13px; color: var(--text-faint); line-height: 1.55; }
 
-  /* ---- content ---- */
-  main { margin-left: var(--side); padding: calc(var(--top) + 40px) 56px 160px; }
-  .chapter { max-width: 980px; }
-  .chapter + .chapter { margin-top: 72px; padding-top: 56px; border-top: 1px solid var(--line); }
-  h1, h2, h3, h4 { color: var(--text-strong); line-height: 1.35; letter-spacing: -.01em; }
-  h1 { font-size: 30px; font-weight: 700; margin: 0 0 20px; }
-  h2 { font-size: 21px; font-weight: 650; margin: 48px 0 12px; }
-  h3 { font-size: 17px; font-weight: 600; margin: 32px 0 8px; }
-  h4 { font-size: 15px; font-weight: 600; margin: 24px 0 6px; }
-  p { margin: 10px 0; }
-  a { color: var(--accent-text); text-decoration: none; }
+  main { min-width: 0; padding: 48px clamp(32px,5vw,76px) 96px; }
+  .chapter { max-width: 860px; margin: 0 auto; scroll-margin-top: 64px; }   /* the browser's own jump to #ch-… lands at the top */
+  html:not(.js) .chapter + .chapter { margin-top: 72px; padding-top: 56px; border-top: 1px solid var(--line); }
+  html.js .chapter { display: none; }
+  html.js .chapter.cur { display: block; animation: rise .32s var(--e-out); }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  /* the chapter's head: kicker, title, lead (the paragraph right after the title) */
+  .head { margin: 0 0 32px; padding: 0 0 26px; border-bottom: 1px solid var(--line); }
+  .kicker { display: inline-flex; align-items: center; gap: 6px; margin: 0 0 14px; padding: 4px 11px; border-radius: 999px;
+    background: var(--accent-soft); border: 1px solid var(--accent-border); color: var(--accent-text); font: 600 12px/1.3 var(--mono); letter-spacing: .02em; }
+  h1 { margin: 0 0 14px; font: 650 clamp(26px,2.6vw,34px)/1.24 var(--font); letter-spacing: -.025em; color: var(--text-strong); }
+  .head h1:last-child { margin-bottom: 0; }
+  .head p.lead { margin: 0; font-size: 16px; line-height: 1.72; color: var(--text-faint); }
+  h2, h3, h4 { color: var(--text-strong); }
+  h2 { margin: 44px 0 14px; padding-top: 8px; font: 650 21px/1.35 var(--font); letter-spacing: -.015em; }
+  .head + h2, .head + * > h2:first-child { margin-top: 6px; }
+  h3 { margin: 28px 0 10px; font: 600 16.5px/1.4 var(--font); letter-spacing: -.01em; }
+  h4 { margin: 22px 0 8px; font: 600 15px/1.4 var(--font); }
+  p { margin: 12px 0; line-height: 1.78; }
   a:hover { text-decoration: underline; text-underline-offset: 3px; }
-  b, strong { font-weight: 600; color: var(--text-strong); }
-  code { font-family: var(--mono); font-size: .85em; background: var(--well); color: var(--text-strong); padding: .15em .4em; border-radius: 4px; }
-  pre { background: var(--well); padding: 14px 18px; border-radius: var(--r-md); overflow-x: auto; line-height: 1.65; margin: 14px 0; }
-  pre code { background: none; padding: 0; font-size: 13px; color: var(--text-strong); }
-  .diagram { width: min(1200px, calc(100vw - var(--side) - 112px)); margin: 20px 0; padding: 20px; background: var(--well); border-radius: var(--r-lg); overflow-x: auto; }
-  table { border-collapse: collapse; margin: 16px 0; font-size: 14px; line-height: 1.65; display: block; overflow-x: auto; }
-  th, td { padding: 9px 14px 9px 0; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
-  th { font-size: 12.5px; font-weight: 600; color: var(--text-faint); white-space: nowrap; border-bottom-color: var(--line-strong); }
-  td:first-child, th:first-child { padding-left: 2px; }
-  tbody tr:hover td { background: color-mix(in srgb, var(--well) 60%, transparent); }
-  ul, ol { padding-left: 22px; margin: 10px 0; }
-  li { margin: 4px 0; }
+  b, strong { color: var(--text-strong); font-weight: 650; }
+  ul, ol { margin: 12px 0 18px; padding-left: 1.45em; }
+  li { margin: 6px 0; line-height: 1.74; }
   li::marker { color: var(--text-ghost); }
-  blockquote { margin: 16px 0; padding: 10px 16px; border-left: 3px solid var(--accent); background: var(--accent-soft);
-    border-radius: 0 var(--r-md) var(--r-md) 0; color: var(--text); }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 34px 0; }
+  code { padding: 2px 6px; border-radius: 5px; background: var(--well); border: 1px solid var(--line); font: 500 .84em/1.4 var(--mono); color: var(--text-strong); }
+  pre { margin: 16px 0 22px; padding: 16px 20px; border-radius: 11px; background: var(--code-bg); color: var(--code-text); overflow-x: auto;
+    box-shadow: var(--lift2); font: 400 13px/1.75 var(--mono); }
+  pre code { padding: 0; border: 0; background: transparent; color: inherit; font: inherit; }
+  blockquote { margin: 18px 0 22px; padding: 14px 18px; border: 1px solid var(--accent-border); border-left: 3.5px solid var(--accent);
+    border-radius: 10px; background: color-mix(in srgb, var(--accent-soft) 55%, transparent); color: var(--text); font-size: 14.5px; }
   blockquote p { margin: 4px 0; }
-  hr { border: 0; border-top: 1px solid var(--line); margin: 36px 0; }
-  .hidden { display: none !important; }
-  aside::-webkit-scrollbar { width: 8px; } aside::-webkit-scrollbar-thumb { background: var(--line-strong); border-radius: 8px; border: 2px solid var(--surface); }
-  @media (max-width: 960px) {
-    .diagram { width: auto; }
-    .top { position: sticky; } .brand-sub { display: none; }
-    aside { position: static; width: auto; border-right: 0; border-bottom: 1px solid var(--line); max-height: 40vh; }
-    main { margin-left: 0; padding: 32px 20px 80px; }
-  }
-  .xlink { font-size: 13.5px; font-weight: 500; color: var(--text-faint); margin-right: 8px; }
-  .xlink:hover { color: var(--accent-text); text-decoration: none; }
+  .table-wrap { margin: 18px 0 24px; border: 1px solid var(--line-strong); border-radius: 12px; overflow-x: auto; background: var(--raised); box-shadow: var(--lift1); }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; line-height: 1.6; }
+  html:not(.js) table { display: block; overflow-x: auto; margin: 16px 0; }
+  th, td { padding: 11px 15px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  th { background: var(--well); color: var(--text-strong); font-size: 12.5px; font-weight: 650; white-space: nowrap; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--well) 45%, transparent); }
+  .diagram { margin: 22px 0 26px; padding: 20px; background: var(--raised); border: 1px solid var(--line-strong); border-radius: 13px;
+    box-shadow: var(--lift2); overflow-x: auto; }
+
   /* docs <-> code: a path that is a link to the file on GitHub, and each chapter's source */
-  a.code code { color: var(--accent-text); background: var(--accent-soft); }
+  a.code code { color: var(--accent-text); background: var(--accent-soft); border-color: var(--accent-border); }
   a.code:hover { text-decoration: none; } a.code:hover code { text-decoration: underline; text-underline-offset: 3px; }
-  pre a.code { color: var(--accent-text); }
-  p.src { margin-top: 40px; font-size: 13px; color: var(--text-faint); }
+  pre a.code { color: var(--code-link); }
+  p.src { margin-top: 44px; font-size: 13px; color: var(--text-faint); }
+
+  /* previous / next */
+  .pager { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 16px; margin-top: 28px; padding-top: 28px; border-top: 1px solid var(--line); }
+  .pager a { display: flex; flex-direction: column; gap: 5px; padding: 16px 20px; border: 1px solid var(--line-strong); border-radius: 12px;
+    background: var(--raised); box-shadow: var(--lift1); transition: border-color .16s, transform .16s, box-shadow .16s; }
+  .pager a:hover { text-decoration: none; border-color: var(--accent); transform: translateY(-1px); box-shadow: var(--lift2); }
+  .pager a.next { grid-column: 2; text-align: right; }
+  .pager small { font: 500 12px var(--mono); color: var(--text-faint); }
+  .pager b { font-size: 15px; font-weight: 650; color: var(--text-strong); }
+
+  /* on this page */
+  aside.toc { position: sticky; top: var(--top); height: calc(100dvh - var(--top)); overflow-y: auto; padding: 48px 24px 40px 8px; }
+  .toc-box { padding-left: 14px; border-left: 1px solid var(--line); }
+  .toc-title { margin: 0 0 10px; font: 650 12px/1.4 var(--font); letter-spacing: .03em; text-transform: uppercase; color: var(--text-strong); }
+  aside.toc a { display: block; padding: 5px 0 5px 8px; margin-left: -8px; font-size: 12.5px; font-weight: 450; line-height: 1.45;
+    color: var(--text-faint); border-radius: 6px; transition: color .15s, background .15s; }
+  aside.toc a.h3 { padding-left: 20px; font-size: 12px; }
+  aside.toc a:hover, aside.toc a.on { color: var(--accent-text); background: var(--accent-soft); text-decoration: none; }
+
+  /* ghost scrollbars: invisible until hovered */
+  aside.side, aside.toc { scrollbar-width: thin; scrollbar-color: transparent transparent; }
+  aside.side:hover, aside.toc:hover { scrollbar-color: color-mix(in srgb, var(--text-strong) 18%, transparent) transparent; }
+  aside.side::-webkit-scrollbar, aside.toc::-webkit-scrollbar { width: 4px; }
+  aside.side::-webkit-scrollbar-thumb, aside.toc::-webkit-scrollbar-thumb { border-radius: 999px; background: transparent; }
+  aside.side:hover::-webkit-scrollbar-thumb, aside.toc:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--text-strong) 18%, transparent); }
+
+  @media (max-width: 1180px) {
+    .layout { grid-template-columns: 272px minmax(0,1fr); }
+    aside.toc { display: none; }
+  }
+  @media (max-width: 860px) {
+    .topbar { padding: 0 16px; }
+    .top-links, .badge, .gh { display: none; }
+    .seg button { padding: 3px 8px; }
+    .menu-btn { display: inline-flex; }
+    .layout { grid-template-columns: 1fr; }
+    aside.side { position: fixed; left: 0; top: var(--top); bottom: 0; width: 290px; height: auto; z-index: 55; background: var(--canvas);
+      box-shadow: var(--lift2); transform: translateX(-102%); transition: transform .24s var(--e-out); }
+    body.nav-open aside.side { transform: none; }
+    main { padding: 32px 20px 72px; }
+    .pager { grid-template-columns: 1fr; } .pager a.next { grid-column: 1; }
+  }
 
 </style>
 </head>
 <body>
-<header class="top">
-  <a class="brand" href="#ch-index">myorch</a><span class="brand-sub">User manual</span>
+<header class="top"><div class="topbar">
+  <button class="menu-btn" id="menu" aria-label="Menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
+  <a class="brand" href="#ch-index"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><defs><linearGradient id="mo-g" x1="3" y1="3" x2="21" y2="21" gradientUnits="userSpaceOnUse"><stop stop-color="#0b8fd0"/><stop offset=".5" stop-color="#526ce8"/><stop offset="1" stop-color="#8a4ed9"/></linearGradient></defs><circle cx="6" cy="6" r="2.6" fill="url(#mo-g)"/><circle cx="18" cy="12" r="2.6" fill="url(#mo-g)"/><circle cx="6" cy="18" r="2.6" fill="url(#mo-g)"/><path d="M8.4 7.2 15.6 10.8M15.6 13.2 8.4 16.8" stroke="url(#mo-g)" stroke-width="2" stroke-linecap="round"/></svg>myorch</a><span class="badge">User manual</span>
+  <nav class="top-links"><a class="xlink" href="workflows/index.html">Flow manual →</a></nav>
   <span class="spacer"></span>
-  <a class="xlink" href="workflows/index.html">Flow manual →</a>
-  <a class="xlink" href="https://github.com/leweii/myorch">GitHub</a>
   <div class="seg" role="radiogroup" aria-label="Theme">
     <button data-theme-pick="light">Light</button><button data-theme-pick="dark">Dark</button><button data-theme-pick="auto">System</button>
   </div>
-</header>
-<aside>
-  <input id="q" type="search" placeholder="Filter chapters  /">
+  <a class="gh" href="https://github.com/leweii/myorch"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .3a12 12 0 0 0-3.8 23.4c.6.1.8-.3.8-.6v-2c-3.3.7-4-1.6-4-1.6-.6-1.4-1.4-1.8-1.4-1.8-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.8 1.3 3.5 1 .1-.8.4-1.3.8-1.6-2.7-.3-5.5-1.3-5.5-6 0-1.2.5-2.3 1.3-3.1-.2-.4-.6-1.6.1-3.2 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.3 4.7 18.3 5 18.3 5c.7 1.6.2 2.9.1 3.2.8.8 1.3 1.9 1.3 3.2 0 4.6-2.8 5.6-5.5 5.9.5.4.9 1.1.9 2.2v3.3c0 .3.2.7.8.6A12 12 0 0 0 12 .3"/></svg>GitHub</a>
+</div></header>
+<div class="layout">
+<aside class="side">
+  <div class="side-head"><b>myorch docs</b><span>User manual</span></div>
+  <div class="search"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.8-3.8"/></svg>
+    <input id="q" type="search" placeholder="Search the docs" autocomplete="off"><kbd>/</kbd></div>
   <ul id="nav">
+<li class="grp-t">Understand</li>
 <li class="ch"><a class="ch-link" href="#ch-index">Home</a></li>
-<li class="ch"><a class="ch-link" href="#ch-01-overview">1. Overview: directories and core concepts</a><ul class="sub"><li><a href="#01-overview--in-one-sentence">In one sentence</a></li><li><a href="#01-overview--directories-and-storage">Directories and storage</a></li><li><a href="#01-overview--glossary">Glossary</a></li><li><a href="#01-overview--two-kinds-of-moments-that-need-you">Two kinds of moments that need you</a></li><li><a href="#01-overview--the-lifecycle-of-a-run">The lifecycle of a run</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-02-services">2. Services and dependencies</a><ul class="sub"><li><a href="#02-services--service-list">Service list</a></li><li><a href="#02-services--service-dependency-diagrams">Service dependency diagrams</a></li><li><a href="#02-services--startup-order">Startup order</a></li><li><a href="#02-services--which-services-each-command-depends-on">Which services each command depends on</a></li><li><a href="#02-services--what-happens-when-a-service-stops">What happens when a service stops</a></li><li><a href="#02-services--external-dependencies">External dependencies</a></li><li><a href="#02-services--who-reads-and-writes-files-and-configuration">Who reads and writes files and configuration</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-03-architecture">3. Architecture</a><ul class="sub"><li><a href="#03-architecture--tech-stack">Tech stack</a></li><li><a href="#03-architecture--layers">Layers</a></li><li><a href="#03-architecture--component-diagram">Component diagram</a></li><li><a href="#03-architecture--responsibility-boundaries">Responsibility boundaries</a></li><li><a href="#03-architecture--code-map">Code map</a></li><li><a href="#03-architecture--how-a-step-executes">How a step executes</a></li><li><a href="#03-architecture--how-a-run-continues">How a run continues</a></li><li><a href="#03-architecture--how-credentials-flow">How credentials flow</a></li><li><a href="#03-architecture--what-the-sandbox-sees">What the sandbox sees</a></li><li><a href="#03-architecture--volume-layout">Volume layout</a></li><li><a href="#03-architecture--the-data-directory-on-the-host">The data directory on the host</a></li><li><a href="#03-architecture--the-channel-layer">The channel layer</a></li><li><a href="#03-architecture--how-the-console-works">How the console works</a></li><li><a href="#03-architecture--other-platform-adapters">Other platform adapters</a></li><li><a href="#03-architecture--local-deployment">Local deployment</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-04-setup">4. Setup</a><ul class="sub"><li><a href="#04-setup--41-required-software">4.1 Required software</a></li><li><a href="#04-setup--42-one-time-installation">4.2 One-time installation</a></li><li><a href="#04-setup--43-starting-the-day">4.3 Starting the day</a></li><li><a href="#04-setup--44-optional-configuration">4.4 Optional configuration</a></li><li><a href="#04-setup--45-development-environment">4.5 Development environment</a></li><li><a href="#04-setup--46-running-with-docker-compose">4.6 Running with docker compose</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-05-cli">5. CLI reference</a><ul class="sub"><li><a href="#05-cli--global-arguments">Global arguments</a></li><li><a href="#05-cli--where-to-run">Where to run</a></li><li><a href="#05-cli--by-purpose">By purpose</a></li><li><a href="#05-cli--install-start">Install, start</a></li><li><a href="#05-cli--start-runs">Start runs</a></li><li><a href="#05-cli--view-runs">View runs</a></li><li><a href="#05-cli--intervene-in-runs">Intervene in runs</a></li><li><a href="#05-cli--project-packs">Project packs</a></li><li><a href="#05-cli--knowledge-sources">Knowledge sources</a></li><li><a href="#05-cli--reviewer-evals">Reviewer evals</a></li><li><a href="#05-cli--other-common-commands">Other common commands</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-06-flows">6. Flows</a><ul class="sub"><li><a href="#06-flows--the-flows">The flows</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-07-projects">7. Project packs</a><ul class="sub"><li><a href="#07-projects--current-projects">Current projects</a></li><li><a href="#07-projects--directory-layout">Directory layout</a></li><li><a href="#07-projects--creating-a-new-project">Creating a new project</a></li><li><a href="#07-projects--projectyaml-fields">project.yaml fields</a></li><li><a href="#07-projects--project-settings-for-the-shared-flows-flows">Project settings for the shared flows (flows:)</a></li><li><a href="#07-projects--prompt-slots-prompts">Prompt slots (prompts/)</a></li><li><a href="#07-projects--template-inheritance-rules">Template inheritance rules</a></li><li><a href="#07-projects--checkssh-convention">checks.sh convention</a></li><li><a href="#07-projects--e2e-convention-optional">e2e/ convention (optional)</a></li><li><a href="#07-projects--risk-rulesyaml">risk-rules.yaml</a></li><li><a href="#07-projects--knowledge-sources">Knowledge sources</a></li><li><a href="#07-projects--onboarding-a-new-project">Onboarding a new project</a></li><li><a href="#07-projects--changing-a-project-pack">Changing a project pack</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-08-flow-syntax">8. Writing flows: YAML syntax</a><ul class="sub"><li><a href="#08-flow-syntax--how-a-flow-file-becomes-a-run">How a flow file becomes a run</a></li><li><a href="#08-flow-syntax--top-level-structure">Top-level structure</a></li><li><a href="#08-flow-syntax--inputs">Inputs</a></li><li><a href="#08-flow-syntax--steps">Steps</a></li><li><a href="#08-flow-syntax--approvals">Approvals</a></li><li><a href="#08-flow-syntax--host-actions">Host actions</a></li><li><a href="#08-flow-syntax--loops">Loops</a></li><li><a href="#08-flow-syntax--fragments-use">Fragments (use:)</a></li><li><a href="#08-flow-syntax--per-project-trimming-if">Per-project trimming: if:</a></li><li><a href="#08-flow-syntax--rules-in-prompts-rule">Rules in prompts ([[rule:]])</a></li><li><a href="#08-flow-syntax--presets">presets</a></li><li><a href="#08-flow-syntax--expressions">Expressions</a></li><li><a href="#08-flow-syntax--template-variables">Template variables</a></li><li><a href="#08-flow-syntax--how-the-prompt-is-assembled">How the prompt is assembled</a></li><li><a href="#08-flow-syntax--environment-and-mounts-in-the-sandbox">Environment and mounts in the sandbox</a></li><li><a href="#08-flow-syntax--profile">Profile</a></li><li><a href="#08-flow-syntax--manifest">Manifest</a></li><li><a href="#08-flow-syntax--agent-questions">Agent questions</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-09-principles">9. Design principles</a><ul class="sub"><li><a href="#09-principles--summary">Summary</a></li><li><a href="#09-principles--1-two-kinds-of-credentials-agents-reach-neither">1. Two kinds of credentials, agents reach neither</a></li><li><a href="#09-principles--2-keep-credentials-and-code-execution-apart">2. Keep credentials and code execution apart</a></li><li><a href="#09-principles--3-one-sandbox-per-step">3. One sandbox per step</a></li><li><a href="#09-principles--4-the-volume-is-the-source-of-truth">4. The volume is the source of truth</a></li><li><a href="#09-principles--5-keep-scheduling-and-the-engine-apart">5. Keep scheduling and the engine apart</a></li><li><a href="#09-principles--6-structure-before-model-judgment">6. Structure before model judgment</a></li><li><a href="#09-principles--7-external-text-is-only-data">7. External text is only data</a></li><li><a href="#09-principles--8-fixed-authorization-approval-bound-to-a-commit">8. Fixed authorization, approval bound to a commit</a></li><li><a href="#09-principles--9-changes-stay-on-this-machine-until-approved">9. Changes stay on this machine until approved</a></li><li><a href="#09-principles--10-people-see-one-and-the-same-run">10. People see one and the same run</a></li><li><a href="#09-principles--11-the-attention-principle">11. The attention principle</a></li><li><a href="#09-principles--12-external-actions-are-idempotent">12. External actions are idempotent</a></li><li><a href="#09-principles--13-on-the-host-only-registered-actions">13. On the host, only registered actions</a></li><li><a href="#09-principles--14-flows-do-not-depend-on-projects">14. Flows do not depend on projects</a></li><li><a href="#09-principles--15-honest-reporting">15. Honest reporting</a></li><li><a href="#09-principles--recording-rejected-designs">Recording rejected designs</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-10-conventions">10. Conventions</a><ul class="sub"><li><a href="#10-conventions--101-daily-use">10.1 Daily use</a></li><li><a href="#10-conventions--102-credentials-and-security">10.2 Credentials and security</a></li><li><a href="#10-conventions--103-changing-code-and-flows">10.3 Changing code and flows</a></li><li><a href="#10-conventions--104-maintaining-the-docs">10.4 Maintaining the docs</a></li></ul></li>
-<li class="ch"><a class="ch-link" href="#ch-11-troubleshooting">11. Troubleshooting</a><ul class="sub"><li><a href="#11-troubleshooting--where-to-look-first">Where to look first</a></li><li><a href="#11-troubleshooting--common-problems">Common problems</a></li><li><a href="#11-troubleshooting--a-step-failed-for-an-external-reason">A step failed for an external reason</a></li><li><a href="#11-troubleshooting--console-500-disk-io-error">Console 500: disk I/O error</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-01-overview">Overview: directories and core concepts</a><ul class="sub"><li><a href="#01-overview--in-one-sentence">In one sentence</a></li><li><a href="#01-overview--directories-and-storage">Directories and storage</a></li><li><a href="#01-overview--glossary">Glossary</a></li><li><a href="#01-overview--two-kinds-of-moments-that-need-you">Two kinds of moments that need you</a></li><li><a href="#01-overview--the-lifecycle-of-a-run">The lifecycle of a run</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-02-services">Services and dependencies</a><ul class="sub"><li><a href="#02-services--service-list">Service list</a></li><li><a href="#02-services--service-dependency-diagrams">Service dependency diagrams</a></li><li><a href="#02-services--startup-order">Startup order</a></li><li><a href="#02-services--which-services-each-command-depends-on">Which services each command depends on</a></li><li><a href="#02-services--what-happens-when-a-service-stops">What happens when a service stops</a></li><li><a href="#02-services--external-dependencies">External dependencies</a></li><li><a href="#02-services--who-reads-and-writes-files-and-configuration">Who reads and writes files and configuration</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-03-architecture">Architecture</a><ul class="sub"><li><a href="#03-architecture--tech-stack">Tech stack</a></li><li><a href="#03-architecture--layers">Layers</a></li><li><a href="#03-architecture--component-diagram">Component diagram</a></li><li><a href="#03-architecture--responsibility-boundaries">Responsibility boundaries</a></li><li><a href="#03-architecture--code-map">Code map</a></li><li><a href="#03-architecture--how-a-step-executes">How a step executes</a></li><li><a href="#03-architecture--how-a-run-continues">How a run continues</a></li><li><a href="#03-architecture--how-credentials-flow">How credentials flow</a></li><li><a href="#03-architecture--what-the-sandbox-sees">What the sandbox sees</a></li><li><a href="#03-architecture--volume-layout">Volume layout</a></li><li><a href="#03-architecture--the-data-directory-on-the-host">The data directory on the host</a></li><li><a href="#03-architecture--the-channel-layer">The channel layer</a></li><li><a href="#03-architecture--how-the-console-works">How the console works</a></li><li><a href="#03-architecture--other-platform-adapters">Other platform adapters</a></li><li><a href="#03-architecture--local-deployment">Local deployment</a></li></ul></li>
+<li class="grp-t">Use</li>
+<li class="ch"><a class="ch-link" href="#ch-04-setup">Setup</a><ul class="sub"><li><a href="#04-setup--41-required-software">4.1 Required software</a></li><li><a href="#04-setup--42-one-time-installation">4.2 One-time installation</a></li><li><a href="#04-setup--43-starting-the-day">4.3 Starting the day</a></li><li><a href="#04-setup--44-optional-configuration">4.4 Optional configuration</a></li><li><a href="#04-setup--45-development-environment">4.5 Development environment</a></li><li><a href="#04-setup--46-running-with-docker-compose">4.6 Running with docker compose</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-05-cli">CLI reference</a><ul class="sub"><li><a href="#05-cli--global-arguments">Global arguments</a></li><li><a href="#05-cli--where-to-run">Where to run</a></li><li><a href="#05-cli--by-purpose">By purpose</a></li><li><a href="#05-cli--install-start">Install, start</a></li><li><a href="#05-cli--start-runs">Start runs</a></li><li><a href="#05-cli--view-runs">View runs</a></li><li><a href="#05-cli--intervene-in-runs">Intervene in runs</a></li><li><a href="#05-cli--project-packs">Project packs</a></li><li><a href="#05-cli--knowledge-sources">Knowledge sources</a></li><li><a href="#05-cli--reviewer-evals">Reviewer evals</a></li><li><a href="#05-cli--other-common-commands">Other common commands</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-06-flows">Flows</a><ul class="sub"><li><a href="#06-flows--the-flows">The flows</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-07-projects">Project packs</a><ul class="sub"><li><a href="#07-projects--current-projects">Current projects</a></li><li><a href="#07-projects--directory-layout">Directory layout</a></li><li><a href="#07-projects--creating-a-new-project">Creating a new project</a></li><li><a href="#07-projects--projectyaml-fields">project.yaml fields</a></li><li><a href="#07-projects--project-settings-for-the-shared-flows-flows">Project settings for the shared flows (flows:)</a></li><li><a href="#07-projects--prompt-slots-prompts">Prompt slots (prompts/)</a></li><li><a href="#07-projects--template-inheritance-rules">Template inheritance rules</a></li><li><a href="#07-projects--checkssh-convention">checks.sh convention</a></li><li><a href="#07-projects--e2e-convention-optional">e2e/ convention (optional)</a></li><li><a href="#07-projects--risk-rulesyaml">risk-rules.yaml</a></li><li><a href="#07-projects--knowledge-sources">Knowledge sources</a></li><li><a href="#07-projects--onboarding-a-new-project">Onboarding a new project</a></li><li><a href="#07-projects--changing-a-project-pack">Changing a project pack</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-08-flow-syntax">Writing flows: YAML syntax</a><ul class="sub"><li><a href="#08-flow-syntax--how-a-flow-file-becomes-a-run">How a flow file becomes a run</a></li><li><a href="#08-flow-syntax--top-level-structure">Top-level structure</a></li><li><a href="#08-flow-syntax--inputs">Inputs</a></li><li><a href="#08-flow-syntax--steps">Steps</a></li><li><a href="#08-flow-syntax--approvals">Approvals</a></li><li><a href="#08-flow-syntax--host-actions">Host actions</a></li><li><a href="#08-flow-syntax--loops">Loops</a></li><li><a href="#08-flow-syntax--fragments-use">Fragments (use:)</a></li><li><a href="#08-flow-syntax--per-project-trimming-if">Per-project trimming: if:</a></li><li><a href="#08-flow-syntax--rules-in-prompts-rule">Rules in prompts ([[rule:]])</a></li><li><a href="#08-flow-syntax--presets">presets</a></li><li><a href="#08-flow-syntax--expressions">Expressions</a></li><li><a href="#08-flow-syntax--template-variables">Template variables</a></li><li><a href="#08-flow-syntax--how-the-prompt-is-assembled">How the prompt is assembled</a></li><li><a href="#08-flow-syntax--environment-and-mounts-in-the-sandbox">Environment and mounts in the sandbox</a></li><li><a href="#08-flow-syntax--profile">Profile</a></li><li><a href="#08-flow-syntax--manifest">Manifest</a></li><li><a href="#08-flow-syntax--agent-questions">Agent questions</a></li></ul></li>
+<li class="grp-t">Maintain</li>
+<li class="ch"><a class="ch-link" href="#ch-09-principles">Design principles</a><ul class="sub"><li><a href="#09-principles--summary">Summary</a></li><li><a href="#09-principles--1-two-kinds-of-credentials-agents-reach-neither">1. Two kinds of credentials, agents reach neither</a></li><li><a href="#09-principles--2-keep-credentials-and-code-execution-apart">2. Keep credentials and code execution apart</a></li><li><a href="#09-principles--3-one-sandbox-per-step">3. One sandbox per step</a></li><li><a href="#09-principles--4-the-volume-is-the-source-of-truth">4. The volume is the source of truth</a></li><li><a href="#09-principles--5-keep-scheduling-and-the-engine-apart">5. Keep scheduling and the engine apart</a></li><li><a href="#09-principles--6-structure-before-model-judgment">6. Structure before model judgment</a></li><li><a href="#09-principles--7-external-text-is-only-data">7. External text is only data</a></li><li><a href="#09-principles--8-fixed-authorization-approval-bound-to-a-commit">8. Fixed authorization, approval bound to a commit</a></li><li><a href="#09-principles--9-changes-stay-on-this-machine-until-approved">9. Changes stay on this machine until approved</a></li><li><a href="#09-principles--10-people-see-one-and-the-same-run">10. People see one and the same run</a></li><li><a href="#09-principles--11-the-attention-principle">11. The attention principle</a></li><li><a href="#09-principles--12-external-actions-are-idempotent">12. External actions are idempotent</a></li><li><a href="#09-principles--13-on-the-host-only-registered-actions">13. On the host, only registered actions</a></li><li><a href="#09-principles--14-flows-do-not-depend-on-projects">14. Flows do not depend on projects</a></li><li><a href="#09-principles--15-honest-reporting">15. Honest reporting</a></li><li><a href="#09-principles--recording-rejected-designs">Recording rejected designs</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-10-conventions">Conventions</a><ul class="sub"><li><a href="#10-conventions--101-daily-use">10.1 Daily use</a></li><li><a href="#10-conventions--102-credentials-and-security">10.2 Credentials and security</a></li><li><a href="#10-conventions--103-changing-code-and-flows">10.3 Changing code and flows</a></li><li><a href="#10-conventions--104-maintaining-the-docs">10.4 Maintaining the docs</a></li></ul></li>
+<li class="ch"><a class="ch-link" href="#ch-11-troubleshooting">Troubleshooting</a><ul class="sub"><li><a href="#11-troubleshooting--where-to-look-first">Where to look first</a></li><li><a href="#11-troubleshooting--common-problems">Common problems</a></li><li><a href="#11-troubleshooting--a-step-failed-for-an-external-reason">A step failed for an external reason</a></li><li><a href="#11-troubleshooting--console-500-disk-io-error">Console 500: disk I/O error</a></li></ul></li>
   </ul>
+  <p class="empty hidden" id="empty">Nothing matches. Try a command, a flow or a file name.</p>
 </aside>
 <main>
-<section class="chapter" id="ch-index"><h1 id="index--myorch-docs">myorch docs</h1>
+<section class="chapter" id="ch-index" data-kicker="Understand · Home"><h1 id="index--myorch-docs">myorch docs</h1>
 <p>myorch is a flow-driven agent platform. Flows are written in YAML, for example "requirements analysis → implementation → multi-reviewer review → risk approval → push the branch". Temporal handles scheduling, retries and waiting for people. Each step runs in its own OpenShell sandbox, and the sandbox holds no real credentials. Project-specific information (repository, identity, check scripts, knowledge) lives in the project pack, so one flow can be used for many projects. People interact with myorch in the local console (<code>myorch ui</code>) or in Slack direct messages. A local Claude Code session can receive run results through a channel and then start follow-up flows. The whole set of services runs with docker compose (<a class="code" href="https://github.com/leweii/myorch/tree/main/deploy"><code>deploy/</code></a>).</p>
 <h2 id="index--directories-four-places">Directories: four places</h2>
 <table>
@@ -379,9 +482,9 @@ uv run myorch approve &lt;run_id&gt; &lt;step&gt;    # approve
 <li><code>myorch-knowledge/README.md</code>: the description of the project pack directory.</li>
 <li><a href="https://github.com/leweii/myorch/blob/main/deploy/README.md">deploy/README.md</a>: docker compose installation, the install script for new machines, the credentials file, Slack, the Claude Code channel, publishing origin/main, ports, known limitations.</li>
 <li><a class="code" href="https://github.com/leweii/myorch/tree/main/docs/notes"><code>docs/notes/</code></a>: records of individual designs, for example the channel layer, the delivery interface, the research on moving the gateway into Docker, the Slack adapter, the Claude Code channel.</li>
-<li><a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>: the web version of this directory and the docs' home page (single page, navigation on the left). Regenerate after changing any chapter: <code>uv run --with markdown python docs/build-html.py</code>.</li>
+<li><a class="code" href="https://leweii.github.io/myorch/"><code>docs/index.html</code></a>: the web version of this directory and the docs' home page (one file; it shows one chapter at a time, with the chapters on the left, the chapter's outline on the right, and previous / next at the end). Regenerate after changing any chapter: <code>uv run --with markdown python docs/build-html.py</code>.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/README.md"><code>docs/README.md</code></a></p></section>
-<section class="chapter" id="ch-01-overview"><h1 id="01-overview--1-overview-directories-and-core-concepts">1. Overview: directories and core concepts</h1>
+<section class="chapter" id="ch-01-overview" data-kicker="Understand · 01"><h1 id="01-overview--1-overview-directories-and-core-concepts">Overview: directories and core concepts</h1>
 <h2 id="01-overview--in-one-sentence">In one sentence</h2>
 <p>You write a <strong>flow</strong>, and start a <strong>run</strong> of it on a <strong>project</strong>. Each <strong>step</strong> in the run executes in a new sandbox. A step can be an agent (claude-code) or a shell script. Steps hand files to each other through a shared <strong>workspace</strong>. When there is a question or an approval, the run stops and waits for a person. You reply in the console, in Slack, or on the command line.</p>
 <h2 id="01-overview--directories-and-storage">Directories and storage</h2>
@@ -1031,7 +1134,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 </div>
 
 <p>Diagram file: <a href="diagrams/run-lifecycle.html">diagrams/run-lifecycle.html</a>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/01-overview.md"><code>docs/01-overview.md</code></a></p></section>
-<section class="chapter" id="ch-02-services"><h1 id="02-services--2-services-and-dependencies">2. Services and dependencies</h1>
+<section class="chapter" id="ch-02-services" data-kicker="Understand · 02"><h1 id="02-services--2-services-and-dependencies">Services and dependencies</h1>
 <p>For installation steps, see <a href="#ch-04-setup">4. Setup</a>.</p>
 <h2 id="02-services--service-list">Service list</h2>
 <p>Since 2026-11-05, the everyday environment is docker compose (<a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/compose.yaml"><code>deploy/compose.yaml</code></a>). The services start automatically once Docker Desktop is running. <code>dc</code> is short for <code>docker compose -f deploy/compose.yaml</code>.</p>
@@ -1834,7 +1937,7 @@ Docker volume myorch-artifacts   ④ Runtime files: workspaces, snapshots, cache
 </table>
 <p>The worker writes <code>events.db</code> into the data directory (<code>--data</code> or <code>MYORCH_DATA</code>; <code>/data</code> in compose).</p>
 <p><code>events.db</code> is opened only by processes inside containers. Processes on the host (for example <code>uv run myorch run</code>) read it through the console's <code>GET /channel/events.json</code>; when the console is not running they report an error and do not fall back to reading the file directly. The reason: processes on the host do not share SQLite's locks with the containers, and when such a process closes its connection it deletes <code>events.db-shm</code>, after which every query in the containers fails with <code>disk I/O error</code> (seen on 2026-11-09; for the fix see <a href="#ch-11-troubleshooting">11. Troubleshooting</a>). <code>MYORCH_EVENTS_DIRECT=1</code> forces reading the file directly; use it only when no container has the file open.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/02-services.md"><code>docs/02-services.md</code></a></p></section>
-<section class="chapter" id="ch-03-architecture"><h1 id="03-architecture--3-architecture">3. Architecture</h1>
+<section class="chapter" id="ch-03-architecture" data-kicker="Understand · 03"><h1 id="03-architecture--3-architecture">Architecture</h1>
 <p>For how services start and what depends on what, see <a href="#ch-02-services">2. Services and dependencies</a>. For the full design rationale, see <a href="https://github.com/leweii/myorch/blob/main/ARCHITECTURE.md">ARCHITECTURE.md</a>.</p>
 <h2 id="03-architecture--tech-stack">Tech stack</h2>
 <table>
@@ -3001,7 +3104,7 @@ channels.yaml            Identity mapping (who is which account on which platfor
 <p>Diagram file: <a href="diagrams/deployment.html">diagrams/deployment.html</a>.</p>
 <p>The everyday setup runs with docker compose (<a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/compose.yaml"><code>deploy/compose.yaml</code></a>). Sandboxes are still containers on the host's Docker, at the same level as the compose services: the gateway and the worker operate the host's Docker through <code>/var/run/docker.sock</code> mounted into their containers. For how the services call each other, see <a href="#02-services--services-in-docker-compose">2. Services and dependencies · Services in docker compose</a>.</p>
 <p>Only a single machine is supported. Team use (server-side event storage, a web UI with login, per-project permissions) and Kubernetes are not done yet.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/03-architecture.md"><code>docs/03-architecture.md</code></a></p></section>
-<section class="chapter" id="ch-04-setup"><h1 id="04-setup--4-setup">4. Setup</h1>
+<section class="chapter" id="ch-04-setup" data-kicker="Use · 04"><h1 id="04-setup--4-setup">Setup</h1>
 <p>Since 2026-11-05 the everyday environment is docker compose: Temporal, the OpenShell gateway, the worker and the console all run in containers. Run every command from the <code>myorch/</code> directory. For how the services relate, see <a href="#ch-02-services">2. Services and dependencies</a>. For the detailed compose steps, credentials files, Slack, the Claude Code channel, ports and known limits, see <a href="https://github.com/leweii/myorch/blob/main/deploy/README.md">deploy/README.md</a>.</p>
 <h2 id="04-setup--41-required-software">4.1 Required software</h2>
 <p>On the host:</p>
@@ -3237,7 +3340,7 @@ uv run lint-imports    # checks the layer dependencies
 <li>The console and the CLI in the container act as <code>MYORCH_USER</code> from <code>deploy/.env</code> (the host's <code>$USER</code> when it is not set), not as root.</li>
 <li>Paths, ports, volume names and other settings are in <code>deploy/.env</code> (template <a class="code" href="https://github.com/leweii/myorch/blob/main/deploy/.env.example"><code>deploy/.env.example</code></a>). The defaults suit a new machine.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/04-setup.md"><code>docs/04-setup.md</code></a></p></section>
-<section class="chapter" id="ch-05-cli"><h1 id="05-cli--5-cli-reference">5. CLI reference</h1>
+<section class="chapter" id="ch-05-cli" data-kicker="Use · 05"><h1 id="05-cli--5-cli-reference">CLI reference</h1>
 <p>Every command has the form <code>uv run myorch &lt;command&gt;</code> and runs from the <code>myorch/</code> directory. The output of <code>uv run myorch &lt;command&gt; -h</code> is the authority on arguments. For which services each command needs, see <a href="#02-services--which-services-each-command-depends-on">2. Services and dependencies</a>.</p>
 <h2 id="05-cli--global-arguments">Global arguments</h2>
 <p>Global arguments go <strong>before</strong> the subcommand, for example <code>uv run myorch --address host:7233 list</code>.</p>
@@ -4022,7 +4125,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 </tbody>
 </table>
 <p>OpenShell limits names to 19 characters, so the names are abbreviated. The full run and step are in the sandbox labels <code>myorch.run</code>, <code>myorch.step</code>, <code>myorch.attempt</code>, <code>myorch.turn</code>. The container name in Docker is <code>openshell-default--&lt;name&gt;-&lt;uuid&gt;</code>.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/05-cli.md"><code>docs/05-cli.md</code></a></p></section>
-<section class="chapter" id="ch-06-flows"><h1 id="06-flows--6-flows">6. Flows</h1>
+<section class="chapter" id="ch-06-flows" data-kicker="Use · 06"><h1 id="06-flows--6-flows">Flows</h1>
 <p>Each flow is described in the separate <strong>Flow manual</strong>: <a href="workflows/index.html#ch-index">workflows/README.md</a>. It has one chapter per flow: what it does, its inputs, the step graph, what each step does, and when it needs you. The step graphs and input tables are generated from <code>flows/*.yaml</code>. The text is in <code>flows/&lt;flow&gt;.md</code>. The manual's home page covers roles, which flow to use when, how to start a run and step in, and how to continue on the same branch.</p>
 <p>This chapter only lists the flows.</p>
 <h2 id="06-flows--the-flows">The flows</h2>
@@ -4088,7 +4191,7 @@ uv run myorch eval report [--batch &lt;B&gt;]                       # how many e
 <li>The <strong>Flow definitions</strong> side bar in the console lists all flow definitions and fragments, grouped by <code>projects:</code> (all are in the <strong>General</strong> group now). A flow opens in a tab, where you can pick a project and inputs to preview the expanded steps.</li>
 <li>For the syntax of flow files, see <a href="#ch-08-flow-syntax">8. Flow syntax</a>. After changing a flow, regenerate the Flow manual: <code>uv run --with markdown python docs/workflows/build.py</code>.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/06-flows.md"><code>docs/06-flows.md</code></a></p></section>
-<section class="chapter" id="ch-07-projects"><h1 id="07-projects--7-project-packs">7. Project packs</h1>
+<section class="chapter" id="ch-07-projects" data-kicker="Use · 07"><h1 id="07-projects--7-project-packs">Project packs</h1>
 <p>Flows contain nothing project-specific. The repository, branch, check commands, risk rules and project knowledge all live in the project pack <code>../myorch-knowledge/&lt;name&gt;/</code>. <code>myorch-knowledge</code> is itself a git repository: every change that learn or onboard writes back is one commit.</p>
 <p>Flows are shared by all projects, one per role. See <a href="#ch-06-flows">6. Flows</a>. The differences in flow shape between projects are set in <code>flows:</code> in <code>project.yaml</code>. Project-specific prompt clauses go in <code>prompts/</code>. See "Project settings for the shared flows" and "Prompt slots". For the steps of each flow, see the <a href="workflows/index.html#ch-index">Flow manual</a>.</p>
 <h2 id="07-projects--current-projects">Current projects</h2>
@@ -4898,7 +5001,7 @@ index: Read tickets with getJiraIssue. Find related tickets with searchJiraIssue
 <li>Exception: after a run writes back to the project pack with <code>project-apply</code>, its later steps mount the new version. Other runs are not affected.</li>
 <li>The latest 3 versions are kept, plus versions written within the last 30 days. The latest version is always kept.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/07-projects.md"><code>docs/07-projects.md</code></a></p></section>
-<section class="chapter" id="ch-08-flow-syntax"><h1 id="08-flow-syntax--8-writing-flows-yaml-syntax">8. Writing flows: YAML syntax</h1>
+<section class="chapter" id="ch-08-flow-syntax" data-kicker="Use · 08"><h1 id="08-flow-syntax--8-writing-flows-yaml-syntax">Writing flows: YAML syntax</h1>
 <p>This chapter covers how to write flow files. For the steps of each flow, see the <a href="workflows/index.html#ch-index">Flow manual</a>. For the design reasons, see ARCHITECTURE.md §3.</p>
 <p>After changing a flow, first look at the expanded result with <code>uv run myorch expand &lt;flow&gt; --project &lt;p&gt;</code>, then try it with a small requirement. The final authority for the fields is the pydantic models in <a class="code" href="https://github.com/leweii/myorch/blob/main/src/myorch/core/flow.py"><code>src/myorch/core/flow.py</code></a>.</p>
 <h2 id="08-flow-syntax--how-a-flow-file-becomes-a-run">How a flow file becomes a run</h2>
@@ -5796,7 +5899,7 @@ steps:
 <p>and then ends its turn. After you reply, a new sandbox continues the same session with <code>--resume</code>. The wait is <code>limits.input_timeout</code>. On timeout the step fails.</p>
 <p><code>escalate_when</code>: when the agent ends without asking and this expression is true, the platform asks for it. The question is taken from <code>outputs.question</code> or <code>outputs.design_question</code>, or the summary if neither exists. The options are taken from <code>outputs.options</code> or <code>outputs.design_options</code>.</p>
 <p>With <code>interaction: never</code> (default), <code>myorch-ask</code> refuses to run, and the prompt tells the agent to make its own assumptions and write them in notes. If the agent still asks, the step fails without retries.</p><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/08-flow-syntax.md"><code>docs/08-flow-syntax.md</code></a></p></section>
-<section class="chapter" id="ch-09-principles"><h1 id="09-principles--9-design-principles">9. Design principles</h1>
+<section class="chapter" id="ch-09-principles" data-kicker="Maintain · 09"><h1 id="09-principles--9-design-principles">Design principles</h1>
 <p>When you make a trade-off, come back here first. The concrete rules for daily use are in <a href="#ch-10-conventions">10. Conventions</a>.</p>
 <h2 id="09-principles--summary">Summary</h2>
 <table>
@@ -5998,7 +6101,7 @@ steps:
 <li>myorch opening a PR after approval: removed 2026-11-06. Opening PRs is a job for people; <code>deliver</code> only pushes the branch.</li>
 <li>A dispatcher agent in the console: removed after it was built. It added a layer between you and the agents in the run, retold things in its own words (often shortened), and could also fail to work well with the agents in the run.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/09-principles.md"><code>docs/09-principles.md</code></a></p></section>
-<section class="chapter" id="ch-10-conventions"><h1 id="10-conventions--10-conventions">10. Conventions</h1>
+<section class="chapter" id="ch-10-conventions" data-kicker="Maintain · 10"><h1 id="10-conventions--10-conventions">Conventions</h1>
 <p>When in doubt, go back to <a href="#ch-09-principles">9. Design principles</a>.</p>
 <h2 id="10-conventions--101-daily-use">10.1 Daily use</h2>
 <ol>
@@ -6114,7 +6217,7 @@ steps:
 <li>Directory trees and terminal output are not diagrams; keep them as text.</li>
 <li>Diagrams, the docs web pages and the console share one set of tokens (neutral grays, five levels of text color, one accent color, following the design principles of <a href="https://github.com/benjitaylor/skills/tree/main/stageshow">Stageshow</a>): hierarchy comes from font size, weight, white space and background, not from borders. Color only shows state (green done, red failed or untrusted, amber waiting on you, blue running or outbound). Colors come from the page's theme variables and work in both light and dark mode.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/10-conventions.md"><code>docs/10-conventions.md</code></a></p></section>
-<section class="chapter" id="ch-11-troubleshooting"><h1 id="11-troubleshooting--11-troubleshooting">11. Troubleshooting</h1>
+<section class="chapter" id="ch-11-troubleshooting" data-kicker="Maintain · 11"><h1 id="11-troubleshooting--11-troubleshooting">Troubleshooting</h1>
 <p><code>dc</code> is short for <code>docker compose -f deploy/compose.yaml</code>, run in the <code>myorch/</code> directory. On the host, <code>openshell</code> connects by default to the brew gateway (which is stopped), so run <code>openshell</code> commands in a container (<code>dc exec worker openshell ...</code>).</p>
 <h2 id="11-troubleshooting--where-to-look-first">Where to look first</h2>
 <table>
@@ -6709,64 +6812,134 @@ steps:
 <li>Do not set <code>MYORCH_EVENTS_DIRECT=1</code> on the host; it makes commands open the file directly.</li>
 </ul><p class="src">Source of this page: <a href="https://github.com/leweii/myorch/blob/main/docs/11-troubleshooting.md"><code>docs/11-troubleshooting.md</code></a></p></section>
 </main>
+<aside class="toc"><div class="toc-box hidden" id="toc"><p class="toc-title">On this page</p><div id="toc-links"></div></div></aside>
+</div>
 <script>
-  const links = [...document.querySelectorAll('aside a')];
-  const byId = new Map(links.map(a => [a.getAttribute('href').slice(1), a]));
-  const targets = [...document.querySelectorAll('section.chapter, section.chapter h2')];
-  let current = null;
-  function setActive(id) {
-    if (id === current) return;
-    current = id;
-    links.forEach(a => a.classList.remove('active'));
-    document.querySelectorAll('aside li.ch').forEach(li => li.classList.remove('open'));
-    const a = byId.get(id); if (!a) return;
-    a.classList.add('active');
-    const ch = a.closest('li.ch');
-    ch?.classList.add('open');
-    ch?.querySelector('.ch-link')?.classList.add('active');
-    a.scrollIntoView({block: 'nearest'});
-  }
-  function onScroll() {
-    let best = null;
-    for (const t of targets) { if (t.getBoundingClientRect().top < 120) best = t; }
-    if (best) setActive(best.id);
-  }
-  window.addEventListener('scroll', onScroll, {passive: true});
-  onScroll();
-  const q = document.getElementById('q');
-  q.addEventListener('input', () => {
-    const v = q.value.trim().toLowerCase();
-    document.querySelectorAll('aside li.ch').forEach(li => {
-      const hit = !v || li.textContent.toLowerCase().includes(v);
-      li.classList.toggle('hidden', !hit);
-      li.classList.toggle('open', !!v && hit);
-      li.querySelectorAll('ul.sub li').forEach(s => s.classList.toggle('hidden', !!v && !s.textContent.toLowerCase().includes(v) && !li.querySelector('.ch-link').textContent.toLowerCase().includes(v)));
-    });
+(() => {
+  const chapters = [...document.querySelectorAll('section.chapter')];
+  const chLinks = [...document.querySelectorAll('#nav a.ch-link')];
+  const linkFor = new Map(chLinks.map(a => [a.getAttribute('href').slice(1), a]));
+  const subFor = new Map([...document.querySelectorAll('#nav ul.sub a')].map(a => [a.getAttribute('href').slice(1), a]));
+  const groupOf = a => { let li = a.closest('li.ch'); while ((li = li.previousElementSibling)) if (li.classList.contains('grp-t')) return li.textContent; return ''; };
+  const toc = document.getElementById('toc'), tocLinks = document.getElementById('toc-links');
+  let cur = null, heads = [];
+
+  // Each chapter: a head (kicker, title, lead), tables in cards, and previous / next cards at the end.
+  chapters.forEach(sec => {
+    const h1 = sec.querySelector(':scope > h1'); const a = linkFor.get(sec.id);
+    if (h1) {
+      const head = document.createElement('header'); head.className = 'head';
+      const kick = sec.dataset.kicker || (a && groupOf(a));
+      if (kick) head.innerHTML = '<span class="kicker"></span>', head.firstChild.textContent = kick;
+      h1.before(head); head.append(h1);
+      const p = head.nextElementSibling;
+      if (p && p.tagName === 'P' && !p.classList.contains('src')) { p.classList.add('lead'); head.append(p); }
+    }
+    sec.querySelectorAll('table').forEach(t => { if (t.parentElement.classList.contains('table-wrap')) return;
+      const w = document.createElement('div'); w.className = 'table-wrap'; t.before(w); w.append(t); });
+    const i = chLinks.indexOf(a), prev = chLinks[i - 1], next = chLinks[i + 1];
+    if (a && (prev || next)) {
+      const nav = document.createElement('nav'); nav.className = 'pager';
+      const card = (l, cls, label) => { const c = document.createElement('a'); c.className = cls; c.href = l.getAttribute('href');
+        c.innerHTML = '<small></small><b></b>'; c.firstChild.textContent = label; c.lastChild.textContent = l.firstChild.textContent.trim(); return c; };
+      if (prev) nav.append(card(prev, 'prev', '← Previous'));
+      if (next) nav.append(card(next, 'next', 'Next →'));
+      sec.append(nav);
+    }
   });
+
+  function show(sec) {
+    if (sec === cur) return;
+    cur?.classList.remove('cur'); cur = sec; sec.classList.add('cur');
+    chLinks.forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + sec.id));
+    document.querySelectorAll('#nav li.ch').forEach(li => li.classList.toggle('open', li.contains(linkFor.get(sec.id) || null)));
+    const link = linkFor.get(sec.id), side = document.querySelector('aside.side');   // scroll the sidebar only, never the page
+    if (link) { const r = link.getBoundingClientRect(), sr = side.getBoundingClientRect();
+      if (r.top < sr.top || r.bottom > sr.bottom) side.scrollTop += r.top - sr.top - sr.height / 3; }
+    heads = [...sec.querySelectorAll('h2[id], h3[id]')];
+    tocLinks.replaceChildren(...heads.map(h => { const a = document.createElement('a'); a.href = '#' + h.id;
+      a.textContent = h.textContent; if (h.tagName === 'H3') a.className = 'h3'; return a; }));
+    toc.classList.toggle('hidden', !heads.length);
+    const t = sec.querySelector('h1')?.firstChild?.textContent.trim(), site = "myorch docs";
+    document.title = t && t !== site ? `${t} · ${site}` : site;
+    fitDiagrams();
+  }
+  function route() {
+    let id = ''; try { id = decodeURIComponent(location.hash.slice(1)); } catch {}
+    const el = id && document.getElementById(id);
+    const sec = el ? el.closest('section.chapter') : chapters[0];
+    if (!sec) return;
+    show(sec);
+    // Jump, not glide: a chapter is a new page. Smooth scrolling stays on for links within the chapter.
+    const root = document.documentElement; root.style.scrollBehavior = 'auto';
+    if (el && el !== sec) el.scrollIntoView({block: 'start'}); else window.scrollTo(0, 0);
+    requestAnimationFrame(() => { root.style.scrollBehavior = ''; });
+    spy();
+  }
+  function spy() {
+    let best = null;
+    for (const h of heads) { if (h.getBoundingClientRect().top < 140) best = h; else break; }
+    const id = best && best.id;
+    tocLinks.querySelectorAll('a').forEach(a => a.classList.toggle('on', a.getAttribute('href') === '#' + id));
+    subFor.forEach((a, k) => a.classList.toggle('on', k === id));
+  }
+  window.addEventListener('hashchange', route);
+  window.addEventListener('load', route);   // after the browser's own jump to the anchor
+  window.addEventListener('scroll', spy, {passive: true});
+
+  // Filter: chapter and section titles first; a chapter whose text has the words shows too.
+  const q = document.getElementById('q'), empty = document.getElementById('empty');
+  q.addEventListener('input', () => {
+    const v = q.value.trim().toLowerCase(); let any = false;
+    document.querySelectorAll('#nav li.ch').forEach(li => {
+      const a = li.querySelector('.ch-link'), sec = document.getElementById(a.getAttribute('href').slice(1));
+      const subs = [...li.querySelectorAll('ul.sub li')];
+      const titleHit = a.textContent.toLowerCase().includes(v);
+      const subHits = subs.filter(s => s.textContent.toLowerCase().includes(v));
+      const bodyHit = !!v && !!sec && sec.textContent.toLowerCase().includes(v);
+      const hit = !v || titleHit || subHits.length > 0 || bodyHit;
+      li.classList.toggle('hidden', !hit); any = any || hit;
+      subs.forEach(s => s.classList.toggle('hidden', !!v && !titleHit && !subHits.includes(s)));
+      li.classList.toggle('open', v ? subHits.length > 0 : li.contains(linkFor.get(cur?.id) || null));
+    });
+    document.querySelectorAll('#nav li.grp-t').forEach(g => { let n = g.nextElementSibling, vis = false;
+      while (n && !n.classList.contains('grp-t')) { vis = vis || !n.classList.contains('hidden'); n = n.nextElementSibling; }
+      g.classList.toggle('hidden', !vis); });
+    empty.classList.toggle('hidden', any);
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === '/' && document.activeElement !== q && !e.metaKey && !e.ctrlKey) { e.preventDefault(); q.focus(); }
+    else if (e.key === 'Escape' && document.activeElement === q) { q.value = ''; q.dispatchEvent(new Event('input')); q.blur(); }
+  });
+
+  // Small screens: the chapter list is a drawer.
+  document.getElementById('menu').addEventListener('click', () => document.body.classList.toggle('nav-open'));
+  document.querySelector('aside.side').addEventListener('click', e => { if (e.target.closest('a')) document.body.classList.remove('nav-open'); });
+
   // Diagrams are drawn on a fixed canvas (docs/diagrams/gen.py); scale each one to the width it has.
   function fitDiagrams() {
-    document.querySelectorAll('.diagram .dg').forEach(d => {
+    document.querySelectorAll('section.chapter.cur .diagram .dg, html:not(.js) .diagram .dg').forEach(d => {
       const avail = d.parentElement.clientWidth - 40;
-      d.style.zoom = Math.min(1.15, avail / parseFloat(d.style.width));
+      if (avail > 0) d.style.zoom = Math.min(1.15, avail / parseFloat(d.style.width));
     });
   }
-  fitDiagrams();
   window.addEventListener('resize', fitDiagrams);
+
   // Theme (shared with the console): light, dark, or auto (follow the system).
-  (() => {
-    const apply = (t) => {
-      if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else document.documentElement.removeAttribute("data-theme");
-      document.querySelectorAll("[data-theme-pick]").forEach(b => b.classList.toggle("on", b.dataset.themePick === t));
-    };
-    let cur = "auto"; try { cur = localStorage.getItem("myorch.theme") || "auto"; } catch {}
-    cur = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[cur] || cur;
-    if (!["light", "dark", "auto"].includes(cur)) cur = "auto";
-    apply(cur);
-    document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
-      apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
-    }));
-  })();
-  document.addEventListener('keydown', e => { if (e.key === '/' && document.activeElement !== q) { e.preventDefault(); q.focus(); } });
+  const apply = (t) => {
+    if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; else document.documentElement.removeAttribute("data-theme");
+    document.querySelectorAll("[data-theme-pick]").forEach(b => b.classList.toggle("on", b.dataset.themePick === t));
+  };
+  let theme = "auto"; try { theme = localStorage.getItem("myorch.theme") || "auto"; } catch {}
+  theme = {paper: "light", vellum: "light", blueprint: "dark", graphite: "dark"}[theme] || theme;
+  if (!["light", "dark", "auto"].includes(theme)) theme = "auto";
+  apply(theme);
+  document.querySelectorAll("[data-theme-pick]").forEach(b => b.addEventListener("click", () => {
+    apply(b.dataset.themePick); try { localStorage.setItem("myorch.theme", b.dataset.themePick); } catch {}
+  }));
+
+  route();
+})();
 </script>
 </body>
 </html>
